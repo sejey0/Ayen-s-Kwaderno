@@ -11,25 +11,28 @@ import '../widgets/handwriting_canvas.dart';
 /// handwriting recognition from canvas strokes, formulas, cursive, and notes.
 class GeminiHandwritingService {
   static const String _geminiEndpoint =
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent';
 
   static const String _prefKeyGeminiApiKey = 'custom_gemini_api_key';
 
   /// Retrieves the active Gemini API key from .env or SharedPreferences
   static Future<String?> getActiveApiKey() async {
-    // 1. Check user custom key from SharedPreferences
-    final prefs = await SharedPreferences.getInstance();
-    final customKey = prefs.getString(_prefKeyGeminiApiKey);
-    if (customKey != null && customKey.trim().isNotEmpty) {
-      return customKey.trim();
-    }
-
-    // 2. Check .env file
+    // 1. Check .env file first (source of truth)
     final envKey = dotenv.env['GEMINI_API_KEY'];
     if (envKey != null && envKey.trim().isNotEmpty) {
+      debugPrint('🔑 Using Gemini API key from .env: ${envKey.trim().substring(0, 8)}...');
       return envKey.trim();
     }
 
+    // 2. Fallback to user custom key from SharedPreferences
+    final prefs = await SharedPreferences.getInstance();
+    final customKey = prefs.getString(_prefKeyGeminiApiKey);
+    if (customKey != null && customKey.trim().isNotEmpty) {
+      debugPrint('🔑 Using Gemini API key from SharedPreferences: ${customKey.trim().substring(0, 8)}...');
+      return customKey.trim();
+    }
+
+    debugPrint('🔑 No Gemini API key found in .env or SharedPreferences');
     return null;
   }
 
@@ -163,7 +166,7 @@ class GeminiHandwritingService {
             headers: {'Content-Type': 'application/json'},
             body: requestBody,
           )
-          .timeout(const Duration(seconds: 12));
+          .timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 200) {
         final jsonResponse = jsonDecode(response.body);
