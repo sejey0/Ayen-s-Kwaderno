@@ -1,15 +1,21 @@
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/document_item_model.dart';
+import '../models/handwriting_note_model.dart';
 import '../models/image_annotation_model.dart';
 import '../models/stroke_model.dart';
 import '../models/text_annotation_model.dart';
 
-/// Manages persistent local storage of recently opened/imported documents and their annotations using SharedPreferences
+/// Manages persistent local storage of recently opened/imported documents, annotations, and handwriting notes using SharedPreferences
 class DocumentStorageService {
   static const String _documentsKey = 'ayens_kwaderno_recent_documents_v2';
+  static const String _handwritingNotesKey = 'ayens_kwaderno_handwriting_notes_v1';
   static String _annotationsKey(String documentName) =>
       'ayens_kwaderno_annotations_$documentName';
+
+  // ==========================================
+  // DOCUMENT FILES PERSISTENCE
+  // ==========================================
 
   /// Loads all saved documents from SharedPreferences
   static Future<List<DocumentItem>> loadSavedDocuments() async {
@@ -62,7 +68,7 @@ class DocumentStorageService {
         docs.removeRange(50, docs.length);
       }
 
-      await _persistList(docs);
+      await _persistDocumentsList(docs);
     } catch (_) {}
   }
 
@@ -71,7 +77,7 @@ class DocumentStorageService {
     try {
       final docs = await loadSavedDocuments();
       docs.removeWhere((d) => d.fileName == fileName);
-      await _persistList(docs);
+      await _persistDocumentsList(docs);
       await clearLocalAnnotations(fileName);
     } catch (_) {}
   }
@@ -116,10 +122,76 @@ class DocumentStorageService {
     } catch (_) {}
   }
 
-  /// Saves the complete list to SharedPreferences
-  static Future<void> _persistList(List<DocumentItem> docs) async {
+  /// Saves the complete document list to SharedPreferences
+  static Future<void> _persistDocumentsList(List<DocumentItem> docs) async {
     final prefs = await SharedPreferences.getInstance();
     final String encoded = jsonEncode(docs.map((d) => d.toJson()).toList());
     await prefs.setString(_documentsKey, encoded);
+  }
+
+  // ==========================================
+  // HANDWRITING NOTES PERSISTENCE
+  // ==========================================
+
+  /// Loads all saved handwriting notes from SharedPreferences
+  static Future<List<HandwritingNote>> loadHandwritingNotes() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final String? jsonString = prefs.getString(_handwritingNotesKey);
+
+      if (jsonString == null || jsonString.isEmpty) {
+        return [];
+      }
+
+      final List<dynamic> decodedList = jsonDecode(jsonString) as List<dynamic>;
+      final List<HandwritingNote> notes = decodedList
+          .map((item) =>
+              HandwritingNote.fromJson(Map<String, dynamic>.from(item as Map)))
+          .toList();
+
+      // Sort newest first
+      notes.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+      return notes;
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /// Saves or updates a handwriting note in persistent storage
+  static Future<void> saveOrUpdateHandwritingNote(HandwritingNote note) async {
+    try {
+      final notes = await loadHandwritingNotes();
+      final existingIndex = notes.indexWhere((n) => n.id == note.id);
+
+      if (existingIndex >= 0) {
+        notes[existingIndex] = note;
+      } else {
+        notes.insert(0, note);
+      }
+
+      // Keep max 100 recent handwriting notes
+      if (notes.length > 100) {
+        notes.removeRange(100, notes.length);
+      }
+
+      await _persistHandwritingNotesList(notes);
+    } catch (_) {}
+  }
+
+  /// Deletes a handwriting note from local storage
+  static Future<void> deleteHandwritingNote(String id) async {
+    try {
+      final notes = await loadHandwritingNotes();
+      notes.removeWhere((n) => n.id == id);
+      await _persistHandwritingNotesList(notes);
+    } catch (_) {}
+  }
+
+  /// Saves the complete handwriting notes list to SharedPreferences
+  static Future<void> _persistHandwritingNotesList(
+      List<HandwritingNote> notes) async {
+    final prefs = await SharedPreferences.getInstance();
+    final String encoded = jsonEncode(notes.map((n) => n.toJson()).toList());
+    await prefs.setString(_handwritingNotesKey, encoded);
   }
 }

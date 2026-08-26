@@ -5,10 +5,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/document_item_model.dart';
+import '../models/handwriting_note_model.dart';
 import '../services/document_storage_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/handwriting_canvas.dart';
 import 'editor_screen.dart';
+
+enum LibrarySection {
+  all,
+  documents,
+  notes,
+}
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -20,10 +27,12 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   bool _isPickingDocument = false;
   bool _isLoadingCloudDocuments = false;
-  String _selectedFilter = 'All Documents';
 
-  // Persistent dynamic document list
+  LibrarySection _currentSection = LibrarySection.all;
+
+  // Persistent dynamic document and handwriting note lists
   List<DocumentItem> _documents = [];
+  List<HandwritingNote> _handwritingNotes = [];
 
   // Palette generator for dynamic notebook cover aesthetics
   static const List<Map<String, Color>> _coverPalettes = [
@@ -53,19 +62,50 @@ class _HomeScreenState extends State<HomeScreen> {
     },
   ];
 
+  // Palette generator for handwriting sticky notes
+  static const List<Map<String, Color>> _notePalettes = [
+    {
+      'bg': Color(0xFFFEF9C3),
+      'border': Color(0xFFFDE047),
+      'accent': Color(0xFFCA8A04),
+    },
+    {
+      'bg': Color(0xFFF3E8FF),
+      'border': Color(0xFFE9D5FF),
+      'accent': AppTheme.primaryPurple,
+    },
+    {
+      'bg': Color(0xFFFFEEF3),
+      'border': Color(0xFFFFD6E4),
+      'accent': AppTheme.accentPink,
+    },
+    {
+      'bg': Color(0xFFE0F2FE),
+      'border': Color(0xFFBAE6FD),
+      'accent': Color(0xFF0284C7),
+    },
+    {
+      'bg': Color(0xFFDCFCE7),
+      'border': Color(0xFFBBF7D0),
+      'accent': Color(0xFF16A34A),
+    },
+  ];
+
   @override
   void initState() {
     super.initState();
-    _loadInitialDocuments();
+    _loadInitialData();
   }
 
   /// Initial load: loads local cache instantly, then syncs with Supabase in background
-  Future<void> _loadInitialDocuments() async {
+  Future<void> _loadInitialData() async {
     // 1. Instant local load
     final localDocs = await DocumentStorageService.loadSavedDocuments();
+    final localNotes = await DocumentStorageService.loadHandwritingNotes();
     if (mounted) {
       setState(() {
         _documents = localDocs;
+        _handwritingNotes = localNotes;
       });
     }
 
@@ -81,7 +121,8 @@ class _HomeScreenState extends State<HomeScreen> {
       final client = Supabase.instance.client;
       final response = await client
           .from('document_annotations')
-          .select('document_name, updated_at, strokes_data, texts_data, images_data')
+          .select(
+              'document_name, updated_at, strokes_data, texts_data, images_data')
           .order('updated_at', ascending: false);
 
       if (!mounted) return;
@@ -102,7 +143,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
         DateTime cloudUpdatedAt = DateTime.now();
         if (updatedAtStr != null) {
-          cloudUpdatedAt = DateTime.tryParse(updatedAtStr)?.toLocal() ?? DateTime.now();
+          cloudUpdatedAt =
+              DateTime.tryParse(updatedAtStr)?.toLocal() ?? DateTime.now();
         }
 
         if (docMap.containsKey(docName)) {
@@ -134,14 +176,17 @@ class _HomeScreenState extends State<HomeScreen> {
       final mergedList = docMap.values.toList()
         ..sort((a, b) => b.lastOpenedAt.compareTo(a.lastOpenedAt));
 
+      final localNotes = await DocumentStorageService.loadHandwritingNotes();
+
       setState(() {
         _documents = mergedList;
+        _handwritingNotes = localNotes;
         _isLoadingCloudDocuments = false;
       });
     } catch (e) {
       if (!mounted) return;
       setState(() => _isLoadingCloudDocuments = false);
-      debugPrint('Cloud sync notice (offline or unconfigured): $e');
+      debugPrint('Cloud sync notice: $e');
     }
   }
 
@@ -214,7 +259,7 @@ class _HomeScreenState extends State<HomeScreen> {
         );
 
         // Refresh list upon returning from editor
-        _loadInitialDocuments();
+        _loadInitialData();
       }
     } catch (e) {
       if (!mounted) return;
@@ -257,8 +302,11 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  /// Displays the recognized text result modal with Copy and Share actions
+  /// Displays the recognized text result modal with Copy and Save actions
   void _showRecognizedResultDialog(String text) {
+    final defaultTitle = text.length > 25 ? '${text.substring(0, 25)}...' : text;
+    final titleController = TextEditingController(text: defaultTitle);
+
     showCupertinoDialog(
       context: context,
       builder: (context) => CupertinoAlertDialog(
@@ -271,30 +319,50 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
         content: Padding(
-          padding: const EdgeInsets.only(top: 14.0),
+          padding: const EdgeInsets.only(top: 12.0),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Container(
-                padding: const EdgeInsets.all(12),
+              CupertinoTextField(
+                controller: titleController,
+                placeholder: 'Note Title',
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                 decoration: BoxDecoration(
                   color: Colors.white,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppTheme.dividerColor),
+                ),
+                style: const TextStyle(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w700,
+                  color: AppTheme.textPrimary,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.all(12),
+                constraints: const BoxConstraints(maxHeight: 180),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF9FAFB),
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(color: AppTheme.dividerColor),
                 ),
-                child: SelectableText(
-                  text,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    color: AppTheme.textPrimary,
-                    height: 1.4,
+                child: SingleChildScrollView(
+                  child: SelectableText(
+                    text,
+                    style: const TextStyle(
+                      fontSize: 13.5,
+                      color: AppTheme.textPrimary,
+                      height: 1.4,
+                    ),
                   ),
                 ),
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 8),
               const Text(
-                'Handwriting converted via Google ML Kit Digital Ink.',
+                'Converted via Google ML Kit Digital Ink Recognition.',
                 style: TextStyle(
                   fontSize: 11,
                   color: AppTheme.textMuted,
@@ -306,11 +374,10 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         actions: [
           CupertinoDialogAction(
-            child: const Text('Close'),
+            child: const Text('Cancel'),
             onPressed: () => Navigator.pop(context),
           ),
           CupertinoDialogAction(
-            isDefaultAction: true,
             onPressed: () {
               Clipboard.setData(ClipboardData(text: text));
               Navigator.pop(context);
@@ -333,7 +400,56 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               );
             },
-            child: const Text('Copy Text'),
+            child: const Text('Copy'),
+          ),
+          CupertinoDialogAction(
+            isDefaultAction: true,
+            onPressed: () async {
+              final finalTitle = titleController.text.trim().isNotEmpty
+                  ? titleController.text.trim()
+                  : 'Quick Note';
+
+              final newNote = HandwritingNote(
+                title: finalTitle,
+                content: text,
+                paletteIndex: _handwritingNotes.length % _notePalettes.length,
+              );
+
+              await DocumentStorageService.saveOrUpdateHandwritingNote(newNote);
+
+              setState(() {
+                _handwritingNotes.insert(0, newNote);
+                _currentSection = LibrarySection.notes;
+              });
+
+              if (!context.mounted) return;
+              Navigator.pop(context);
+
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Row(
+                    children: [
+                      const Icon(CupertinoIcons.checkmark_circle_fill,
+                          color: Color(0xFF10B981), size: 18),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Saved to Handwriting Notes section! ✍️',
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ],
+                  ),
+                  backgroundColor: AppTheme.primaryPurpleDark,
+                  behavior: SnackBarBehavior.floating,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  duration: const Duration(seconds: 2),
+                ),
+              );
+            },
+            child: const Text('Save Note'),
           ),
         ],
       ),
@@ -345,7 +461,6 @@ class _HomeScreenState extends State<HomeScreen> {
     final path = doc.filePath;
 
     if (path != null && File(path).existsSync()) {
-      // Update last opened time
       final updated = doc.copyWith(lastOpenedAt: DateTime.now());
       await DocumentStorageService.saveOrUpdateDocument(updated);
 
@@ -359,9 +474,8 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       );
 
-      _loadInitialDocuments();
+      _loadInitialData();
     } else {
-      // File path missing/moved: prompt to select PDF file from device
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Row(
@@ -402,7 +516,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
                 );
-                _loadInitialDocuments();
+                _loadInitialData();
               }
             },
           ),
@@ -418,6 +532,113 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  /// Displays and allows editing a saved handwriting note
+  void _openHandwritingNoteDialog(HandwritingNote note) {
+    final titleController = TextEditingController(text: note.title);
+    final contentController = TextEditingController(text: note.content);
+
+    showCupertinoDialog(
+      context: context,
+      builder: (context) => CupertinoAlertDialog(
+        title: const Text('Handwriting Note'),
+        content: Padding(
+          padding: const EdgeInsets.only(top: 12.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CupertinoTextField(
+                controller: titleController,
+                placeholder: 'Title',
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppTheme.dividerColor),
+                ),
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 10),
+              CupertinoTextField(
+                controller: contentController,
+                placeholder: 'Note Content',
+                maxLines: 6,
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppTheme.dividerColor),
+                ),
+                style: const TextStyle(fontSize: 13.5, height: 1.4),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          CupertinoDialogAction(
+            child: const Text('Cancel'),
+            onPressed: () => Navigator.pop(context),
+          ),
+          CupertinoDialogAction(
+            onPressed: () {
+              Clipboard.setData(ClipboardData(text: contentController.text));
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: const Row(
+                    children: [
+                      Icon(CupertinoIcons.doc_on_clipboard_fill,
+                          color: Colors.white, size: 18),
+                      SizedBox(width: 8),
+                      Text('Copied note to clipboard! 📋'),
+                    ],
+                  ),
+                  backgroundColor: AppTheme.primaryPurpleDark,
+                  behavior: SnackBarBehavior.floating,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  duration: const Duration(seconds: 2),
+                ),
+              );
+            },
+            child: const Text('Copy'),
+          ),
+          CupertinoDialogAction(
+            isDefaultAction: true,
+            onPressed: () async {
+              final updatedNote = note.copyWith(
+                title: titleController.text.trim().isNotEmpty
+                    ? titleController.text.trim()
+                    : 'Quick Note',
+                content: contentController.text.trim(),
+                updatedAt: DateTime.now(),
+              );
+
+              await DocumentStorageService.saveOrUpdateHandwritingNote(
+                  updatedNote);
+
+              setState(() {
+                final index =
+                    _handwritingNotes.indexWhere((n) => n.id == note.id);
+                if (index >= 0) {
+                  _handwritingNotes[index] = updatedNote;
+                }
+              });
+
+              if (!context.mounted) return;
+              Navigator.pop(context);
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  }
+
   /// Deletes a document from the recent list with confirmation
   void _confirmDeleteDocument(DocumentItem doc) {
     showCupertinoDialog(
@@ -425,7 +646,7 @@ class _HomeScreenState extends State<HomeScreen> {
       builder: (context) => CupertinoAlertDialog(
         title: const Text('Remove from Recent?'),
         content: Text(
-          'Do you want to remove "${doc.fileName}" from your recent documents list? Cloud annotations will remain preserved.',
+          'Do you want to remove "${doc.fileName}" from your documents list? Cloud annotations will remain preserved.',
         ),
         actions: [
           CupertinoDialogAction(
@@ -448,21 +669,43 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  /// Returns filtered documents according to selected category chip
-  List<DocumentItem> get _filteredDocuments {
-    if (_selectedFilter == 'Recently Opened') {
-      return _documents
-          .where((d) => d.filePath != null && File(d.filePath!).existsSync())
-          .toList();
-    } else if (_selectedFilter == 'Cloud Synced') {
-      return _documents.where((d) => d.isCloudSynced).toList();
-    }
-    return _documents;
+  /// Deletes a handwriting note with confirmation
+  void _confirmDeleteNote(HandwritingNote note) {
+    showCupertinoDialog(
+      context: context,
+      builder: (context) => CupertinoAlertDialog(
+        title: const Text('Delete Note?'),
+        content: Text('Do you want to delete "${note.title}"?'),
+        actions: [
+          CupertinoDialogAction(
+            child: const Text('Cancel'),
+            onPressed: () => Navigator.pop(context),
+          ),
+          CupertinoDialogAction(
+            isDestructiveAction: true,
+            child: const Text('Delete'),
+            onPressed: () async {
+              Navigator.pop(context);
+              await DocumentStorageService.deleteHandwritingNote(note.id);
+              setState(() {
+                _handwritingNotes.removeWhere((n) => n.id == note.id);
+              });
+            },
+          ),
+        ],
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final displayDocs = _filteredDocuments;
+    final showDocs = _currentSection == LibrarySection.all ||
+        _currentSection == LibrarySection.documents;
+    final showNotes = _currentSection == LibrarySection.all ||
+        _currentSection == LibrarySection.notes;
+
+    final totalDocsCount = _documents.length;
+    final totalNotesCount = _handwritingNotes.length;
 
     return Scaffold(
       backgroundColor: AppTheme.background,
@@ -493,124 +736,214 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
 
-              const SliverToBoxAdapter(child: SizedBox(height: 28)),
+              const SliverToBoxAdapter(child: SizedBox(height: 24)),
 
-              // Filter Tabs (All, Recently Opened, Cloud Synced)
+              // Main Section Switcher Tabs (All Items, PDF Documents, Handwritten Notes)
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20.0),
-                  child: _buildFilterChips(),
+                  child: _buildSectionSwitcher(
+                      totalDocsCount, totalNotesCount),
                 ),
               ),
 
-              const SliverToBoxAdapter(child: SizedBox(height: 20)),
+              const SliverToBoxAdapter(child: SizedBox(height: 18)),
 
-              // Section Header
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20.0),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Row(
-                        children: [
-                          Text(
-                            _selectedFilter == 'All Documents'
-                                ? 'My Study Notebooks (${displayDocs.length})'
-                                : '$_selectedFilter (${displayDocs.length})',
-                            style: const TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w700,
-                              color: AppTheme.textPrimary,
-                              letterSpacing: -0.3,
+              // ==========================================
+              // 1. PDF DOCUMENTS SECTION
+              // ==========================================
+              if (showDocs) ...[
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20.0),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(
+                              CupertinoIcons.doc_text_fill,
+                              color: AppTheme.primaryPurple,
+                              size: 18,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'PDF Documents ($totalDocsCount)',
+                              style: const TextStyle(
+                                fontSize: 17,
+                                fontWeight: FontWeight.w700,
+                                color: AppTheme.textPrimary,
+                                letterSpacing: -0.2,
+                              ),
+                            ),
+                            if (_isLoadingCloudDocuments) ...[
+                              const SizedBox(width: 8),
+                              const SizedBox(
+                                width: 12,
+                                height: 12,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: AppTheme.primaryPurple,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                        GestureDetector(
+                          onTap: _isPickingDocument ? null : _pickAndOpenDocument,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 5),
+                            decoration: BoxDecoration(
+                              color: AppTheme.primaryPurpleLight,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(CupertinoIcons.add,
+                                    size: 13, color: AppTheme.primaryPurple),
+                                SizedBox(width: 3),
+                                Text(
+                                  'Import PDF',
+                                  style: TextStyle(
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppTheme.primaryPurpleDark,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                          if (_isLoadingCloudDocuments) ...[
-                            const SizedBox(width: 10),
-                            const SizedBox(
-                              width: 14,
-                              height: 14,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: AppTheme.primaryPurple,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SliverToBoxAdapter(child: SizedBox(height: 10)),
+                if (_documents.isEmpty)
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 20.0, vertical: 4.0),
+                      child: _buildEmptyDocumentsCard(),
+                    ),
+                  )
+                else
+                  SliverPadding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 20.0, vertical: 4.0),
+                    sliver: SliverGrid(
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 2,
+                        crossAxisSpacing: 14,
+                        mainAxisSpacing: 14,
+                        childAspectRatio: 0.78,
+                      ),
+                      delegate: SliverChildBuilderDelegate(
+                        (context, index) {
+                          final doc = _documents[index];
+                          return _buildNotebookCard(doc);
+                        },
+                        childCount: _documents.length,
+                      ),
+                    ),
+                  ),
+                const SliverToBoxAdapter(child: SizedBox(height: 24)),
+              ],
+
+              // ==========================================
+              // 2. HANDWRITING NOTES SECTION
+              // ==========================================
+              if (showNotes) ...[
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20.0),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(
+                              CupertinoIcons.pencil_ellipsis_rectangle,
+                              color: AppTheme.accentPink,
+                              size: 18,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Handwriting Notes ($totalNotesCount)',
+                              style: const TextStyle(
+                                fontSize: 17,
+                                fontWeight: FontWeight.w700,
+                                color: AppTheme.textPrimary,
+                                letterSpacing: -0.2,
                               ),
                             ),
                           ],
-                        ],
-                      ),
-                      IconButton(
-                        icon: const Icon(
-                          CupertinoIcons.arrow_clockwise,
-                          size: 17,
-                          color: AppTheme.primaryPurple,
                         ),
-                        tooltip: 'Sync with Cloud',
-                        onPressed:
-                            _isLoadingCloudDocuments ? null : _syncWithCloud,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-
-              const SliverToBoxAdapter(child: SizedBox(height: 10)),
-
-              // Grid or Empty State
-              if (displayDocs.isEmpty && !_isLoadingCloudDocuments)
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 20.0, vertical: 8.0),
-                    child: _buildEmptyState(),
-                  ),
-                )
-              else if (displayDocs.isEmpty && _isLoadingCloudDocuments)
-                SliverToBoxAdapter(
-                  child: const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 40.0),
-                    child: Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          CircularProgressIndicator(
-                            color: AppTheme.primaryPurple,
-                            strokeWidth: 2.5,
-                          ),
-                          SizedBox(height: 14),
-                          Text(
-                            'Loading notebooks...',
-                            style: TextStyle(
-                              color: AppTheme.textSecondary,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w500,
+                        GestureDetector(
+                          onTap: _launchHandwritingToText,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 5),
+                            decoration: BoxDecoration(
+                              color: AppTheme.accentPinkLight,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(CupertinoIcons.pencil,
+                                    size: 13, color: AppTheme.accentPinkDark),
+                                SizedBox(width: 3),
+                                Text(
+                                  'Write Note',
+                                  style: TextStyle(
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppTheme.accentPinkDark,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                        ],
-                      ),
-                    ),
-                  ),
-                )
-              else
-                SliverPadding(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 20.0, vertical: 4.0),
-                  sliver: SliverGrid(
-                    gridDelegate:
-                        const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 2,
-                      crossAxisSpacing: 14,
-                      mainAxisSpacing: 14,
-                      childAspectRatio: 0.78,
-                    ),
-                    delegate: SliverChildBuilderDelegate(
-                      (context, index) {
-                        final doc = displayDocs[index];
-                        return _buildNotebookCard(doc);
-                      },
-                      childCount: displayDocs.length,
+                        ),
+                      ],
                     ),
                   ),
                 ),
+                const SliverToBoxAdapter(child: SizedBox(height: 10)),
+                if (_handwritingNotes.isEmpty)
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 20.0, vertical: 4.0),
+                      child: _buildEmptyNotesCard(),
+                    ),
+                  )
+                else
+                  SliverPadding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 20.0, vertical: 4.0),
+                    sliver: SliverGrid(
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 2,
+                        crossAxisSpacing: 14,
+                        mainAxisSpacing: 14,
+                        childAspectRatio: 0.85,
+                      ),
+                      delegate: SliverChildBuilderDelegate(
+                        (context, index) {
+                          final note = _handwritingNotes[index];
+                          return _buildHandwritingNoteCard(note);
+                        },
+                        childCount: _handwritingNotes.length,
+                      ),
+                    ),
+                  ),
+              ],
 
               const SliverToBoxAdapter(child: SizedBox(height: 90)),
             ],
@@ -618,10 +951,14 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ),
 
-      // Floating Action Button for Quick Upload
+      // Floating Action Button for Quick Upload or Note Creation
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: _isPickingDocument ? null : _pickAndOpenDocument,
-        backgroundColor: AppTheme.accentPink,
+        onPressed: _currentSection == LibrarySection.notes
+            ? _launchHandwritingToText
+            : (_isPickingDocument ? null : _pickAndOpenDocument),
+        backgroundColor: _currentSection == LibrarySection.notes
+            ? AppTheme.primaryPurple
+            : AppTheme.accentPink,
         foregroundColor: Colors.white,
         elevation: 4,
         icon: _isPickingDocument
@@ -633,10 +970,15 @@ class _HomeScreenState extends State<HomeScreen> {
                   color: Colors.white,
                 ),
               )
-            : const Icon(CupertinoIcons.add, size: 20),
-        label: const Text(
-          'New Document',
-          style: TextStyle(
+            : Icon(
+                _currentSection == LibrarySection.notes
+                    ? CupertinoIcons.pencil_outline
+                    : CupertinoIcons.add,
+                size: 20,
+              ),
+        label: Text(
+          _currentSection == LibrarySection.notes ? 'New Note' : 'New Document',
+          style: const TextStyle(
             fontWeight: FontWeight.w700,
             fontSize: 14,
             letterSpacing: 0.2,
@@ -646,89 +988,93 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  /// Clean, GoodNotes-style Empty State Placeholder
-  Widget _buildEmptyState() {
+  /// Segmented Section Switcher (All Items, Documents, Notes)
+  Widget _buildSectionSwitcher(int docsCount, int notesCount) {
     return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 36.0),
+      padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
         color: AppTheme.surfaceWhite,
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(color: AppTheme.dividerColor),
-        boxShadow: AppTheme.softShadow,
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 70,
-            height: 70,
-            decoration: BoxDecoration(
-              color: AppTheme.primaryPurpleLight,
-              shape: BoxShape.circle,
-              boxShadow: [
-                BoxShadow(
-                  color: AppTheme.primaryPurple.withValues(alpha: 0.15),
-                  blurRadius: 14,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: const Center(
-              child: Icon(
-                CupertinoIcons.doc_text_search,
-                color: AppTheme.primaryPurple,
-                size: 34,
-              ),
-            ),
-          ),
-          const SizedBox(height: 18),
-
-          Text(
-            _selectedFilter == 'All Documents'
-                ? 'No Study Notebooks Yet'
-                : 'No $_selectedFilter Found',
-            style: const TextStyle(
-              fontSize: 17,
-              fontWeight: FontWeight.w800,
-              color: AppTheme.textPrimary,
-              letterSpacing: -0.3,
-            ),
-          ),
-          const SizedBox(height: 8),
-
-          Text(
-            _selectedFilter == 'All Documents'
-                ? 'Import your PDF slides, reviewers, or textbooks to start highlighting and syncing to the cloud.'
-                : 'Tap "Open PDF Document" below to import your study material into this section.',
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              fontSize: 13,
-              color: AppTheme.textSecondary,
-              height: 1.45,
-            ),
-          ),
-          const SizedBox(height: 22),
-
-          // Action button inside empty state
-          ElevatedButton.icon(
-            onPressed: _isPickingDocument ? null : _pickAndOpenDocument,
-            icon: const Icon(CupertinoIcons.arrow_up_doc_fill, size: 16),
-            label: const Text(
-              'Open PDF Document',
-              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5),
-            ),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.primaryPurple,
-              foregroundColor: Colors.white,
-              elevation: 0,
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14),
-              ),
-            ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
           ),
         ],
+      ),
+      child: Row(
+        children: [
+          _buildSwitcherTab(
+            label: 'All Items',
+            badge: '${docsCount + notesCount}',
+            section: LibrarySection.all,
+          ),
+          _buildSwitcherTab(
+            label: 'Documents',
+            badge: '$docsCount',
+            section: LibrarySection.documents,
+          ),
+          _buildSwitcherTab(
+            label: 'Notes',
+            badge: '$notesCount',
+            section: LibrarySection.notes,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSwitcherTab({
+    required String label,
+    required String badge,
+    required LibrarySection section,
+  }) {
+    final isSelected = _currentSection == section;
+
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => setState(() => _currentSection = section),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          decoration: BoxDecoration(
+            color: isSelected ? AppTheme.primaryPurple : Colors.transparent,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
+                  color: isSelected ? Colors.white : AppTheme.textSecondary,
+                ),
+              ),
+              const SizedBox(width: 5),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                decoration: BoxDecoration(
+                  color: isSelected
+                      ? Colors.white.withValues(alpha: 0.25)
+                      : AppTheme.primaryPurpleLight,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  badge,
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    color: isSelected ? Colors.white : AppTheme.primaryPurpleDark,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -740,7 +1086,6 @@ class _HomeScreenState extends State<HomeScreen> {
       children: [
         Row(
           children: [
-            // Soft Avatar / Monogram with glow ring
             Container(
               width: 48,
               height: 48,
@@ -806,9 +1151,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 const SizedBox(height: 2),
                 const Text(
-                  'Let’s organize your study session ✨',
+                  'Your Study Notebooks & Handwritten Notes ✨',
                   style: TextStyle(
-                    fontSize: 13,
+                    fontSize: 12.5,
                     color: AppTheme.textSecondary,
                     fontWeight: FontWeight.w500,
                   ),
@@ -817,7 +1162,6 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ],
         ),
-        // Cloud Sync Status / Refresh Button
         Container(
           decoration: BoxDecoration(
             color: AppTheme.surfaceWhite,
@@ -873,7 +1217,6 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       child: Stack(
         children: [
-          // Decorative background circles
           Positioned(
             right: -25,
             top: -25,
@@ -898,7 +1241,6 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
           ),
-
           Padding(
             padding: const EdgeInsets.all(20.0),
             child: Column(
@@ -907,7 +1249,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Icon Container
                     Container(
                       width: 50,
                       height: 50,
@@ -943,7 +1284,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                           SizedBox(height: 3),
                           Text(
-                            'Import PDF reviewers or convert digital ink handwriting into clean text.',
+                            'Annotate PDF reviewers or create instant handwriting notes.',
                             style: TextStyle(
                               fontSize: 12.5,
                               color: AppTheme.textSecondary,
@@ -956,11 +1297,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   ],
                 ),
                 const SizedBox(height: 16),
-
-                // Action Buttons Row: [ Open PDF ] & [ Handwriting to Text ]
                 Row(
                   children: [
-                    // 1. Open PDF Document Button
                     Expanded(
                       flex: 6,
                       child: SizedBox(
@@ -1031,10 +1369,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       ),
                     ),
-
                     const SizedBox(width: 10),
-
-                    // 2. Handwriting to Text Button
                     Expanded(
                       flex: 5,
                       child: SizedBox(
@@ -1058,7 +1393,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               Icon(
-                                CupertinoIcons.textformat,
+                                CupertinoIcons.pencil_outline,
                                 size: 17,
                                 color: AppTheme.primaryPurpleDark,
                               ),
@@ -1086,62 +1421,75 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  /// Filter tabs (All Documents, Recently Opened, Cloud Synced)
-  Widget _buildFilterChips() {
-    final filters = ['All Documents', 'Recently Opened', 'Cloud Synced'];
-
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      physics: const BouncingScrollPhysics(),
-      child: Row(
-        children: filters.map((filter) {
-          final isSelected = _selectedFilter == filter;
-          return Padding(
-            padding: const EdgeInsets.only(right: 8.0),
-            child: GestureDetector(
-              onTap: () => setState(() => _selectedFilter = filter),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 16.0, vertical: 9.0),
-                decoration: BoxDecoration(
-                  color: isSelected
-                      ? AppTheme.primaryPurple
-                      : AppTheme.surfaceWhite,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: isSelected
-                        ? AppTheme.primaryPurple
-                        : AppTheme.dividerColor,
-                  ),
-                  boxShadow: isSelected
-                      ? [
-                          BoxShadow(
-                            color:
-                                AppTheme.primaryPurple.withValues(alpha: 0.25),
-                            blurRadius: 8,
-                            offset: const Offset(0, 3),
-                          ),
-                        ]
-                      : null,
-                ),
-                child: Text(
-                  filter,
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                    color: isSelected ? Colors.white : AppTheme.textSecondary,
-                  ),
-                ),
-              ),
+  /// Empty State card for Documents section
+  Widget _buildEmptyDocumentsCard() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppTheme.surfaceWhite,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppTheme.dividerColor),
+      ),
+      child: Column(
+        children: [
+          const Icon(CupertinoIcons.doc_text_search,
+              size: 32, color: AppTheme.primaryPurple),
+          const SizedBox(height: 8),
+          const Text(
+            'No PDF Documents Yet',
+            style: TextStyle(
+              fontWeight: FontWeight.w700,
+              fontSize: 14.5,
+              color: AppTheme.textPrimary,
             ),
-          );
-        }).toList(),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'Import a PDF file to highlight, draw lines, and add stickers.',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+          ),
+        ],
       ),
     );
   }
 
-  /// Study Notebook Card
+  /// Empty State card for Handwriting Notes section
+  Widget _buildEmptyNotesCard() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppTheme.surfaceWhite,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppTheme.dividerColor),
+      ),
+      child: Column(
+        children: [
+          const Icon(CupertinoIcons.pencil_ellipsis_rectangle,
+              size: 32, color: AppTheme.accentPink),
+          const SizedBox(height: 8),
+          const Text(
+            'No Handwriting Notes Yet',
+            style: TextStyle(
+              fontWeight: FontWeight.w700,
+              fontSize: 14.5,
+              color: AppTheme.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'Tap "Handwriting" or "Write Note" to convert your strokes to digital notes.',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Study Notebook Card (PDF Documents)
   Widget _buildNotebookCard(DocumentItem doc) {
     final palette = _coverPalettes[doc.paletteIndex % _coverPalettes.length];
     final color = palette['color']!;
@@ -1160,7 +1508,6 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Notebook Cover Preview
             Expanded(
               child: Stack(
                 children: [
@@ -1180,8 +1527,6 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
                   ),
-
-                  // Left Spine / Wire Binding Effect
                   Positioned(
                     left: 0,
                     top: 0,
@@ -1196,8 +1541,6 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
                   ),
-
-                  // Cloud Synced Badge
                   if (doc.isCloudSynced)
                     Positioned(
                       top: 8,
@@ -1239,8 +1582,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 ],
               ),
             ),
-
-            // Document Details
             Padding(
               padding: const EdgeInsets.all(12.0),
               child: Column(
@@ -1278,6 +1619,105 @@ class _HomeScreenState extends State<HomeScreen> {
                     ],
                   ),
                 ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Handwriting Sticky Note Card
+  Widget _buildHandwritingNoteCard(HandwritingNote note) {
+    final palette = _notePalettes[note.paletteIndex % _notePalettes.length];
+    final bg = palette['bg']!;
+    final border = palette['border']!;
+    final accent = palette['accent']!;
+
+    return GestureDetector(
+      onTap: () => _openHandwritingNoteDialog(note),
+      onLongPress: () => _confirmDeleteNote(note),
+      child: Container(
+        padding: const EdgeInsets.all(14.0),
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: border, width: 1.2),
+          boxShadow: [
+            BoxShadow(
+              color: accent.withValues(alpha: 0.08),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Top Bar: Note Pin & Copy action
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    Icon(CupertinoIcons.pin_fill, size: 13, color: accent),
+                    const SizedBox(width: 4),
+                    Text(
+                      _formatTimestamp(note.updatedAt),
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        color: accent.withValues(alpha: 0.8),
+                      ),
+                    ),
+                  ],
+                ),
+                GestureDetector(
+                  onTap: () {
+                    Clipboard.setData(ClipboardData(text: note.content));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Copied "${note.title}"! 📋'),
+                        duration: const Duration(seconds: 1),
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  },
+                  child: Icon(
+                    CupertinoIcons.doc_on_clipboard,
+                    size: 14,
+                    color: accent,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+
+            // Note Title
+            Text(
+              note.title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w800,
+                color: AppTheme.textPrimary,
+                letterSpacing: -0.2,
+              ),
+            ),
+            const SizedBox(height: 6),
+
+            // Note Content Snippet
+            Expanded(
+              child: Text(
+                note.content,
+                maxLines: 4,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: Color(0xFF4B5563),
+                  height: 1.35,
+                ),
               ),
             ),
           ],
