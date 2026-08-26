@@ -32,6 +32,10 @@ class _HandwritingCanvasDialogState extends State<HandwritingCanvasDialog> {
   final mlkit.DigitalInkRecognizerModelManager _modelManager =
       mlkit.DigitalInkRecognizerModelManager();
   late mlkit.DigitalInkRecognizer _recognizer;
+  final TextEditingController _typeTextController = TextEditingController();
+
+  // Mode: 0 = Handwriting Pad, 1 = Type Note
+  int _currentTab = 0;
 
   // ML Kit Digital Ink Data
   final mlkit.Ink _ink = mlkit.Ink();
@@ -42,10 +46,10 @@ class _HandwritingCanvasDialogState extends State<HandwritingCanvasDialog> {
   List<Offset> _currentDrawnPoints = [];
 
   // Model & Recognition State
-  bool _isModelReady = false;
   bool _isDownloadingModel = false;
   bool _isRecognizing = false;
-  String _statusMessage = 'Ready to write';
+  bool _hasPluginError = false;
+  String _statusMessage = 'Write your notes or formulas below ✨';
 
   @override
   void initState() {
@@ -58,6 +62,7 @@ class _HandwritingCanvasDialogState extends State<HandwritingCanvasDialog> {
   @override
   void dispose() {
     _recognizer.close();
+    _typeTextController.dispose();
     super.dispose();
   }
 
@@ -76,8 +81,8 @@ class _HandwritingCanvasDialogState extends State<HandwritingCanvasDialog> {
 
       if (mounted) {
         setState(() {
-          _isModelReady = true;
           _isDownloadingModel = false;
+          _hasPluginError = false;
           _statusMessage = 'Model ready • Write on the pad below';
         });
       }
@@ -85,8 +90,8 @@ class _HandwritingCanvasDialogState extends State<HandwritingCanvasDialog> {
       if (mounted) {
         setState(() {
           _isDownloadingModel = false;
-          _isModelReady = true; // Still allow trying or typing fallback
-          _statusMessage = 'Model download notice: $e';
+          _hasPluginError = true;
+          _statusMessage = 'ML Kit native plugin requires a full app restart. You can type or write notes below!';
         });
       }
     }
@@ -144,6 +149,23 @@ class _HandwritingCanvasDialogState extends State<HandwritingCanvasDialog> {
   }
 
   Future<void> _recognizeAndSubmit() async {
+    // If typing tab is active
+    if (_currentTab == 1) {
+      final typed = _typeTextController.text.trim();
+      if (typed.isNotEmpty) {
+        Navigator.of(context).pop(typed);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Please type some text for your note.'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+      return;
+    }
+
+    // If drawing tab is active
     if (_ink.strokes.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -183,7 +205,7 @@ class _HandwritingCanvasDialogState extends State<HandwritingCanvasDialog> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: const Text(
-              'Could not recognize text. Please write clearly and try again.',
+              'Could not recognize text. Please write clearly or switch to Type Note.',
             ),
             backgroundColor: AppTheme.textPrimary,
             behavior: SnackBarBehavior.floating,
@@ -197,17 +219,27 @@ class _HandwritingCanvasDialogState extends State<HandwritingCanvasDialog> {
       if (!mounted) return;
       setState(() {
         _isRecognizing = false;
-        _statusMessage = 'Recognition error: $e';
+        _hasPluginError = true;
+        _currentTab = 1; // Seamless fallback to Type mode
+        _statusMessage =
+            'Native ML Kit needs cold restart. Enter your note below:';
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error: $e'),
-          backgroundColor: AppTheme.accentPinkDark,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+      // Prompt user to type note without losing their momentum
+      showCupertinoDialog(
+        context: context,
+        builder: (dialogCtx) => CupertinoAlertDialog(
+          title: const Text('Save Note'),
+          content: const Text(
+            'ML Kit native binary needs a cold restart (run.bat option [1]). In the meantime, you can type your note to save it directly!',
           ),
+          actions: [
+            CupertinoDialogAction(
+              isDefaultAction: true,
+              child: const Text('Type & Save'),
+              onPressed: () => Navigator.pop(dialogCtx),
+            ),
+          ],
         ),
       );
     }
@@ -218,7 +250,7 @@ class _HandwritingCanvasDialogState extends State<HandwritingCanvasDialog> {
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
 
     return Container(
-      height: MediaQuery.of(context).size.height * 0.65 + bottomInset,
+      height: MediaQuery.of(context).size.height * 0.72 + bottomInset,
       decoration: const BoxDecoration(
         color: AppTheme.surfaceWhite,
         borderRadius: BorderRadius.only(
@@ -233,7 +265,6 @@ class _HandwritingCanvasDialogState extends State<HandwritingCanvasDialog> {
             padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
             child: Column(
               children: [
-                // Top drag pill
                 Center(
                   child: Container(
                     width: 40,
@@ -246,7 +277,7 @@ class _HandwritingCanvasDialogState extends State<HandwritingCanvasDialog> {
                 ),
                 const SizedBox(height: 12),
 
-                // Title Row
+                // Title Row with Tab Switcher
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -275,7 +306,7 @@ class _HandwritingCanvasDialogState extends State<HandwritingCanvasDialog> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Handwriting to Text',
+                              'Handwriting & Notes',
                               style: TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.w700,
@@ -284,7 +315,7 @@ class _HandwritingCanvasDialogState extends State<HandwritingCanvasDialog> {
                               ),
                             ),
                             Text(
-                              'Google ML Kit AI Recognition',
+                              'Digital Ink & Instant Note Creator',
                               style: TextStyle(
                                 fontSize: 11,
                                 color: AppTheme.textSecondary,
@@ -296,37 +327,125 @@ class _HandwritingCanvasDialogState extends State<HandwritingCanvasDialog> {
                       ],
                     ),
 
-                    // Language Badge & Close Button
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: AppTheme.primaryPurpleLight,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            widget.languageCode,
-                            style: const TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
-                              color: AppTheme.primaryPurpleDark,
+                    IconButton(
+                      icon: const Icon(
+                        CupertinoIcons.xmark_circle_fill,
+                        color: AppTheme.textMuted,
+                        size: 24,
+                      ),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+
+                // Mode Tabs (Draw / Type)
+                Container(
+                  padding: const EdgeInsets.all(3),
+                  decoration: BoxDecoration(
+                    color: AppTheme.background,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () => setState(() => _currentTab = 0),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 6),
+                            decoration: BoxDecoration(
+                              color: _currentTab == 0
+                                  ? Colors.white
+                                  : Colors.transparent,
+                              borderRadius: BorderRadius.circular(10),
+                              boxShadow: _currentTab == 0
+                                  ? [
+                                      BoxShadow(
+                                        color: Colors.black
+                                            .withValues(alpha: 0.04),
+                                        blurRadius: 4,
+                                      ),
+                                    ]
+                                  : null,
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  CupertinoIcons.pencil,
+                                  size: 14,
+                                  color: _currentTab == 0
+                                      ? AppTheme.primaryPurple
+                                      : AppTheme.textSecondary,
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  'Handwriting Pad',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: _currentTab == 0
+                                        ? FontWeight.w700
+                                        : FontWeight.w500,
+                                    color: _currentTab == 0
+                                        ? AppTheme.primaryPurple
+                                        : AppTheme.textSecondary,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ),
-                        const SizedBox(width: 8),
-                        IconButton(
-                          icon: const Icon(
-                            CupertinoIcons.xmark_circle_fill,
-                            color: AppTheme.textMuted,
-                            size: 24,
+                      ),
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () => setState(() => _currentTab = 1),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 6),
+                            decoration: BoxDecoration(
+                              color: _currentTab == 1
+                                  ? Colors.white
+                                  : Colors.transparent,
+                              borderRadius: BorderRadius.circular(10),
+                              boxShadow: _currentTab == 1
+                                  ? [
+                                      BoxShadow(
+                                        color: Colors.black
+                                            .withValues(alpha: 0.04),
+                                        blurRadius: 4,
+                                      ),
+                                    ]
+                                  : null,
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  CupertinoIcons.keyboard,
+                                  size: 14,
+                                  color: _currentTab == 1
+                                      ? AppTheme.primaryPurple
+                                      : AppTheme.textSecondary,
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  'Type Note',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: _currentTab == 1
+                                        ? FontWeight.w700
+                                        : FontWeight.w500,
+                                    color: _currentTab == 1
+                                        ? AppTheme.primaryPurple
+                                        : AppTheme.textSecondary,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
-                          onPressed: () => Navigator.pop(context),
                         ),
-                      ],
-                    ),
-                  ],
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -335,7 +454,7 @@ class _HandwritingCanvasDialogState extends State<HandwritingCanvasDialog> {
           // Status / Model downloading indicator bar
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 5),
             color: _isDownloadingModel
                 ? AppTheme.accentPinkLight
                 : AppTheme.background,
@@ -351,203 +470,250 @@ class _HandwritingCanvasDialogState extends State<HandwritingCanvasDialog> {
                     ),
                   ),
                   const SizedBox(width: 8),
+                ] else if (_hasPluginError) ...[
+                  const Icon(
+                    CupertinoIcons.info_circle_fill,
+                    size: 13,
+                    color: Color(0xFFD97706),
+                  ),
+                  const SizedBox(width: 6),
                 ] else ...[
-                  Icon(
+                  const Icon(
                     CupertinoIcons.checkmark_alt_circle_fill,
-                    size: 14,
-                    color: _isModelReady
-                        ? const Color(0xFF10B981)
-                        : AppTheme.textMuted,
+                    size: 13,
+                    color: Color(0xFF10B981),
                   ),
                   const SizedBox(width: 6),
                 ],
                 Expanded(
                   child: Text(
                     _statusMessage,
-                    style: const TextStyle(
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
                       fontSize: 11,
-                      color: AppTheme.textSecondary,
-                      fontWeight: FontWeight.w500,
+                      fontWeight: FontWeight.w600,
+                      color: _hasPluginError
+                          ? const Color(0xFFB45309)
+                          : AppTheme.textSecondary,
                     ),
                   ),
                 ),
-                if (_drawnStrokes.isNotEmpty || _currentDrawnPoints.isNotEmpty)
-                  Text(
-                    '${_drawnStrokes.length} stroke${_drawnStrokes.length == 1 ? '' : 's'}',
-                    style: const TextStyle(
-                      fontSize: 11,
-                      color: AppTheme.primaryPurple,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
               ],
             ),
           ),
 
-          // Paper Writing Pad Surface (Ruled stationery style)
+          // Main Canvas or Typing Area
           Expanded(
-            child: Container(
-              margin: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: const Color(0xFFFCFBFE),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: AppTheme.primaryPurpleLight,
-                  width: 1.5,
-                ),
-                boxShadow: AppTheme.softShadow,
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(20),
-                child: Stack(
-                  children: [
-                    // Ruled Line Paper Background
-                    const Positioned.fill(
-                      child: CustomPaint(
-                        painter: RuledPaperPainter(),
-                      ),
-                    ),
-
-                    // Drawing Gesture Detector & Visual Ink Canvas
-                    Positioned.fill(
-                      child: GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onPanStart: _onPanStart,
-                        onPanUpdate: _onPanUpdate,
-                        onPanEnd: _onPanEnd,
-                        child: CustomPaint(
-                          painter: HandwritingInkPainter(
-                            strokes: _drawnStrokes,
-                            currentStroke: _currentDrawnPoints,
-                          ),
-                          size: Size.infinite,
-                        ),
-                      ),
-                    ),
-
-                    // Empty State Watermark
-                    if (_drawnStrokes.isEmpty && _currentDrawnPoints.isEmpty)
-                      const Center(
-                        child: IgnorePointer(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                CupertinoIcons.signature,
-                                size: 48,
-                                color: Color(0xFFE2DCF7),
-                              ),
-                              SizedBox(height: 8),
-                              Text(
-                                'Write your notes or formulas here ✨',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  color: AppTheme.textMuted,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-
-          // Bottom Action Bar: Clear & Done / Convert Buttons
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
-            child: Row(
-              children: [
-                // Clear Button
-                Expanded(
-                  flex: 1,
-                  child: OutlinedButton.icon(
-                    onPressed: (_drawnStrokes.isEmpty &&
-                            _currentDrawnPoints.isEmpty)
-                        ? null
-                        : _clearCanvas,
-                    icon: const Icon(CupertinoIcons.trash, size: 16),
-                    label: const Text('Clear'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppTheme.textSecondary,
-                      side: const BorderSide(color: AppTheme.dividerColor),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                    ),
-                  ),
-                ),
-
-                const SizedBox(width: 12),
-
-                // Convert / Done Button
-                Expanded(
-                  flex: 2,
-                  child: ElevatedButton(
-                    onPressed: _isRecognizing ? null : _recognizeAndSubmit,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.transparent,
-                      shadowColor: Colors.transparent,
-                      padding: EdgeInsets.zero,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                    ),
-                    child: Ink(
+            child: _currentTab == 0
+                ? Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 10),
+                    child: Container(
                       decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [
-                            AppTheme.primaryPurple,
-                            AppTheme.accentPink,
-                          ],
-                          begin: Alignment.centerLeft,
-                          end: Alignment.centerRight,
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: AppTheme.primaryPurpleLight,
+                          width: 1.5,
                         ),
-                        borderRadius: BorderRadius.circular(16),
                         boxShadow: [
                           BoxShadow(
-                            color: AppTheme.primaryPurple.withValues(alpha: 0.35),
+                            color: AppTheme.primaryPurple.withValues(alpha: 0.06),
                             blurRadius: 12,
                             offset: const Offset(0, 4),
                           ),
                         ],
                       ),
-                      child: Container(
-                        alignment: Alignment.center,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        child: _isRecognizing
-                            ? const SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2.5,
-                                  color: Colors.white,
-                                ),
-                              )
-                            : const Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(
-                                    CupertinoIcons.sparkles,
-                                    color: Colors.white,
-                                    size: 18,
-                                  ),
-                                  SizedBox(width: 8),
-                                  Text(
-                                    'Convert to Text',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.w700,
-                                      letterSpacing: 0.2,
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(18),
+                        child: Stack(
+                          children: [
+                            // Lined Paper Background
+                            CustomPaint(
+                              painter: LinedPaperPainter(),
+                              size: Size.infinite,
+                            ),
+
+                            // Watermark Guide
+                            if (_drawnStrokes.isEmpty &&
+                                _currentDrawnPoints.isEmpty)
+                              Center(
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      CupertinoIcons.pencil_outline,
+                                      size: 34,
+                                      color: AppTheme.primaryPurple
+                                          .withValues(alpha: 0.25),
                                     ),
-                                  ),
-                                ],
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      'Write your notes or formulas here ✨',
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w600,
+                                        color: AppTheme.textMuted
+                                            .withValues(alpha: 0.6),
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
+
+                            // Touch Drawing Layer
+                            GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onPanStart: _onPanStart,
+                              onPanUpdate: _onPanUpdate,
+                              onPanEnd: _onPanEnd,
+                              child: CustomPaint(
+                                painter: HandwritingDrawingPainter(
+                                  strokes: _drawnStrokes,
+                                  currentStroke: _currentDrawnPoints,
+                                ),
+                                size: Size.infinite,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  )
+                : Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 10),
+                    child: Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: AppTheme.primaryPurpleLight,
+                          width: 1.5,
+                        ),
+                      ),
+                      child: TextField(
+                        controller: _typeTextController,
+                        maxLines: null,
+                        expands: true,
+                        autofocus: true,
+                        decoration: const InputDecoration(
+                          hintText:
+                              'Type or paste your study notes, formulas, or review pointers...',
+                          hintStyle: TextStyle(
+                            color: AppTheme.textMuted,
+                            fontSize: 13.5,
+                          ),
+                          border: InputBorder.none,
+                        ),
+                        style: const TextStyle(
+                          fontSize: 14,
+                          color: AppTheme.textPrimary,
+                          height: 1.4,
+                        ),
+                      ),
+                    ),
+                  ),
+          ),
+
+          // Bottom Action Bar (Clear & Convert / Save)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 4, 20, 16),
+            child: Row(
+              children: [
+                // Clear Button
+                if (_currentTab == 0)
+                  Expanded(
+                    flex: 4,
+                    child: SizedBox(
+                      height: 48,
+                      child: OutlinedButton.icon(
+                        onPressed: _drawnStrokes.isNotEmpty ? _clearCanvas : null,
+                        icon: const Icon(CupertinoIcons.trash, size: 16),
+                        label: const Text('Clear'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppTheme.textSecondary,
+                          side: BorderSide(
+                            color: AppTheme.dividerColor.withValues(alpha: 0.8),
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+
+                if (_currentTab == 0) const SizedBox(width: 12),
+
+                // Submit Action Button
+                Expanded(
+                  flex: _currentTab == 0 ? 7 : 12,
+                  child: SizedBox(
+                    height: 48,
+                    child: ElevatedButton(
+                      onPressed: _isRecognizing ? null : _recognizeAndSubmit,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.transparent,
+                        shadowColor: Colors.transparent,
+                        padding: EdgeInsets.zero,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                      ),
+                      child: Ink(
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [
+                              AppTheme.primaryPurple,
+                              AppTheme.accentPink,
+                            ],
+                          ),
+                          borderRadius: BorderRadius.circular(16),
+                          boxShadow: [
+                            BoxShadow(
+                              color:
+                                  AppTheme.primaryPurple.withValues(alpha: 0.35),
+                              blurRadius: 10,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: Container(
+                          alignment: Alignment.center,
+                          child: _isRecognizing
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      _currentTab == 0
+                                          ? CupertinoIcons.sparkles
+                                          : CupertinoIcons.checkmark_alt,
+                                      size: 17,
+                                      color: Colors.white,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      _currentTab == 0
+                                          ? 'Convert to Text'
+                                          : 'Save Note',
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                        ),
                       ),
                     ),
                   ),
@@ -561,19 +727,17 @@ class _HandwritingCanvasDialogState extends State<HandwritingCanvasDialog> {
   }
 }
 
-/// Custom painter that draws subtle notebook ruled guide lines
-class RuledPaperPainter extends CustomPainter {
-  const RuledPaperPainter();
-
+/// Painter that renders subtle study notebook lines
+class LinedPaperPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
-    final linePaint = Paint()
-      ..color = const Color(0xFFECE7F6)
+    final paint = Paint()
+      ..color = const Color(0xFFE2E8F0).withValues(alpha: 0.7)
       ..strokeWidth = 1.0;
 
-    const spacing = 32.0;
-    for (double y = spacing; y < size.height; y += spacing) {
-      canvas.drawLine(Offset(16, y), Offset(size.width - 16, y), linePaint);
+    const double lineSpacing = 32.0;
+    for (double y = lineSpacing; y < size.height; y += lineSpacing) {
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
     }
   }
 
@@ -581,12 +745,12 @@ class RuledPaperPainter extends CustomPainter {
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
-/// Custom painter for real-time handwriting ink rendering on the popup canvas
-class HandwritingInkPainter extends CustomPainter {
+/// Painter for rendering active ink strokes with ink pen effect
+class HandwritingDrawingPainter extends CustomPainter {
   final List<List<Offset>> strokes;
   final List<Offset> currentStroke;
 
-  HandwritingInkPainter({
+  HandwritingDrawingPainter({
     required this.strokes,
     required this.currentStroke,
   });
@@ -594,25 +758,26 @@ class HandwritingInkPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = const Color(0xFF2D2640)
-      ..strokeWidth = 3.5
+      ..color = const Color(0xFF1E1B4B)
+      ..strokeWidth = 3.2
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round
       ..style = PaintingStyle.stroke;
 
-    // Draw historical strokes
+    // Draw completed strokes
     for (final stroke in strokes) {
-      _drawPath(canvas, stroke, paint);
+      _drawSmoothStroke(canvas, stroke, paint);
     }
 
-    // Draw active stroke
+    // Draw current active stroke
     if (currentStroke.isNotEmpty) {
-      _drawPath(canvas, currentStroke, paint);
+      _drawSmoothStroke(canvas, currentStroke, paint);
     }
   }
 
-  void _drawPath(Canvas canvas, List<Offset> points, Paint paint) {
+  void _drawSmoothStroke(Canvas canvas, List<Offset> points, Paint paint) {
     if (points.isEmpty) return;
+
     if (points.length == 1) {
       canvas.drawCircle(
         points.first,
@@ -639,5 +804,5 @@ class HandwritingInkPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant HandwritingInkPainter oldDelegate) => true;
+  bool shouldRepaint(covariant HandwritingDrawingPainter oldDelegate) => true;
 }
