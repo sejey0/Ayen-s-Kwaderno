@@ -1043,8 +1043,8 @@ class _EditorScreenState extends State<EditorScreen>
             children: [
               // Back Button
               Container(
-                width: 40,
-                height: 40,
+                width: 36,
+                height: 36,
                 decoration: BoxDecoration(
                   color: AppTheme.primaryPurpleLight.withValues(alpha: 0.6),
                   shape: BoxShape.circle,
@@ -1054,12 +1054,12 @@ class _EditorScreenState extends State<EditorScreen>
                   icon: const Icon(
                     CupertinoIcons.chevron_back,
                     color: AppTheme.primaryPurple,
-                    size: 22,
+                    size: 20,
                   ),
                   onPressed: () => Navigator.of(context).pop(),
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 10),
 
               // Title and Page Badge
               Expanded(
@@ -1072,68 +1072,77 @@ class _EditorScreenState extends State<EditorScreen>
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
-                        fontSize: 15,
+                        fontSize: 14.5,
                         fontWeight: FontWeight.w700,
                         color: AppTheme.textPrimary,
                         letterSpacing: -0.2,
                       ),
                     ),
                     const SizedBox(height: 2),
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 1.5),
-                          decoration: BoxDecoration(
-                            color: AppTheme.primaryPurpleLight,
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text(
-                            _isDocumentLoaded
-                                ? 'Page $_currentPage of $_pageCount'
-                                : 'Loading...',
-                            style: const TextStyle(
-                              fontSize: 10.5,
-                              fontWeight: FontWeight.w700,
-                              color: AppTheme.primaryPurpleDark,
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      physics: const BouncingScrollPhysics(),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 1.5),
+                            decoration: BoxDecoration(
+                              color: AppTheme.primaryPurpleLight,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              _isDocumentLoaded
+                                  ? 'Page $_currentPage of $_pageCount'
+                                  : 'Loading...',
+                              style: const TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                                color: AppTheme.primaryPurpleDark,
+                              ),
                             ),
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                        if (_activeTool != AnnotationTool.none)
-                          Text(
-                            '• ${_getToolName(_activeTool)}',
-                            style: const TextStyle(
-                              fontSize: 11,
-                              color: AppTheme.accentPinkDark,
-                              fontWeight: FontWeight.w600,
+                          if (_activeTool != AnnotationTool.none) ...[
+                            const SizedBox(width: 6),
+                            Text(
+                              '• ${_getToolName(_activeTool)}',
+                              style: const TextStyle(
+                                fontSize: 10.5,
+                                color: AppTheme.accentPinkDark,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
-                          ),
-                        if (totalAnnotationsCount > 0) ...[
-                          const SizedBox(width: 6),
-                          Text(
-                            '($totalAnnotationsCount item${totalAnnotationsCount == 1 ? '' : 's'})',
-                            style: const TextStyle(
-                              fontSize: 11,
-                              color: AppTheme.textMuted,
-                              fontWeight: FontWeight.w500,
+                          ],
+                          if (totalAnnotationsCount > 0) ...[
+                            const SizedBox(width: 6),
+                            Text(
+                              '($totalAnnotationsCount)',
+                              style: const TextStyle(
+                                fontSize: 10.5,
+                                color: AppTheme.textMuted,
+                                fontWeight: FontWeight.w500,
+                              ),
                             ),
-                          ),
+                          ],
                         ],
-                      ],
+                      ),
                     ),
                   ],
                 ),
               ),
+              const SizedBox(width: 6),
 
               // Undo Button
               IconButton(
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                 icon: Icon(
                   CupertinoIcons.arrow_uturn_left,
                   color: _strokes.isNotEmpty
                       ? AppTheme.textPrimary
-                      : AppTheme.textMuted.withValues(alpha: 0.5),
-                  size: 20,
+                      : AppTheme.textMuted.withValues(alpha: 0.4),
+                  size: 18,
                 ),
                 tooltip: 'Undo stroke',
                 onPressed: _strokes.isNotEmpty ? _undo : null,
@@ -1141,12 +1150,14 @@ class _EditorScreenState extends State<EditorScreen>
 
               // Redo Button
               IconButton(
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                 icon: Icon(
                   CupertinoIcons.arrow_uturn_right,
                   color: _redoHistory.isNotEmpty
                       ? AppTheme.textPrimary
-                      : AppTheme.textMuted.withValues(alpha: 0.5),
-                  size: 20,
+                      : AppTheme.textMuted.withValues(alpha: 0.4),
+                  size: 18,
                 ),
                 tooltip: 'Redo stroke',
                 onPressed: _redoHistory.isNotEmpty ? _redo : null,
@@ -1155,10 +1166,13 @@ class _EditorScreenState extends State<EditorScreen>
               // Clear Annotations Button
               if (totalAnnotationsCount > 0)
                 IconButton(
+                  padding: EdgeInsets.zero,
+                  constraints:
+                      const BoxConstraints(minWidth: 30, minHeight: 32),
                   icon: const Icon(
                     CupertinoIcons.trash,
                     color: AppTheme.accentPink,
-                    size: 19,
+                    size: 17,
                   ),
                   tooltip: 'Clear Annotations',
                   onPressed: _clearAnnotations,
@@ -1171,40 +1185,41 @@ class _EditorScreenState extends State<EditorScreen>
                   gradient: const LinearGradient(
                     colors: [AppTheme.primaryPurple, AppTheme.accentPink],
                   ),
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(10),
                   boxShadow: [
                     BoxShadow(
                       color: AppTheme.accentPink.withValues(alpha: 0.35),
-                      blurRadius: 8,
-                      offset: const Offset(0, 3),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
                     ),
                   ],
                 ),
                 child: Material(
                   color: Colors.transparent,
                   child: InkWell(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(10),
                     onTap: _isSyncing ? null : _saveAnnotationsToSupabase,
                     child: Padding(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 8),
+                          horizontal: 10, vertical: 6),
                       child: Row(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
                           if (_isSyncing) ...[
                             const SizedBox(
-                              width: 14,
-                              height: 14,
+                              width: 12,
+                              height: 12,
                               child: CircularProgressIndicator(
                                 strokeWidth: 2,
                                 color: Colors.white,
                               ),
                             ),
-                            const SizedBox(width: 8),
+                            const SizedBox(width: 6),
                             const Text(
-                              'Saving...',
+                              'Saving',
                               style: TextStyle(
                                 color: Colors.white,
-                                fontSize: 13,
+                                fontSize: 12,
                                 fontWeight: FontWeight.w700,
                               ),
                             ),
@@ -1212,14 +1227,14 @@ class _EditorScreenState extends State<EditorScreen>
                             const Icon(
                               CupertinoIcons.cloud_upload_fill,
                               color: Colors.white,
-                              size: 15,
+                              size: 14,
                             ),
-                            const SizedBox(width: 6),
+                            const SizedBox(width: 4),
                             const Text(
                               'Save',
                               style: TextStyle(
                                 color: Colors.white,
-                                fontSize: 13,
+                                fontSize: 12,
                                 fontWeight: FontWeight.w700,
                               ),
                             ),
