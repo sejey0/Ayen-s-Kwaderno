@@ -531,7 +531,7 @@ class _HomeScreenState extends State<HomeScreen> {
               const SliverToBoxAdapter(child: SizedBox(height: 18)),
 
               // ==========================================
-              // 1. PDF DOCUMENTS SECTION
+              // 1. UPLOADED DOCUMENTS & IMAGES SECTION
               // ==========================================
               if (showDocs) ...[
                 SliverToBoxAdapter(
@@ -549,7 +549,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             ),
                             const SizedBox(width: 8),
                             Text(
-                              'PDF Documents ($totalDocsCount)',
+                              'Documents & Images ($totalDocsCount)',
                               style: const TextStyle(
                                 fontSize: 17,
                                 fontWeight: FontWeight.w700,
@@ -582,11 +582,11 @@ class _HomeScreenState extends State<HomeScreen> {
                             child: const Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Icon(CupertinoIcons.add,
+                                Icon(CupertinoIcons.cloud_upload_fill,
                                     size: 13, color: AppTheme.primaryPurple),
-                                SizedBox(width: 3),
+                                SizedBox(width: 4),
                                 Text(
-                                  'Import PDF',
+                                  'Upload',
                                   style: TextStyle(
                                     fontSize: 11.5,
                                     fontWeight: FontWeight.w700,
@@ -613,7 +613,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 else
                   SliverPadding(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 20.0, vertical: 4.0),
+                         horizontal: 20.0, vertical: 4.0),
                     sliver: SliverGrid(
                       gridDelegate:
                           const SliverGridDelegateWithFixedCrossAxisCount(
@@ -635,7 +635,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ],
 
               // ==========================================
-              // 2. HANDWRITING NOTES SECTION
+              // 2. WRITE A NOTE / WRITTEN NOTES SECTION
               // ==========================================
               if (showNotes) ...[
                 SliverToBoxAdapter(
@@ -653,7 +653,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             ),
                             const SizedBox(width: 8),
                             Text(
-                              'Handwriting Notes ($totalNotesCount)',
+                              'Written Notes ($totalNotesCount)',
                               style: const TextStyle(
                                 fontSize: 17,
                                 fontWeight: FontWeight.w700,
@@ -679,7 +679,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                     size: 13, color: AppTheme.accentPinkDark),
                                 SizedBox(width: 3),
                                 Text(
-                                  'Write Note',
+                                  'Write a Note',
                                   style: TextStyle(
                                     fontSize: 11.5,
                                     fontWeight: FontWeight.w700,
@@ -749,7 +749,7 @@ class _HomeScreenState extends State<HomeScreen> {
           size: 20,
         ),
         label: Text(
-          _currentSection == LibrarySection.notes ? 'New Note' : 'Upload File',
+          _currentSection == LibrarySection.notes ? 'Write a Note' : 'Upload Document',
           style: const TextStyle(
             fontWeight: FontWeight.w700,
             fontSize: 14,
@@ -760,7 +760,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  /// Segmented Section Switcher (All Items, Documents, Notes)
+  /// Segmented Section Switcher (All, Documents, Notes)
   Widget _buildSectionSwitcher(int docsCount, int notesCount) {
     return Container(
       padding: const EdgeInsets.all(4),
@@ -779,7 +779,7 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Row(
         children: [
           _buildSwitcherTab(
-            label: 'All Items',
+            label: 'All',
             badge: '${docsCount + notesCount}',
             section: LibrarySection.all,
           ),
@@ -810,23 +810,28 @@ class _HomeScreenState extends State<HomeScreen> {
         onTap: () => setState(() => _currentSection = section),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 180),
-          padding: const EdgeInsets.symmetric(vertical: 8),
+          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
           decoration: BoxDecoration(
             color: isSelected ? AppTheme.primaryPurple : Colors.transparent,
             borderRadius: BorderRadius.circular(12),
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 12.5,
-                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
-                  color: isSelected ? Colors.white : AppTheme.textSecondary,
+              Flexible(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
+                    color: isSelected ? Colors.white : AppTheme.textSecondary,
+                  ),
                 ),
               ),
-              const SizedBox(width: 5),
+              const SizedBox(width: 4),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
                 decoration: BoxDecoration(
@@ -838,9 +843,10 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: Text(
                   badge,
                   style: TextStyle(
-                    fontSize: 10,
+                    fontSize: 9.5,
                     fontWeight: FontWeight.w700,
-                    color: isSelected ? Colors.white : AppTheme.primaryPurpleDark,
+                    color:
+                        isSelected ? Colors.white : AppTheme.primaryPurpleDark,
                   ),
                 ),
               ),
@@ -1188,7 +1194,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  /// Empty State card for Documents section
+  /// Empty State card for Documents or Images section
   Widget _buildEmptyDocumentsCard() {
     return Container(
       width: double.infinity,
@@ -1198,22 +1204,22 @@ class _HomeScreenState extends State<HomeScreen> {
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: AppTheme.dividerColor),
       ),
-      child: Column(
+      child: const Column(
         children: [
-          const Icon(CupertinoIcons.doc_text_search,
+          Icon(CupertinoIcons.doc_text_search,
               size: 32, color: AppTheme.primaryPurple),
-          const SizedBox(height: 8),
-          const Text(
-            'No PDF Documents Yet',
+          SizedBox(height: 8),
+          Text(
+            'No Documents or Images Yet',
             style: TextStyle(
               fontWeight: FontWeight.w700,
               fontSize: 14.5,
               color: AppTheme.textPrimary,
             ),
           ),
-          const SizedBox(height: 4),
-          const Text(
-            'Import a PDF file to highlight, draw lines, and add stickers.',
+          SizedBox(height: 4),
+          Text(
+            'Upload a PDF document or image to highlight, draw lines, and add notes.',
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
           ),
@@ -1222,7 +1228,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  /// Empty State card for Handwriting Notes section
+  /// Empty State card for Written Notes section
   Widget _buildEmptyNotesCard() {
     return Container(
       width: double.infinity,
@@ -1232,22 +1238,22 @@ class _HomeScreenState extends State<HomeScreen> {
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: AppTheme.dividerColor),
       ),
-      child: Column(
+      child: const Column(
         children: [
-          const Icon(CupertinoIcons.pencil_ellipsis_rectangle,
+          Icon(CupertinoIcons.pencil_ellipsis_rectangle,
               size: 32, color: AppTheme.accentPink),
-          const SizedBox(height: 8),
-          const Text(
-            'No Handwriting Notes Yet',
+          SizedBox(height: 8),
+          Text(
+            'No Notes Written Yet',
             style: TextStyle(
               fontWeight: FontWeight.w700,
               fontSize: 14.5,
               color: AppTheme.textPrimary,
             ),
           ),
-          const SizedBox(height: 4),
-          const Text(
-            'Tap "Handwriting" or "Write Note" to convert your strokes to digital notes.',
+          SizedBox(height: 4),
+          Text(
+            'Tap "Write a Note" to convert your handwriting or type digital study notes.',
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
           ),
