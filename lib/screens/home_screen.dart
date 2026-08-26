@@ -221,7 +221,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
       final picked = await FilePicker.pickFile(
         type: FileType.custom,
-        allowedExtensions: ['pdf'],
+        allowedExtensions: ['pdf', 'png', 'jpg', 'jpeg', 'webp'],
       );
 
       if (!mounted) return;
@@ -398,7 +398,7 @@ class _HomeScreenState extends State<HomeScreen> {
             onPressed: () async {
               final picked = await FilePicker.pickFile(
                 type: FileType.custom,
-                allowedExtensions: ['pdf'],
+                allowedExtensions: ['pdf', 'png', 'jpg', 'jpeg', 'webp', 'bmp'],
               );
               if (picked != null && picked.path != null) {
                 final selectedPath = picked.path!;
@@ -1185,7 +1185,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                           SizedBox(height: 3),
                           Text(
-                            'Annotate PDF reviewers or create instant handwriting notes.',
+                            'Annotate PDF documents & images, or write notes instantly.',
                             style: TextStyle(
                               fontSize: 12.5,
                               color: AppTheme.textSecondary,
@@ -1238,6 +1238,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             ),
                             child: Container(
                               alignment: Alignment.center,
+                              padding: const EdgeInsets.symmetric(horizontal: 8),
                               child: _isPickingDocument
                                   ? const SizedBox(
                                       width: 18,
@@ -1251,16 +1252,20 @@ class _HomeScreenState extends State<HomeScreen> {
                                       mainAxisAlignment:
                                           MainAxisAlignment.center,
                                       children: [
-                                        Icon(CupertinoIcons.folder_badge_plus,
+                                        Icon(CupertinoIcons.cloud_upload_fill,
                                             size: 17, color: Colors.white),
-                                        SizedBox(width: 7),
-                                        Text(
-                                          'Open PDF',
-                                          style: TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 13.5,
-                                            fontWeight: FontWeight.w700,
-                                            letterSpacing: 0.1,
+                                        SizedBox(width: 6),
+                                        Expanded(
+                                          child: Text(
+                                            'Upload Documents or Images',
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w700,
+                                              letterSpacing: -0.2,
+                                            ),
                                           ),
                                         ),
                                       ],
@@ -1288,19 +1293,19 @@ class _HomeScreenState extends State<HomeScreen> {
                               borderRadius: BorderRadius.circular(14),
                             ),
                             padding:
-                                const EdgeInsets.symmetric(horizontal: 10),
+                                const EdgeInsets.symmetric(horizontal: 8),
                           ),
                           child: const Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               Icon(
-                                CupertinoIcons.pencil_outline,
+                                CupertinoIcons.pencil_ellipsis_rectangle,
                                 size: 17,
                                 color: AppTheme.primaryPurpleDark,
                               ),
                               SizedBox(width: 6),
                               Text(
-                                'Handwriting',
+                                'Write a Note',
                                 style: TextStyle(
                                   color: AppTheme.primaryPurpleDark,
                                   fontSize: 13,

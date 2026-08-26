@@ -86,11 +86,24 @@ class _EditorScreenState extends State<EditorScreen>
   String get _documentIdentifier =>
       widget.fileName ?? widget.pdfPath.split(Platform.pathSeparator).last;
 
+  bool get _isImageDocument {
+    final lower = widget.pdfPath.toLowerCase();
+    return lower.endsWith('.png') ||
+        lower.endsWith('.jpg') ||
+        lower.endsWith('.jpeg') ||
+        lower.endsWith('.webp') ||
+        lower.endsWith('.bmp');
+  }
+
   @override
   void initState() {
     super.initState();
     _documentId = 'doc_${DateTime.now().millisecondsSinceEpoch}';
-    _loadPdfDocument();
+    if (_isImageDocument) {
+      _loadImageDocument();
+    } else {
+      _loadPdfDocument();
+    }
     _loadAnnotationsOfflineFirst();
   }
 
@@ -98,7 +111,9 @@ class _EditorScreenState extends State<EditorScreen>
   void dispose() {
     _cloudSyncDebounceTimer?.cancel();
     _transformationController.dispose();
-    PdfViewerPlatform.instance.closeDocument(_documentId);
+    if (!_isImageDocument) {
+      PdfViewerPlatform.instance.closeDocument(_documentId);
+    }
     super.dispose();
   }
 
@@ -115,6 +130,33 @@ class _EditorScreenState extends State<EditorScreen>
       },
     );
     return completer.future;
+  }
+
+  /// Loads standalone image file into the high-definition annotation canvas
+  Future<void> _loadImageDocument() async {
+    try {
+      setState(() => _isLoadingPage = true);
+      final file = File(widget.pdfPath);
+      final bytes = await file.readAsBytes();
+      final codec = await ui.instantiateImageCodec(bytes);
+      final frameInfo = await codec.getNextFrame();
+      final uiImage = frameInfo.image;
+
+      if (!mounted) return;
+      setState(() {
+        _renderedPageUiImage = uiImage;
+        _pageWidth = uiImage.width.toDouble();
+        _pageHeight = uiImage.height.toDouble();
+        _pageCount = 1;
+        _currentPage = 1;
+        _isDocumentLoaded = true;
+        _isLoadingPage = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isLoadingPage = false);
+      debugPrint('Error loading image document: $e');
+    }
   }
 
   /// Initializes PDF Renderer and loads page dimensions
