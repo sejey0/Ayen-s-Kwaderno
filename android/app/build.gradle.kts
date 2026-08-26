@@ -22,7 +22,7 @@ android {
 
     defaultConfig {
         applicationId = "com.ayenskwaderno.ayens_kwaderno"
-        minSdk = flutter.minSdkVersion
+        minSdk = 21
         targetSdk = 35
         versionCode = flutter.versionCode
         versionName = flutter.versionName
@@ -37,9 +37,4 @@ android {
 
 flutter {
     source = "../.."
-}
-
-// Force override buildToolsVersion if any subproject or plugin injects 25.0.4
-project.afterEvaluate {
-    android.buildToolsVersion = "34.0.0"
 }
