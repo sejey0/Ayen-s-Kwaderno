@@ -9,6 +9,7 @@ import '../models/handwriting_note_model.dart';
 import '../services/document_storage_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/handwriting_canvas.dart';
+import '../widgets/upload_document_dialog.dart';
 import 'editor_screen.dart';
 
 enum LibrarySection {
@@ -25,7 +26,6 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  bool _isPickingDocument = false;
   bool _isLoadingCloudDocuments = false;
 
   LibrarySection _currentSection = LibrarySection.all;
@@ -214,104 +214,11 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  /// Handles picking a PDF document using FilePicker, saving to persistence, and opening Editor
+  /// Opens the Upload Document or Image modal with preview and title editor
   Future<void> _pickAndOpenDocument() async {
-    try {
-      setState(() => _isPickingDocument = true);
-
-      final picked = await FilePicker.pickFile(
-        type: FileType.custom,
-        allowedExtensions: ['pdf', 'png', 'jpg', 'jpeg', 'webp'],
-      );
-
-      if (!mounted) return;
-      setState(() => _isPickingDocument = false);
-
-      if (picked != null && picked.path != null) {
-        final filePath = picked.path!;
-        final fileName = picked.name;
-
-        // Persist document to local storage
-        final newDoc = DocumentItem(
-          fileName: fileName,
-          filePath: filePath,
-          lastOpenedAt: DateTime.now(),
-          annotationsCount: 0,
-          paletteIndex: _documents.length % _coverPalettes.length,
-          isCloudSynced: false,
-        );
-
-        await DocumentStorageService.saveOrUpdateDocument(newDoc);
-
-        // Update in-memory state
-        setState(() {
-          _documents.removeWhere((d) => d.fileName == fileName);
-          _documents.insert(0, newDoc);
-        });
-
-        if (!mounted) return;
-
-        // Smooth PageRoute transition into Editor
-        await Navigator.of(context).push(
-          PageRouteBuilder(
-            pageBuilder: (context, animation, secondaryAnimation) =>
-                EditorScreen(
-              pdfPath: filePath,
-              fileName: fileName,
-            ),
-            transitionsBuilder:
-                (context, animation, secondaryAnimation, child) {
-              const begin = Offset(0.0, 0.05);
-              const end = Offset.zero;
-              const curve = Curves.easeOutCubic;
-
-              final tween =
-                  Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
-              final fadeTween = Tween<double>(begin: 0.0, end: 1.0)
-                  .chain(CurveTween(curve: curve));
-
-              return SlideTransition(
-                position: animation.drive(tween),
-                child: FadeTransition(
-                  opacity: animation.drive(fadeTween),
-                  child: child,
-                ),
-              );
-            },
-            transitionDuration: const Duration(milliseconds: 300),
-          ),
-        );
-
-        // Refresh list upon returning from editor
-        _loadInitialData();
-      }
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _isPickingDocument = false);
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              const Icon(
-                Icons.error_outline_rounded,
-                color: Colors.white,
-                size: 20,
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text('Unable to open document: $e'),
-              ),
-            ],
-          ),
-          backgroundColor: AppTheme.textPrimary,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          margin: const EdgeInsets.all(16),
-        ),
-      );
+    final uploadedDoc = await UploadDocumentDialog.show(context);
+    if (uploadedDoc != null) {
+      _loadInitialData();
     }
   }
 
@@ -691,7 +598,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           ],
                         ),
                         GestureDetector(
-                          onTap: _isPickingDocument ? null : _pickAndOpenDocument,
+                          onTap: _pickAndOpenDocument,
                           child: Container(
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 10, vertical: 5),
@@ -856,29 +763,20 @@ class _HomeScreenState extends State<HomeScreen> {
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _currentSection == LibrarySection.notes
             ? _launchHandwritingToText
-            : (_isPickingDocument ? null : _pickAndOpenDocument),
+            : _pickAndOpenDocument,
         backgroundColor: _currentSection == LibrarySection.notes
             ? AppTheme.primaryPurple
             : AppTheme.accentPink,
         foregroundColor: Colors.white,
         elevation: 4,
-        icon: _isPickingDocument
-            ? const SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: Colors.white,
-                ),
-              )
-            : Icon(
-                _currentSection == LibrarySection.notes
-                    ? CupertinoIcons.pencil_outline
-                    : CupertinoIcons.add,
-                size: 20,
-              ),
+        icon: Icon(
+          _currentSection == LibrarySection.notes
+              ? CupertinoIcons.pencil_outline
+              : CupertinoIcons.cloud_upload_fill,
+          size: 20,
+        ),
         label: Text(
-          _currentSection == LibrarySection.notes ? 'New Note' : 'New Document',
+          _currentSection == LibrarySection.notes ? 'New Note' : 'Upload File',
           style: const TextStyle(
             fontWeight: FontWeight.w700,
             fontSize: 14,
@@ -1205,8 +1103,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       child: SizedBox(
                         height: 48,
                         child: ElevatedButton(
-                          onPressed:
-                              _isPickingDocument ? null : _pickAndOpenDocument,
+                          onPressed: _pickAndOpenDocument,
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.transparent,
                             shadowColor: Colors.transparent,
@@ -1239,37 +1136,28 @@ class _HomeScreenState extends State<HomeScreen> {
                             child: Container(
                               alignment: Alignment.center,
                               padding: const EdgeInsets.symmetric(horizontal: 8),
-                              child: _isPickingDocument
-                                  ? const SizedBox(
-                                      width: 18,
-                                      height: 18,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
+                              child: const Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.center,
+                                children: [
+                                  Icon(CupertinoIcons.cloud_upload_fill,
+                                      size: 17, color: Colors.white),
+                                  SizedBox(width: 6),
+                                  Expanded(
+                                    child: Text(
+                                      'Upload Documents or Images',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
                                         color: Colors.white,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w700,
+                                        letterSpacing: -0.2,
                                       ),
-                                    )
-                                  : const Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      children: [
-                                        Icon(CupertinoIcons.cloud_upload_fill,
-                                            size: 17, color: Colors.white),
-                                        SizedBox(width: 6),
-                                        Expanded(
-                                          child: Text(
-                                            'Upload Documents or Images',
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 12,
-                                              fontWeight: FontWeight.w700,
-                                              letterSpacing: -0.2,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
                                     ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
                         ),
