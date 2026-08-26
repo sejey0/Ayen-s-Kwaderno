@@ -12,7 +12,8 @@ class HandwritingNote {
 
   bool get isHandwritten =>
       _isHandwritten == true ||
-      (strokesJson != null && strokesJson!.isNotEmpty);
+      (strokesJson != null && strokesJson!.isNotEmpty) ||
+      content.startsWith('Handwritten drawing');
 
   HandwritingNote({
     String? id,

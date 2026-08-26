@@ -165,10 +165,22 @@ class _HomeScreenState extends State<HomeScreen> {
         };
 
         for (final row in notesResponse) {
-          final note = HandwritingNote.fromJson(Map<String, dynamic>.from(row))
-              .copyWith(isCloudSynced: true);
-          noteMap[note.id] = note;
-          await DocumentStorageService.saveOrUpdateHandwritingNote(note);
+          final cloudNote =
+              HandwritingNote.fromJson(Map<String, dynamic>.from(row))
+                  .copyWith(isCloudSynced: true);
+
+          final localNote = noteMap[cloudNote.id];
+          if (localNote != null) {
+            noteMap[cloudNote.id] = cloudNote.copyWith(
+              isHandwritten: cloudNote.isHandwritten || localNote.isHandwritten,
+              strokesJson: cloudNote.strokesJson ?? localNote.strokesJson,
+            );
+          } else {
+            noteMap[cloudNote.id] = cloudNote;
+          }
+
+          await DocumentStorageService.saveOrUpdateHandwritingNote(
+              noteMap[cloudNote.id]!);
         }
 
         mergedNotes = noteMap.values.toList()
