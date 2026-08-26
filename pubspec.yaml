@@ -44,6 +44,7 @@ dependencies:
   shared_preferences: ^2.5.5
   syncfusion_pdfviewer_platform_interface: ^34.2.5
   connectivity_plus: ^7.3.1
+  http: ^1.2.1
 
 dev_dependencies:
   flutter_test:

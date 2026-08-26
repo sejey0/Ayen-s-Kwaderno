@@ -1455,18 +1455,29 @@ class _HomeScreenState extends State<HomeScreen> {
                       children: [
                         Row(
                           children: [
-                            const Icon(
-                              CupertinoIcons.pencil,
-                              size: 11,
-                              color: AppTheme.primaryPurple,
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 5, vertical: 1.5),
+                              decoration: BoxDecoration(
+                                color: AppTheme.primaryPurpleLight,
+                                borderRadius: BorderRadius.circular(5),
+                              ),
+                              child: const Text(
+                                '2 Pages',
+                                style: TextStyle(
+                                  fontSize: 9.5,
+                                  fontWeight: FontWeight.w800,
+                                  color: AppTheme.primaryPurpleDark,
+                                ),
+                              ),
                             ),
-                            const SizedBox(width: 3),
+                            const SizedBox(width: 4),
                             Text(
                               '${strokes.length} stroke${strokes.length == 1 ? '' : 's'}',
                               style: const TextStyle(
-                                fontSize: 10.5,
+                                fontSize: 10,
                                 fontWeight: FontWeight.w600,
-                                color: AppTheme.primaryPurple,
+                                color: AppTheme.textSecondary,
                               ),
                             ),
                           ],

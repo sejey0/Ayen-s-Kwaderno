@@ -1,9 +1,11 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_mlkit_digital_ink_recognition/google_mlkit_digital_ink_recognition.dart'
     as mlkit;
 import '../models/handwriting_note_model.dart';
 import '../services/document_storage_service.dart';
+import '../services/gemini_handwriting_service.dart';
 import '../theme/app_theme.dart';
 
 class HandwritingStroke {
@@ -47,14 +49,16 @@ class HandwritingStroke {
   }
 }
 
-/// Full screen pure white canvas studio for handwritten notes
+/// Full screen pure white canvas studio for handwritten notes with 2-Page Smart Note support:
+/// - Page 1: ✍️ Real Handwritten Drawing Canvas
+/// - Page 2: 📄 AI Converted Digital Text
 class HandwritingCanvasDialog extends StatefulWidget {
   final String languageCode;
   final HandwritingNote? existingNote;
 
   const HandwritingCanvasDialog({
     super.key,
-    this.languageCode = 'en-US',
+    this.languageCode = 'en',
     this.existingNote,
   });
 
@@ -82,10 +86,15 @@ class _HandwritingCanvasDialogState extends State<HandwritingCanvasDialog> {
   late mlkit.DigitalInkRecognizer _recognizer;
 
   final TextEditingController _titleController = TextEditingController();
+  final TextEditingController _convertedTextController =
+      TextEditingController();
+
+  // 2-Page Navigation: 0 = Page 1 (Drawing Canvas), 1 = Page 2 (Converted Text)
+  int _activePageIndex = 0;
 
   // Full Screen / Resize state
-  bool _isFullscreen = true; // Default full size white space
-  bool _showTools = true; // Toggle for tools overlay
+  bool _isFullscreen = true;
+  bool _showTools = true;
 
   // Drawing Tools
   bool _isEraser = false;
@@ -117,7 +126,6 @@ class _HandwritingCanvasDialogState extends State<HandwritingCanvasDialog> {
 
   // State
   bool _isRecognizing = false;
-  bool _hasPluginError = false;
 
   @override
   void initState() {
@@ -134,6 +142,11 @@ class _HandwritingCanvasDialogState extends State<HandwritingCanvasDialog> {
           _strokes.add(HandwritingStroke.fromJson(sJson));
         }
       }
+      final existingContent = widget.existingNote!.content;
+      if (existingContent.isNotEmpty &&
+          !existingContent.startsWith('Handwritten drawing (')) {
+        _convertedTextController.text = existingContent;
+      }
     }
   }
 
@@ -143,6 +156,7 @@ class _HandwritingCanvasDialogState extends State<HandwritingCanvasDialog> {
       _recognizer.close().catchError((_) {});
     } catch (_) {}
     _titleController.dispose();
+    _convertedTextController.dispose();
     super.dispose();
   }
 
@@ -153,9 +167,7 @@ class _HandwritingCanvasDialogState extends State<HandwritingCanvasDialog> {
       if (!isDownloaded) {
         await _modelManager.downloadModel(widget.languageCode);
       }
-    } catch (_) {
-      if (mounted) setState(() => _hasPluginError = true);
-    }
+    } catch (_) {}
   }
 
   void _onPanStart(DragStartDetails details) {
@@ -270,40 +282,234 @@ class _HandwritingCanvasDialogState extends State<HandwritingCanvasDialog> {
     });
   }
 
+  /// Converts handwritten ink strokes into digital recognized text using Gemini Vision AI / ML Kit
   Future<String> _recognizeHandwriting() async {
-    if (_strokes.isEmpty || _hasPluginError) {
+    if (_strokes.isEmpty) {
       return '';
     }
 
+    // 1. Try Ultra-Accurate Google Gemini Multimodal Vision AI first
     try {
-      setState(() => _isRecognizing = true);
-      final candidates = await _recognizer.recognize(_ink);
-      setState(() => _isRecognizing = false);
+      if (mounted) setState(() => _isRecognizing = true);
+      final geminiResult =
+          await GeminiHandwritingService.transcribeWithGemini(_strokes);
+      if (geminiResult != null && geminiResult.trim().isNotEmpty) {
+        if (mounted) setState(() => _isRecognizing = false);
+        return geminiResult.trim();
+      }
+    } catch (e) {
+      debugPrint('Gemini vision attempt notice: $e');
+    }
+
+    // 2. On-Device Google ML Kit Digital Ink Recognition fallback
+    try {
+      final isDownloaded =
+          await _modelManager.isModelDownloaded(widget.languageCode);
+      if (!isDownloaded) {
+        if (mounted) setState(() => _isRecognizing = true);
+        await _modelManager.downloadModel(widget.languageCode);
+      }
+    } catch (e) {
+      debugPrint('Model download check notice: $e');
+    }
+
+    // Build fresh ML Kit Ink with normalized monotonic millisecond timestamps
+    final ink = mlkit.Ink();
+    int timeMs = 0;
+    for (final stroke in _strokes) {
+      if (stroke.points.isEmpty) continue;
+      final mlStroke = mlkit.Stroke();
+      for (final pt in stroke.points) {
+        mlStroke.points.add(
+          mlkit.StrokePoint(
+            x: pt.dx,
+            y: pt.dy,
+            t: timeMs += 15,
+          ),
+        );
+      }
+      ink.strokes.add(mlStroke);
+    }
+
+    try {
+      if (mounted) setState(() => _isRecognizing = true);
+      final candidates = await _recognizer.recognize(ink);
+      if (mounted) setState(() => _isRecognizing = false);
 
       if (candidates.isNotEmpty) {
-        return candidates.first.text;
+        final recognizedText = candidates.first.text.trim();
+        debugPrint('🎯 Recognized ML Kit Text: $recognizedText');
+        return recognizedText;
       }
-    } catch (_) {
+    } on MissingPluginException {
+      if (mounted) {
+        setState(() => _isRecognizing = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              '⚠️ Full app restart required: Please restart run.bat once to enable native ML Kit recognition.',
+            ),
+            backgroundColor: Color(0xFFE11D48),
+            duration: Duration(seconds: 4),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('Digital Ink Recognition error: $e');
       if (mounted) setState(() => _isRecognizing = false);
     }
     return '';
   }
 
+  /// Converts handwriting while writing and switches to Page 2
+  Future<void> _convertAndShowTextPage() async {
+    if (_strokes.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please write or draw something on the canvas first! ✍️'),
+          behavior: SnackBarBehavior.floating,
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+
+    final recognized = await _recognizeHandwriting();
+    if (!mounted) return;
+
+    if (recognized.isNotEmpty) {
+      setState(() {
+        _convertedTextController.text = recognized;
+        _activePageIndex = 1; // Switch to Page 2: Converted Text
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(CupertinoIcons.sparkles,
+                  color: Color(0xFFFACC15), size: 18),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text('Recognized: "$recognized" ✨'),
+              ),
+            ],
+          ),
+          backgroundColor: AppTheme.primaryPurpleDark,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    } else {
+      setState(() {
+        _activePageIndex = 1;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not detect text clearly yet. You can keep writing or type notes! ✍️'),
+          behavior: SnackBarBehavior.floating,
+          duration: Duration(seconds: 3),
+        ),
+      );
+    }
+  }
+
+  Future<void> _showAiKeyDialog() async {
+    final activeKey = await GeminiHandwritingService.getActiveApiKey() ?? '';
+    final keyController = TextEditingController(text: activeKey);
+
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Row(
+          children: [
+            Icon(CupertinoIcons.sparkles, color: AppTheme.primaryPurple),
+            SizedBox(width: 8),
+            Text(
+              'Gemini Vision AI',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Enter your free Google Gemini API Key from Google AI Studio (aistudio.google.com) for ultra-accurate handwriting & cursive transcription:',
+              style: TextStyle(fontSize: 13, color: AppTheme.textSecondary),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: keyController,
+              decoration: InputDecoration(
+                hintText: 'AIzaSy...',
+                labelText: 'Gemini API Key',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12, vertical: 12),
+              ),
+              style: const TextStyle(fontSize: 13),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              await GeminiHandwritingService.setCustomApiKey(
+                  keyController.text.trim());
+              if (ctx.mounted) Navigator.pop(ctx);
+              if (!mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Gemini API Key updated! ✨'),
+                  backgroundColor: AppTheme.primaryPurpleDark,
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.primaryPurple,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            child: const Text('Save Key'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Saves BOTH Page 1 (Handwritten Drawing) and Page 2 (Converted Text) in 1 note file
   Future<void> _saveHandwrittenNote() async {
     final title = _titleController.text.trim().isNotEmpty
         ? _titleController.text.trim()
         : 'Note ${DateTime.now().month}/${DateTime.now().day}';
 
-    final recognized = await _recognizeHandwriting();
-    final content = recognized.isNotEmpty
-        ? recognized
-        : 'Handwritten drawing (${_strokes.length} strokes)';
+    String textContent = _convertedTextController.text.trim();
+    if (textContent.isEmpty && _strokes.isNotEmpty) {
+      final recognized = await _recognizeHandwriting();
+      textContent = recognized.isNotEmpty ? recognized : '';
+    }
 
     final newNote = HandwritingNote(
       id: widget.existingNote?.id ??
           'note_${DateTime.now().millisecondsSinceEpoch}',
       title: title,
-      content: content,
+      content: textContent,
       createdAt: widget.existingNote?.createdAt ?? DateTime.now(),
       updatedAt: DateTime.now(),
       paletteIndex: widget.existingNote?.paletteIndex ??
@@ -320,9 +526,24 @@ class _HandwritingCanvasDialogState extends State<HandwritingCanvasDialog> {
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('Saved "$title" to Written Notes! ✍️'),
+        content: Row(
+          children: [
+            const Icon(CupertinoIcons.checkmark_circle_fill,
+                color: Color(0xFF10B981), size: 18),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Saved "$title" (2 Pages: Drawing + Text)! ✍️📄',
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+            ),
+          ],
+        ),
         backgroundColor: AppTheme.textPrimary,
         behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+        ),
       ),
     );
   }
@@ -338,7 +559,7 @@ class _HandwritingCanvasDialogState extends State<HandwritingCanvasDialog> {
         : mediaQuery.padding.bottom;
     final screenHeight = mediaQuery.size.height;
     final targetHeight =
-        _isFullscreen ? screenHeight : screenHeight * 0.82;
+        _isFullscreen ? screenHeight : screenHeight * 0.85;
 
     final topMargin = _isFullscreen
         ? (safeTop > 0 ? safeTop + 8 : 34.0)
@@ -350,7 +571,7 @@ class _HandwritingCanvasDialogState extends State<HandwritingCanvasDialog> {
       curve: Curves.easeOutCubic,
       height: targetHeight,
       decoration: BoxDecoration(
-        color: Colors.white, // PURE WHITE BACKGROUND
+        color: Colors.white,
         borderRadius: _isFullscreen
             ? BorderRadius.zero
             : const BorderRadius.only(
@@ -360,63 +581,283 @@ class _HandwritingCanvasDialogState extends State<HandwritingCanvasDialog> {
       ),
       child: Stack(
         children: [
-          // 1. FULL SCREEN PURE WHITE CANVAS
-          Positioned.fill(
-            child: GestureDetector(
-              onPanStart: _onPanStart,
-              onPanUpdate: _onPanUpdate,
-              onPanEnd: _onPanEnd,
-              child: CustomPaint(
-                painter: HandwritingCanvasPainter(
-                  strokes: _strokes,
-                  currentStrokePoints: _currentPoints,
-                  currentColor: _selectedColor,
-                  currentStrokeWidth: _selectedStrokeWidth,
-                  isEraser: _isEraser,
-                ),
-                child: Stack(
-                  children: [
-                    if (_strokes.isEmpty && _currentPoints.isEmpty)
-                      Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              _isEraser
-                                  ? CupertinoIcons.trash
-                                  : CupertinoIcons.hand_draw,
-                              size: 44,
-                              color:
-                                  AppTheme.textMuted.withValues(alpha: 0.35),
-                            ),
-                            const SizedBox(height: 10),
-                            Text(
-                              _isEraser
-                                  ? 'Eraser Active • Drag over strokes to erase'
-                                  : 'Write, sketch, or draw notes freely ✍️',
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color:
-                                    AppTheme.textMuted.withValues(alpha: 0.55),
+          // ==============================================================
+          // PAGE BODY: PAGE 1 (DRAWING CANVAS) OR PAGE 2 (CONVERTED TEXT)
+          // ==============================================================
+          if (_activePageIndex == 0)
+            // PAGE 1: ✍️ Pure White Drawing Space
+            Positioned.fill(
+              child: GestureDetector(
+                onPanStart: _onPanStart,
+                onPanUpdate: _onPanUpdate,
+                onPanEnd: _onPanEnd,
+                child: CustomPaint(
+                  painter: HandwritingCanvasPainter(
+                    strokes: _strokes,
+                    currentStrokePoints: _currentPoints,
+                    currentColor: _selectedColor,
+                    currentStrokeWidth: _selectedStrokeWidth,
+                    isEraser: _isEraser,
+                  ),
+                  child: Stack(
+                    children: [
+                      if (_strokes.isEmpty && _currentPoints.isEmpty)
+                        Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                _isEraser
+                                    ? CupertinoIcons.trash
+                                    : CupertinoIcons.hand_draw,
+                                size: 44,
+                                color: AppTheme.textMuted
+                                    .withValues(alpha: 0.35),
                               ),
+                              const SizedBox(height: 10),
+                              Text(
+                                _isEraser
+                                    ? 'Eraser Active • Drag over strokes to erase'
+                                    : 'Write, sketch, or draw notes freely ✍️',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppTheme.textMuted
+                                      .withValues(alpha: 0.55),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            )
+          else
+            // PAGE 2: 📄 AI Converted Digital Text View
+            Positioned.fill(
+              child: Container(
+                color: const Color(0xFFF8FAFC),
+                padding: EdgeInsets.fromLTRB(
+                    16, topMargin + 56, 16, bottomMargin + 10),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Converted Text Banner
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 10),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [
+                            AppTheme.primaryPurpleLight,
+                            Color(0xFFEDE9FE),
+                          ],
+                        ),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: AppTheme.primaryPurple
+                              .withValues(alpha: 0.25),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(CupertinoIcons.sparkles,
+                              color: AppTheme.primaryPurple, size: 18),
+                          const SizedBox(width: 8),
+                          const Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Page 2: Converted Digital Text',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppTheme.primaryPurpleDark,
+                                  ),
+                                ),
+                                Text(
+                                  'Recognized text from Page 1. Edit or copy anytime!',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: AppTheme.textSecondary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          // Re-convert button
+                          GestureDetector(
+                            onTap: _convertAndShowTextPage,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                    color: AppTheme.primaryPurple
+                                        .withValues(alpha: 0.3)),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (_isRecognizing)
+                                    const SizedBox(
+                                      width: 12,
+                                      height: 12,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: AppTheme.primaryPurple,
+                                      ),
+                                    )
+                                  else ...[
+                                    const Icon(CupertinoIcons.arrow_2_circlepath,
+                                        size: 12,
+                                        color: AppTheme.primaryPurple),
+                                    const SizedBox(width: 4),
+                                    const Text(
+                                      'Re-convert',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w700,
+                                        color: AppTheme.primaryPurple,
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+
+                          // AI Settings Button
+                          GestureDetector(
+                            onTap: _showAiKeyDialog,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                    color: AppTheme.primaryPurple
+                                        .withValues(alpha: 0.3)),
+                              ),
+                              child: const Icon(
+                                CupertinoIcons.gear_alt,
+                                size: 14,
+                                color: AppTheme.primaryPurple,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Editable Text Area
+                    Expanded(
+                      child: Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: AppTheme.dividerColor),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.04),
+                              blurRadius: 8,
+                              offset: const Offset(0, 2),
                             ),
                           ],
                         ),
+                        child: TextField(
+                          controller: _convertedTextController,
+                          maxLines: null,
+                          expands: true,
+                          decoration: const InputDecoration(
+                            hintText:
+                                'Converted text will appear here. You can also type notes or study summaries...',
+                            hintStyle: TextStyle(
+                              color: AppTheme.textMuted,
+                              fontSize: 14,
+                            ),
+                            border: InputBorder.none,
+                          ),
+                          style: const TextStyle(
+                            fontSize: 14.5,
+                            color: AppTheme.textPrimary,
+                            height: 1.5,
+                          ),
+                        ),
                       ),
+                    ),
+                    const SizedBox(height: 10),
+
+                    // Bottom Quick Actions for Page 2
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        // Switch back to Drawing Page
+                        OutlinedButton.icon(
+                          onPressed: () =>
+                              setState(() => _activePageIndex = 0),
+                          icon: const Icon(CupertinoIcons.pencil, size: 14),
+                          label: const Text('✍️ Page 1: Drawing Canvas'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: AppTheme.primaryPurple,
+                            side: const BorderSide(
+                                color: AppTheme.primaryPurple),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                        ),
+
+                        // Copy Text
+                        ElevatedButton.icon(
+                          onPressed: () {
+                            Clipboard.setData(ClipboardData(
+                                text: _convertedTextController.text));
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Copied converted text! 📋'),
+                                duration: Duration(seconds: 1),
+                                behavior: SnackBarBehavior.floating,
+                              ),
+                            );
+                          },
+                          icon: const Icon(CupertinoIcons.doc_on_clipboard,
+                              size: 14),
+                          label: const Text('Copy Text'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppTheme.primaryPurple,
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ],
                 ),
               ),
             ),
-          ),
 
-          // 2. TOP BAR: Title, Fullscreen/Resize, Tools Toggle, Save & Close
+          // ==============================================================
+          // TOP BAR: Navigation, Title, 2-Page Switcher, Convert, Save
+          // ==============================================================
           Positioned(
             top: topMargin,
             left: 12,
             right: 12,
             child: Container(
-              height: 48,
+              height: 50,
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
               decoration: BoxDecoration(
                 color: Colors.white.withValues(alpha: 0.96),
@@ -442,12 +883,13 @@ class _HandwritingCanvasDialogState extends State<HandwritingCanvasDialog> {
                     tooltip: 'Close',
                     onPressed: () => Navigator.pop(context),
                     constraints:
-                        const BoxConstraints(minWidth: 32, minHeight: 32),
+                        const BoxConstraints(minWidth: 30, minHeight: 30),
                     padding: EdgeInsets.zero,
                   ),
 
                   // Inline Title Input Field
                   Expanded(
+                    flex: 3,
                     child: Container(
                       height: 36,
                       padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -460,7 +902,7 @@ class _HandwritingCanvasDialogState extends State<HandwritingCanvasDialog> {
                         decoration: const InputDecoration(
                           hintText: 'Note Title...',
                           hintStyle: TextStyle(
-                            fontSize: 12.5,
+                            fontSize: 12,
                             color: AppTheme.textMuted,
                           ),
                           border: InputBorder.none,
@@ -468,10 +910,129 @@ class _HandwritingCanvasDialogState extends State<HandwritingCanvasDialog> {
                           contentPadding: EdgeInsets.symmetric(vertical: 8),
                         ),
                         style: const TextStyle(
-                          fontSize: 13,
+                          fontSize: 12.5,
                           fontWeight: FontWeight.w700,
                           color: AppTheme.textPrimary,
                         ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+
+                  // 2-PAGE SWITCHER PILL (Page 1: ✍️ Drawing | Page 2: 📄 Text)
+                  Container(
+                    height: 34,
+                    padding: const EdgeInsets.all(2),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF1F5F9),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        GestureDetector(
+                          onTap: () => setState(() => _activePageIndex = 0),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 150),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: _activePageIndex == 0
+                                  ? AppTheme.primaryPurple
+                                  : Colors.transparent,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Icon(
+                              CupertinoIcons.pencil,
+                              size: 14,
+                              color: _activePageIndex == 0
+                                  ? Colors.white
+                                  : AppTheme.textSecondary,
+                            ),
+                          ),
+                        ),
+                        GestureDetector(
+                          onTap: () {
+                            if (_convertedTextController.text.trim().isEmpty &&
+                                _strokes.isNotEmpty) {
+                              _convertAndShowTextPage();
+                            } else {
+                              setState(() => _activePageIndex = 1);
+                            }
+                          },
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 150),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: _activePageIndex == 1
+                                  ? AppTheme.primaryPurple
+                                  : Colors.transparent,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Icon(
+                              CupertinoIcons.doc_text,
+                              size: 14,
+                              color: _activePageIndex == 1
+                                  ? Colors.white
+                                  : AppTheme.textSecondary,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+
+                  // ✨ CONVERT TO TEXT BUTTON (Runs ML Kit Recognition)
+                  GestureDetector(
+                    onTap: _isRecognizing ? null : _convertAndShowTextPage,
+                    child: Container(
+                      height: 34,
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [
+                            Color(0xFF7C3AED),
+                            Color(0xFF9333EA),
+                          ],
+                        ),
+                        borderRadius: BorderRadius.circular(10),
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppTheme.primaryPurple
+                                .withValues(alpha: 0.25),
+                            blurRadius: 4,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (_isRecognizing)
+                            const SizedBox(
+                              width: 12,
+                              height: 12,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          else ...[
+                            const Icon(CupertinoIcons.sparkles,
+                                size: 13, color: Colors.white),
+                            const SizedBox(width: 4),
+                            const Text(
+                              'Convert',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                     ),
                   ),
@@ -494,52 +1055,54 @@ class _HandwritingCanvasDialogState extends State<HandwritingCanvasDialog> {
                             ? CupertinoIcons.fullscreen_exit
                             : CupertinoIcons.fullscreen,
                         color: AppTheme.primaryPurple,
-                        size: 17,
+                        size: 16,
                       ),
                     ),
                   ),
-                  const SizedBox(width: 6),
+                  const SizedBox(width: 5),
 
-                  // Tools Toggle Button
-                  GestureDetector(
-                    onTap: () => setState(() => _showTools = !_showTools),
-                    child: Container(
-                      height: 34,
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      decoration: BoxDecoration(
-                        color: _showTools
-                            ? AppTheme.primaryPurple
-                            : AppTheme.primaryPurpleLight,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            CupertinoIcons.slider_horizontal_3,
-                            size: 14,
-                            color: _showTools
-                                ? Colors.white
-                                : AppTheme.primaryPurpleDark,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            _showTools ? 'Hide' : 'Tools',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
+                  // Tools Toggle Button (when on drawing canvas)
+                  if (_activePageIndex == 0) ...[
+                    GestureDetector(
+                      onTap: () => setState(() => _showTools = !_showTools),
+                      child: Container(
+                        height: 34,
+                        padding: const EdgeInsets.symmetric(horizontal: 7),
+                        decoration: BoxDecoration(
+                          color: _showTools
+                              ? AppTheme.primaryPurple
+                              : AppTheme.primaryPurpleLight,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              CupertinoIcons.slider_horizontal_3,
+                              size: 13,
                               color: _showTools
                                   ? Colors.white
                                   : AppTheme.primaryPurpleDark,
                             ),
-                          ),
-                        ],
+                            const SizedBox(width: 3),
+                            Text(
+                              _showTools ? 'Hide' : 'Tools',
+                              style: TextStyle(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w700,
+                                color: _showTools
+                                    ? Colors.white
+                                    : AppTheme.primaryPurpleDark,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 6),
+                    const SizedBox(width: 5),
+                  ],
 
-                  // Direct Save Button
+                  // Direct Save Button (Saves BOTH Page 1 & Page 2)
                   ElevatedButton(
                     onPressed: _isRecognizing ? null : _saveHandwrittenNote,
                     style: ElevatedButton.styleFrom(
@@ -553,37 +1116,30 @@ class _HandwritingCanvasDialogState extends State<HandwritingCanvasDialog> {
                         borderRadius: BorderRadius.circular(10),
                       ),
                     ),
-                    child: _isRecognizing
-                        ? const SizedBox(
-                            width: 14,
-                            height: 14,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          )
-                        : const Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(CupertinoIcons.checkmark_alt, size: 14),
-                              SizedBox(width: 3),
-                              Text(
-                                'Save',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ],
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(CupertinoIcons.checkmark_alt, size: 14),
+                        SizedBox(width: 3),
+                        Text(
+                          'Save',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
                           ),
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),
             ),
           ),
 
-          // 3. COLLAPSIBLE FLOATING TOOLS PANEL
-          if (_showTools)
+          // ==============================================================
+          // COLLAPSIBLE FLOATING TOOLS PANEL (VISIBLE ON DRAWING PAGE)
+          // ==============================================================
+          if (_showTools && _activePageIndex == 0)
             Positioned(
               bottom: bottomMargin,
               left: 12,
@@ -700,9 +1256,9 @@ class _HandwritingCanvasDialogState extends State<HandwritingCanvasDialog> {
                                 padding: const EdgeInsets.symmetric(
                                     horizontal: 8, vertical: 3),
                                 decoration: BoxDecoration(
-                                    color: isSelected
-                                        ? AppTheme.primaryPurpleLight
-                                        : const Color(0xFFF8FAFC),
+                                  color: isSelected
+                                      ? AppTheme.primaryPurpleLight
+                                      : const Color(0xFFF8FAFC),
                                   borderRadius: BorderRadius.circular(8),
                                   border: Border.all(
                                     color: isSelected
