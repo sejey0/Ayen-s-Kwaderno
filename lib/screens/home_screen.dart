@@ -315,167 +315,44 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  /// Launches Google ML Kit Handwriting Recognition from Home Screen
+  /// Launches Handwriting & Notes Creator from Home Screen
   Future<void> _launchHandwritingToText() async {
-    final recognizedText = await HandwritingCanvasDialog.show(context);
+    final savedNote = await HandwritingCanvasDialog.show(context);
 
-    if (!mounted) return;
+    if (!mounted || savedNote == null) return;
 
-    if (recognizedText != null && recognizedText.trim().isNotEmpty) {
-      _showRecognizedResultDialog(recognizedText.trim());
-    }
-  }
+    setState(() {
+      final existingIndex =
+          _handwritingNotes.indexWhere((n) => n.id == savedNote.id);
+      if (existingIndex >= 0) {
+        _handwritingNotes[existingIndex] = savedNote;
+      } else {
+        _handwritingNotes.insert(0, savedNote);
+      }
+      _currentSection = LibrarySection.notes;
+    });
 
-  /// Displays the recognized text result modal with Copy and Save actions
-  void _showRecognizedResultDialog(String text) {
-    final defaultTitle = text.length > 25 ? '${text.substring(0, 25)}...' : text;
-    final titleController = TextEditingController(text: defaultTitle);
-
-    showCupertinoDialog(
-      context: context,
-      builder: (context) => CupertinoAlertDialog(
-        title: const Row(
-          mainAxisAlignment: MainAxisAlignment.center,
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
           children: [
-            Icon(CupertinoIcons.sparkles, color: AppTheme.primaryPurple, size: 18),
-            SizedBox(width: 6),
-            Text('Recognized Text'),
+            const Icon(CupertinoIcons.checkmark_circle_fill,
+                color: Color(0xFF10B981), size: 18),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Saved "${savedNote.title}" to Handwriting Notes! ✍️',
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+            ),
           ],
         ),
-        content: Padding(
-          padding: const EdgeInsets.only(top: 12.0),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              CupertinoTextField(
-                controller: titleController,
-                placeholder: 'Note Title',
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: AppTheme.dividerColor),
-                ),
-                style: const TextStyle(
-                  fontSize: 13.5,
-                  fontWeight: FontWeight.w700,
-                  color: AppTheme.textPrimary,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Container(
-                padding: const EdgeInsets.all(12),
-                constraints: const BoxConstraints(maxHeight: 180),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF9FAFB),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: AppTheme.dividerColor),
-                ),
-                child: SingleChildScrollView(
-                  child: SelectableText(
-                    text,
-                    style: const TextStyle(
-                      fontSize: 13.5,
-                      color: AppTheme.textPrimary,
-                      height: 1.4,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'Converted via Google ML Kit Digital Ink Recognition.',
-                style: TextStyle(
-                  fontSize: 11,
-                  color: AppTheme.textMuted,
-                ),
-                textAlign: TextAlign.center,
-              ),
-            ],
-          ),
+        backgroundColor: AppTheme.primaryPurpleDark,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
         ),
-        actions: [
-          CupertinoDialogAction(
-            child: const Text('Cancel'),
-            onPressed: () => Navigator.pop(context),
-          ),
-          CupertinoDialogAction(
-            onPressed: () {
-              Clipboard.setData(ClipboardData(text: text));
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: const Row(
-                    children: [
-                      Icon(CupertinoIcons.doc_on_clipboard_fill,
-                          color: Colors.white, size: 18),
-                      SizedBox(width: 8),
-                      Text('Copied text to clipboard! 📋'),
-                    ],
-                  ),
-                  backgroundColor: AppTheme.primaryPurpleDark,
-                  behavior: SnackBarBehavior.floating,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  duration: const Duration(seconds: 2),
-                ),
-              );
-            },
-            child: const Text('Copy'),
-          ),
-          CupertinoDialogAction(
-            isDefaultAction: true,
-            onPressed: () async {
-              final finalTitle = titleController.text.trim().isNotEmpty
-                  ? titleController.text.trim()
-                  : 'Quick Note';
-
-              final newNote = HandwritingNote(
-                title: finalTitle,
-                content: text,
-                paletteIndex: _handwritingNotes.length % _notePalettes.length,
-              );
-
-              await DocumentStorageService.saveOrUpdateHandwritingNote(newNote);
-
-              setState(() {
-                _handwritingNotes.insert(0, newNote);
-                _currentSection = LibrarySection.notes;
-              });
-
-              if (!context.mounted) return;
-              Navigator.pop(context);
-
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Row(
-                    children: [
-                      const Icon(CupertinoIcons.checkmark_circle_fill,
-                          color: Color(0xFF10B981), size: 18),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'Saved to Handwriting Notes section! ✍️',
-                          style: const TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                      ),
-                    ],
-                  ),
-                  backgroundColor: AppTheme.primaryPurpleDark,
-                  behavior: SnackBarBehavior.floating,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  duration: const Duration(seconds: 2),
-                ),
-              );
-            },
-            child: const Text('Save Note'),
-          ),
-        ],
+        duration: const Duration(seconds: 2),
       ),
     );
   }

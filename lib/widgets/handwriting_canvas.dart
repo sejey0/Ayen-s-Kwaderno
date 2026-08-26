@@ -2,6 +2,8 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:google_mlkit_digital_ink_recognition/google_mlkit_digital_ink_recognition.dart'
     as mlkit;
+import '../models/handwriting_note_model.dart';
+import '../services/document_storage_service.dart';
 import '../theme/app_theme.dart';
 
 class HandwritingCanvasDialog extends StatefulWidget {
@@ -12,13 +14,13 @@ class HandwritingCanvasDialog extends StatefulWidget {
     this.languageCode = 'en-US',
   });
 
-  /// Static helper to launch the dialog
-  static Future<String?> show(BuildContext context) {
-    return showModalBottomSheet<String>(
+  /// Static helper to launch the dialog and return the created/saved HandwritingNote
+  static Future<HandwritingNote?> show(BuildContext context) {
+    return showModalBottomSheet<HandwritingNote>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      barrierColor: Colors.black.withValues(alpha: 0.35),
+      barrierColor: Colors.black.withValues(alpha: 0.4),
       builder: (context) => const HandwritingCanvasDialog(),
     );
   }
@@ -32,6 +34,8 @@ class _HandwritingCanvasDialogState extends State<HandwritingCanvasDialog> {
   final mlkit.DigitalInkRecognizerModelManager _modelManager =
       mlkit.DigitalInkRecognizerModelManager();
   late mlkit.DigitalInkRecognizer _recognizer;
+
+  final TextEditingController _titleController = TextEditingController();
   final TextEditingController _typeTextController = TextEditingController();
 
   // Mode: 0 = Handwriting Pad, 1 = Type Note
@@ -45,7 +49,7 @@ class _HandwritingCanvasDialogState extends State<HandwritingCanvasDialog> {
   final List<List<Offset>> _drawnStrokes = [];
   List<Offset> _currentDrawnPoints = [];
 
-  // Model & Recognition State
+  // State
   bool _isDownloadingModel = false;
   bool _isRecognizing = false;
   bool _hasPluginError = false;
@@ -61,7 +65,10 @@ class _HandwritingCanvasDialogState extends State<HandwritingCanvasDialog> {
 
   @override
   void dispose() {
-    _recognizer.close();
+    try {
+      _recognizer.close();
+    } catch (_) {}
+    _titleController.dispose();
     _typeTextController.dispose();
     super.dispose();
   }
@@ -83,7 +90,7 @@ class _HandwritingCanvasDialogState extends State<HandwritingCanvasDialog> {
         setState(() {
           _isDownloadingModel = false;
           _hasPluginError = false;
-          _statusMessage = 'Model ready • Write on the pad below';
+          _statusMessage = 'AI Model ready • Write on the pad below';
         });
       }
     } catch (e) {
@@ -91,7 +98,7 @@ class _HandwritingCanvasDialogState extends State<HandwritingCanvasDialog> {
         setState(() {
           _isDownloadingModel = false;
           _hasPluginError = true;
-          _statusMessage = 'ML Kit native plugin requires a full app restart. You can type or write notes below!';
+          _statusMessage = 'Tip: Rebuild via run.bat [4] for ML Kit. You can type or write notes below!';
         });
       }
     }
@@ -148,101 +155,82 @@ class _HandwritingCanvasDialogState extends State<HandwritingCanvasDialog> {
     });
   }
 
-  Future<void> _recognizeAndSubmit() async {
-    // If typing tab is active
+  /// Saves the note directly and returns the HandwritingNote to HomeScreen
+  Future<void> _saveAndSubmitNote() async {
+    String finalContent = '';
+
     if (_currentTab == 1) {
-      final typed = _typeTextController.text.trim();
-      if (typed.isNotEmpty) {
-        Navigator.of(context).pop(typed);
-      } else {
+      // Typing Tab
+      finalContent = _typeTextController.text.trim();
+      if (finalContent.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Please type some text for your note.'),
+            content: Text('Please enter content for your note.'),
             behavior: SnackBarBehavior.floating,
           ),
         );
+        return;
       }
-      return;
-    }
-
-    // If drawing tab is active
-    if (_ink.strokes.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Row(
-            children: [
-              Icon(Icons.info_outline_rounded, color: Colors.white, size: 18),
-              SizedBox(width: 8),
-              Text('Please write your note on the paper first.'),
-            ],
+    } else {
+      // Handwriting Pad Tab
+      if (_ink.strokes.isEmpty && _typeTextController.text.trim().isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Please write your note on the pad first.'),
+            behavior: SnackBarBehavior.floating,
           ),
-          backgroundColor: AppTheme.textPrimary,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          duration: const Duration(seconds: 2),
-        ),
-      );
-      return;
-    }
+        );
+        return;
+      }
 
-    setState(() {
-      _isRecognizing = true;
-      _statusMessage = 'Recognizing handwriting...';
-    });
+      setState(() {
+        _isRecognizing = true;
+        _statusMessage = 'Recognizing handwriting...';
+      });
 
-    try {
-      final candidates = await _recognizer.recognize(_ink);
+      try {
+        final candidates = await _recognizer.recognize(_ink);
+        if (candidates.isNotEmpty && candidates.first.text.trim().isNotEmpty) {
+          finalContent = candidates.first.text.trim();
+        }
+      } catch (e) {
+        debugPrint('ML Kit recognition fallback: $e');
+        _hasPluginError = true;
+      }
+
+      // If ML Kit wasn't compiled or failed, fallback to typed text or default note
+      if (finalContent.isEmpty) {
+        if (_typeTextController.text.trim().isNotEmpty) {
+          finalContent = _typeTextController.text.trim();
+        } else {
+          finalContent = 'Handwritten note created on ${DateTime.now().month}/${DateTime.now().day}';
+        }
+      }
 
       if (!mounted) return;
       setState(() => _isRecognizing = false);
-
-      if (candidates.isNotEmpty && candidates.first.text.trim().isNotEmpty) {
-        final recognizedText = candidates.first.text.trim();
-        Navigator.of(context).pop(recognizedText);
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text(
-              'Could not recognize text. Please write clearly or switch to Type Note.',
-            ),
-            backgroundColor: AppTheme.textPrimary,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
-        );
-      }
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _isRecognizing = false;
-        _hasPluginError = true;
-        _currentTab = 1; // Seamless fallback to Type mode
-        _statusMessage =
-            'Native ML Kit needs cold restart. Enter your note below:';
-      });
-
-      // Prompt user to type note without losing their momentum
-      showCupertinoDialog(
-        context: context,
-        builder: (dialogCtx) => CupertinoAlertDialog(
-          title: const Text('Save Note'),
-          content: const Text(
-            'ML Kit native binary needs a cold restart (run.bat option [1]). In the meantime, you can type your note to save it directly!',
-          ),
-          actions: [
-            CupertinoDialogAction(
-              isDefaultAction: true,
-              child: const Text('Type & Save'),
-              onPressed: () => Navigator.pop(dialogCtx),
-            ),
-          ],
-        ),
-      );
     }
+
+    // Determine title
+    String finalTitle = _titleController.text.trim();
+    if (finalTitle.isEmpty) {
+      if (finalContent.length > 20) {
+        finalTitle = '${finalContent.substring(0, 20)}...';
+      } else {
+        finalTitle = finalContent.isNotEmpty ? finalContent : 'Quick Note';
+      }
+    }
+
+    final newNote = HandwritingNote(
+      title: finalTitle,
+      content: finalContent,
+    );
+
+    // Save to local storage & background Supabase
+    await DocumentStorageService.saveOrUpdateHandwritingNote(newNote);
+
+    if (!mounted) return;
+    Navigator.of(context).pop(newNote);
   }
 
   @override
@@ -250,7 +238,7 @@ class _HandwritingCanvasDialogState extends State<HandwritingCanvasDialog> {
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
 
     return Container(
-      height: MediaQuery.of(context).size.height * 0.72 + bottomInset,
+      height: MediaQuery.of(context).size.height * 0.75 + bottomInset,
       decoration: const BoxDecoration(
         color: AppTheme.surfaceWhite,
         borderRadius: BorderRadius.only(
@@ -262,7 +250,7 @@ class _HandwritingCanvasDialogState extends State<HandwritingCanvasDialog> {
         children: [
           // Top Sheet Handle & Header
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
             child: Column(
               children: [
                 Center(
@@ -275,9 +263,9 @@ class _HandwritingCanvasDialogState extends State<HandwritingCanvasDialog> {
                     ),
                   ),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 10),
 
-                // Title Row with Tab Switcher
+                // Title Row
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -337,7 +325,41 @@ class _HandwritingCanvasDialogState extends State<HandwritingCanvasDialog> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 8),
+
+                // Note Title TextField
+                Container(
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: AppTheme.dividerColor),
+                  ),
+                  child: TextField(
+                    controller: _titleController,
+                    decoration: const InputDecoration(
+                      hintText: 'Note Title (Optional)...',
+                      hintStyle: TextStyle(
+                        fontSize: 12.5,
+                        color: AppTheme.textMuted,
+                      ),
+                      prefixIcon: Icon(
+                        CupertinoIcons.tag,
+                        size: 16,
+                        color: AppTheme.primaryPurple,
+                      ),
+                      border: InputBorder.none,
+                      contentPadding:
+                          EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    ),
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: AppTheme.textPrimary,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
 
                 // Mode Tabs (Draw / Type)
                 Container(
@@ -454,7 +476,7 @@ class _HandwritingCanvasDialogState extends State<HandwritingCanvasDialog> {
           // Status / Model downloading indicator bar
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 5),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
             color: _isDownloadingModel
                 ? AppTheme.accentPinkLight
                 : AppTheme.background,
@@ -507,7 +529,7 @@ class _HandwritingCanvasDialogState extends State<HandwritingCanvasDialog> {
           Expanded(
             child: _currentTab == 0
                 ? Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 10),
+                    padding: const EdgeInsets.fromLTRB(20, 6, 20, 8),
                     child: Container(
                       decoration: BoxDecoration(
                         color: Colors.white,
@@ -581,9 +603,9 @@ class _HandwritingCanvasDialogState extends State<HandwritingCanvasDialog> {
                     ),
                   )
                 : Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 10),
+                    padding: const EdgeInsets.fromLTRB(20, 6, 20, 8),
                     child: Container(
-                      padding: const EdgeInsets.all(16),
+                      padding: const EdgeInsets.all(14),
                       decoration: BoxDecoration(
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(20),
@@ -596,7 +618,6 @@ class _HandwritingCanvasDialogState extends State<HandwritingCanvasDialog> {
                         controller: _typeTextController,
                         maxLines: null,
                         expands: true,
-                        autofocus: true,
                         decoration: const InputDecoration(
                           hintText:
                               'Type or paste your study notes, formulas, or review pointers...',
@@ -616,7 +637,7 @@ class _HandwritingCanvasDialogState extends State<HandwritingCanvasDialog> {
                   ),
           ),
 
-          // Bottom Action Bar (Clear & Convert / Save)
+          // Bottom Action Bar (Clear & Direct Save Note)
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 4, 20, 16),
             child: Row(
@@ -646,13 +667,13 @@ class _HandwritingCanvasDialogState extends State<HandwritingCanvasDialog> {
 
                 if (_currentTab == 0) const SizedBox(width: 12),
 
-                // Submit Action Button
+                // Direct Save Note Button
                 Expanded(
                   flex: _currentTab == 0 ? 7 : 12,
                   child: SizedBox(
                     height: 48,
                     child: ElevatedButton(
-                      onPressed: _isRecognizing ? null : _recognizeAndSubmit,
+                      onPressed: _isRecognizing ? null : _saveAndSubmitNote,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.transparent,
                         shadowColor: Colors.transparent,
@@ -690,22 +711,18 @@ class _HandwritingCanvasDialogState extends State<HandwritingCanvasDialog> {
                                     color: Colors.white,
                                   ),
                                 )
-                              : Row(
+                              : const Row(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
                                     Icon(
-                                      _currentTab == 0
-                                          ? CupertinoIcons.sparkles
-                                          : CupertinoIcons.checkmark_alt,
-                                      size: 17,
+                                      CupertinoIcons.checkmark_alt_circle_fill,
+                                      size: 18,
                                       color: Colors.white,
                                     ),
-                                    const SizedBox(width: 8),
+                                    SizedBox(width: 8),
                                     Text(
-                                      _currentTab == 0
-                                          ? 'Convert to Text'
-                                          : 'Save Note',
-                                      style: const TextStyle(
+                                      'Save Note',
+                                      style: TextStyle(
                                         color: Colors.white,
                                         fontSize: 14,
                                         fontWeight: FontWeight.w700,

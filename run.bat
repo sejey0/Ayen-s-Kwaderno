@@ -49,14 +49,25 @@ echo.
 echo ==========================================
 echo Select Run Mode:
 echo [1] Standard Debug Run (Incremental Build)
-echo [2] Fast Attach (No Build / Rekta Debugger kung bukas na ang app)
+echo [2] Fast Attach (No Build / Rekta Debugger)
 echo [3] Release Mode (Full Build)
+echo [4] Clean ^& Fresh Rebuild (Compiles ML Kit ^& Plugins)
 echo ==========================================
 
-choice /c 123 /m "Piliin ang opsyong gusto mo"
+choice /c 1234 /m "Piliin ang opsyong gusto mo"
+if errorlevel 4 goto RUN_CLEAN
 if errorlevel 3 goto RUN_RELEASE
 if errorlevel 2 goto RUN_ATTACH
 if errorlevel 1 goto RUN_DEBUG
+goto END
+
+:RUN_CLEAN
+echo.
+echo Cleaning build cache and fetching packages...
+call flutter clean
+call flutter pub get
+echo Starting app with fresh native plugin compilation...
+call flutter run
 goto END
 
 :RUN_RELEASE
