@@ -5,9 +5,11 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
+import '../models/document_item_model.dart';
 import '../models/image_annotation_model.dart';
 import '../models/stroke_model.dart';
 import '../models/text_annotation_model.dart';
+import '../services/document_storage_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/handwriting_canvas.dart';
 
@@ -180,11 +182,22 @@ class _EditorScreenState extends State<EditorScreen>
           .from('document_annotations')
           .upsert(payload, onConflict: 'document_name');
 
-      if (!mounted) return;
-      setState(() => _isSyncing = false);
-
       final totalItems =
           _strokes.length + _textAnnotations.length + _imageAnnotations.length;
+
+      // Update local persistent document entry
+      await DocumentStorageService.saveOrUpdateDocument(
+        DocumentItem(
+          fileName: _documentIdentifier,
+          filePath: widget.pdfPath,
+          lastOpenedAt: DateTime.now(),
+          annotationsCount: totalItems,
+          isCloudSynced: true,
+        ),
+      );
+
+      if (!mounted) return;
+      setState(() => _isSyncing = false);
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(

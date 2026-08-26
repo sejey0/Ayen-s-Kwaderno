@@ -3,6 +3,8 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../models/document_item_model.dart';
+import '../services/document_storage_service.dart';
 import '../theme/app_theme.dart';
 import 'editor_screen.dart';
 
@@ -18,41 +20,59 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isLoadingCloudDocuments = false;
   String _selectedFilter = 'All Documents';
 
-  // Dynamic real documents list
-  final List<Map<String, dynamic>> _recentDocuments = [];
+  // Persistent dynamic document list
+  List<DocumentItem> _documents = [];
 
   // Palette generator for dynamic notebook cover aesthetics
-  final List<Map<String, Color>> _coverPalettes = [
+  static const List<Map<String, Color>> _coverPalettes = [
     {
-      'color': const Color(0xFFE9E4FC),
+      'color': Color(0xFFE9E4FC),
       'accent': AppTheme.primaryPurple,
     },
     {
-      'color': const Color(0xFFFFEEF3),
+      'color': Color(0xFFFFEEF3),
       'accent': AppTheme.accentPink,
     },
     {
-      'color': const Color(0xFFE6F4FE),
-      'accent': const Color(0xFF5B9BF6),
+      'color': Color(0xFFE6F4FE),
+      'accent': Color(0xFF5B9BF6),
     },
     {
-      'color': const Color(0xFFE8F8F0),
-      'accent': const Color(0xFF34D399),
+      'color': Color(0xFFE8F8F0),
+      'accent': Color(0xFF34D399),
     },
     {
-      'color': const Color(0xFFFEF3C7),
-      'accent': const Color(0xFFF59E0B),
+      'color': Color(0xFFFEF3C7),
+      'accent': Color(0xFFF59E0B),
+    },
+    {
+      'color': Color(0xFFF3E8FF),
+      'accent': Color(0xFF8B5CF6),
     },
   ];
 
   @override
   void initState() {
     super.initState();
-    _fetchCloudDocuments();
+    _loadInitialDocuments();
   }
 
-  /// Fetches saved document annotations from Supabase to populate real notebooks
-  Future<void> _fetchCloudDocuments() async {
+  /// Initial load: loads local cache instantly, then syncs with Supabase in background
+  Future<void> _loadInitialDocuments() async {
+    // 1. Instant local load
+    final localDocs = await DocumentStorageService.loadSavedDocuments();
+    if (mounted) {
+      setState(() {
+        _documents = localDocs;
+      });
+    }
+
+    // 2. Background Supabase sync
+    await _syncWithCloud();
+  }
+
+  /// Fetches saved document annotations from Supabase and merges with local list
+  Future<void> _syncWithCloud() async {
     try {
       setState(() => _isLoadingCloudDocuments = true);
 
@@ -64,7 +84,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
       if (!mounted) return;
 
-      final List<Map<String, dynamic>> cloudDocs = [];
+      final localDocs = await DocumentStorageService.loadSavedDocuments();
+      final Map<String, DocumentItem> docMap = {
+        for (var doc in localDocs) doc.fileName: doc
+      };
+
       for (int i = 0; i < response.length; i++) {
         final row = response[i];
         final docName = row['document_name'] as String? ?? 'Untitled Document';
@@ -74,48 +98,52 @@ class _HomeScreenState extends State<HomeScreen> {
         final images = row['images_data'] as List<dynamic>? ?? [];
         final totalAnnotations = strokes.length + texts.length + images.length;
 
-        final palette = _coverPalettes[i % _coverPalettes.length];
-
-        String formattedDate = 'Recently saved';
+        DateTime cloudUpdatedAt = DateTime.now();
         if (updatedAtStr != null) {
-          try {
-            final date = DateTime.parse(updatedAtStr).toLocal();
-            final difference = DateTime.now().difference(date);
-            if (difference.inMinutes < 60) {
-              formattedDate = '${difference.inMinutes.clamp(1, 60)}m ago';
-            } else if (difference.inHours < 24) {
-              formattedDate = '${difference.inHours}h ago';
-            } else {
-              formattedDate = '${date.month}/${date.day}/${date.year}';
-            }
-          } catch (_) {}
+          cloudUpdatedAt = DateTime.tryParse(updatedAtStr)?.toLocal() ?? DateTime.now();
         }
 
-        cloudDocs.add({
-          'title': docName,
-          'path': null, // Cloud-synced document reference
-          'date': formattedDate,
-          'annotations': totalAnnotations,
-          'color': palette['color']!,
-          'accent': palette['accent']!,
-          'icon': CupertinoIcons.doc_text_fill,
-          'badge': totalAnnotations > 0 ? '$totalAnnotations edits' : 'Cloud',
-        });
+        if (docMap.containsKey(docName)) {
+          // Update existing local document with cloud state
+          final existing = docMap[docName]!;
+          docMap[docName] = existing.copyWith(
+            annotationsCount: totalAnnotations,
+            isCloudSynced: true,
+            lastOpenedAt: cloudUpdatedAt.isAfter(existing.lastOpenedAt)
+                ? cloudUpdatedAt
+                : existing.lastOpenedAt,
+          );
+        } else {
+          // Add new cloud-synced document
+          docMap[docName] = DocumentItem(
+            fileName: docName,
+            filePath: null, // Cloud-only until user opens file locally
+            lastOpenedAt: cloudUpdatedAt,
+            annotationsCount: totalAnnotations,
+            isCloudSynced: true,
+            paletteIndex: i % _coverPalettes.length,
+          );
+        }
+
+        // Persist merged document
+        await DocumentStorageService.saveOrUpdateDocument(docMap[docName]!);
       }
 
+      final mergedList = docMap.values.toList()
+        ..sort((a, b) => b.lastOpenedAt.compareTo(a.lastOpenedAt));
+
       setState(() {
-        _recentDocuments.clear();
-        _recentDocuments.addAll(cloudDocs);
+        _documents = mergedList;
         _isLoadingCloudDocuments = false;
       });
     } catch (e) {
       if (!mounted) return;
       setState(() => _isLoadingCloudDocuments = false);
-      debugPrint('Cloud documents fetch notice (offline/empty): $e');
+      debugPrint('Cloud sync notice (offline or unconfigured): $e');
     }
   }
 
-  /// Handles picking a PDF document using FilePicker and navigating to the EditorScreen
+  /// Handles picking a PDF document using FilePicker, saving to persistence, and opening Editor
   Future<void> _pickAndOpenDocument() async {
     try {
       setState(() => _isPickingDocument = true);
@@ -132,24 +160,23 @@ class _HomeScreenState extends State<HomeScreen> {
         final filePath = pickedFile.path!;
         final fileName = pickedFile.name;
 
-        // Register document in recent list
-        final palette = _coverPalettes[_recentDocuments.length % _coverPalettes.length];
+        // Persist document immediately
+        final newDoc = DocumentItem(
+          fileName: fileName,
+          filePath: filePath,
+          lastOpenedAt: DateTime.now(),
+          paletteIndex: _documents.length % _coverPalettes.length,
+        );
+
+        await DocumentStorageService.saveOrUpdateDocument(newDoc);
+
+        // Update in-memory state
         setState(() {
-          // Remove existing duplicate by title if any
-          _recentDocuments.removeWhere((d) => d['title'] == fileName);
-          _recentDocuments.insert(0, {
-            'title': fileName,
-            'path': filePath,
-            'date': 'Just now',
-            'annotations': 0,
-            'color': palette['color']!,
-            'accent': palette['accent']!,
-            'icon': CupertinoIcons.doc_text_fill,
-            'badge': 'Local PDF',
-          });
+          _documents.removeWhere((d) => d.fileName == fileName);
+          _documents.insert(0, newDoc);
         });
 
-        // Navigate smoothly to EditorScreen
+        // Navigate to EditorScreen
         if (!mounted) return;
         await Navigator.of(context).push(
           PageRouteBuilder(
@@ -179,8 +206,8 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         );
 
-        // Refresh cloud list upon returning from editor
-        _fetchCloudDocuments();
+        // Refresh list upon returning from editor
+        _loadInitialDocuments();
       }
     } catch (e) {
       if (!mounted) return;
@@ -212,22 +239,28 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  /// Opens a notebook card directly or prompts file selection
-  void _openDocumentCard(Map<String, dynamic> item) {
-    final path = item['path'] as String?;
-    final title = item['title'] as String;
+  /// Opens a saved document card
+  Future<void> _openDocument(DocumentItem doc) async {
+    final path = doc.filePath;
 
     if (path != null && File(path).existsSync()) {
-      Navigator.of(context).push(
+      // Update last opened time
+      final updated = doc.copyWith(lastOpenedAt: DateTime.now());
+      await DocumentStorageService.saveOrUpdateDocument(updated);
+
+      if (!mounted) return;
+      await Navigator.of(context).push(
         MaterialPageRoute(
           builder: (context) => EditorScreen(
             pdfPath: path,
-            fileName: title,
+            fileName: doc.fileName,
           ),
         ),
-      ).then((_) => _fetchCloudDocuments());
+      );
+
+      _loadInitialDocuments();
     } else {
-      // Local path not cached, prompt to select PDF
+      // File path missing/moved: prompt to select PDF file from device
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Row(
@@ -237,16 +270,39 @@ class _HomeScreenState extends State<HomeScreen> {
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  'Select "$title" from your device to load cloud annotations.',
+                  'Select "${doc.fileName}" from device to load and sync annotations.',
                   style: const TextStyle(fontSize: 13),
                 ),
               ),
             ],
           ),
           action: SnackBarAction(
-            label: 'Open',
+            label: 'Select PDF',
             textColor: AppTheme.accentPinkLight,
-            onPressed: _pickAndOpenDocument,
+            onPressed: () async {
+              final picked = await FilePicker.pickFile(
+                type: FileType.custom,
+                allowedExtensions: ['pdf'],
+              );
+              if (picked != null && picked.path != null) {
+                final updatedDoc = doc.copyWith(
+                  filePath: picked.path,
+                  lastOpenedAt: DateTime.now(),
+                );
+                await DocumentStorageService.saveOrUpdateDocument(updatedDoc);
+
+                if (!mounted) return;
+                await Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => EditorScreen(
+                      pdfPath: picked.path!,
+                      fileName: doc.fileName,
+                    ),
+                  ),
+                );
+                _loadInitialDocuments();
+              }
+            },
           ),
           backgroundColor: AppTheme.primaryPurpleDark,
           behavior: SnackBarBehavior.floating,
@@ -260,15 +316,59 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  /// Deletes a document from the recent list with confirmation
+  void _confirmDeleteDocument(DocumentItem doc) {
+    showCupertinoDialog(
+      context: context,
+      builder: (context) => CupertinoAlertDialog(
+        title: const Text('Remove from Recent?'),
+        content: Text(
+          'Do you want to remove "${doc.fileName}" from your recent documents list? Cloud annotations will remain preserved.',
+        ),
+        actions: [
+          CupertinoDialogAction(
+            child: const Text('Cancel'),
+            onPressed: () => Navigator.pop(context),
+          ),
+          CupertinoDialogAction(
+            isDestructiveAction: true,
+            child: const Text('Remove'),
+            onPressed: () async {
+              Navigator.pop(context);
+              await DocumentStorageService.deleteDocument(doc.fileName);
+              setState(() {
+                _documents.removeWhere((d) => d.fileName == doc.fileName);
+              });
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Returns filtered documents according to selected category chip
+  List<DocumentItem> get _filteredDocuments {
+    if (_selectedFilter == 'Recently Opened') {
+      return _documents
+          .where((d) => d.filePath != null && File(d.filePath!).existsSync())
+          .toList();
+    } else if (_selectedFilter == 'Cloud Synced') {
+      return _documents.where((d) => d.isCloudSynced).toList();
+    }
+    return _documents;
+  }
+
   @override
   Widget build(BuildContext context) {
+    final displayDocs = _filteredDocuments;
+
     return Scaffold(
       backgroundColor: AppTheme.background,
       body: SafeArea(
         child: RefreshIndicator(
           color: AppTheme.primaryPurple,
           backgroundColor: AppTheme.surfaceWhite,
-          onRefresh: _fetchCloudDocuments,
+          onRefresh: _syncWithCloud,
           child: CustomScrollView(
             physics: const AlwaysScrollableScrollPhysics(
               parent: BouncingScrollPhysics(),
@@ -293,7 +393,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
               const SliverToBoxAdapter(child: SizedBox(height: 28)),
 
-              // Filter Tabs (All, Favorites, Folders)
+              // Filter Tabs (All, Recently Opened, Cloud Synced)
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20.0),
@@ -312,9 +412,11 @@ class _HomeScreenState extends State<HomeScreen> {
                     children: [
                       Row(
                         children: [
-                          const Text(
-                            'Recent Study Notebooks',
-                            style: TextStyle(
+                          Text(
+                            _selectedFilter == 'All Documents'
+                                ? 'My Study Notebooks (${displayDocs.length})'
+                                : '$_selectedFilter (${displayDocs.length})',
+                            style: const TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.w700,
                               color: AppTheme.textPrimary,
@@ -340,10 +442,8 @@ class _HomeScreenState extends State<HomeScreen> {
                           size: 17,
                           color: AppTheme.primaryPurple,
                         ),
-                        tooltip: 'Refresh Cloud Documents',
-                        onPressed: _isLoadingCloudDocuments
-                            ? null
-                            : _fetchCloudDocuments,
+                        tooltip: 'Sync with Cloud',
+                        onPressed: _isLoadingCloudDocuments ? null : _syncWithCloud,
                       ),
                     ],
                   ),
@@ -353,7 +453,7 @@ class _HomeScreenState extends State<HomeScreen> {
               const SliverToBoxAdapter(child: SizedBox(height: 10)),
 
               // Grid or Empty State
-              if (_recentDocuments.isEmpty && !_isLoadingCloudDocuments)
+              if (displayDocs.isEmpty && !_isLoadingCloudDocuments)
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.symmetric(
@@ -361,7 +461,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: _buildEmptyState(),
                   ),
                 )
-              else if (_recentDocuments.isEmpty && _isLoadingCloudDocuments)
+              else if (displayDocs.isEmpty && _isLoadingCloudDocuments)
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.symmetric(vertical: 40.0),
@@ -375,7 +475,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                           const SizedBox(height: 14),
                           Text(
-                            'Checking Supabase for notebooks...',
+                            'Loading notebooks...',
                             style: TextStyle(
                               color: AppTheme.textSecondary,
                               fontSize: 13,
@@ -401,10 +501,10 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     delegate: SliverChildBuilderDelegate(
                       (context, index) {
-                        final item = _recentDocuments[index];
-                        return _buildNotebookCard(item);
+                        final doc = displayDocs[index];
+                        return _buildNotebookCard(doc);
                       },
-                      childCount: _recentDocuments.length,
+                      childCount: displayDocs.length,
                     ),
                   ),
                 ),
@@ -489,9 +589,11 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           const SizedBox(height: 18),
 
-          const Text(
-            'No Study Notebooks Yet',
-            style: TextStyle(
+          Text(
+            _selectedFilter == 'All Documents'
+                ? 'No Study Notebooks Yet'
+                : 'No $_selectedFilter Found',
+            style: const TextStyle(
               fontSize: 17,
               fontWeight: FontWeight.w800,
               color: AppTheme.textPrimary,
@@ -500,10 +602,12 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           const SizedBox(height: 8),
 
-          const Text(
-            'Import your PDF slides, reviewers, or textbooks to start highlighting, handwriting notes, and syncing to the cloud.',
+          Text(
+            _selectedFilter == 'All Documents'
+                ? 'Import your PDF slides, reviewers, or textbooks to start highlighting, handwriting notes, and syncing to the cloud.'
+                : 'Tap "Open PDF Document" below to import your study material into this section.',
             textAlign: TextAlign.center,
-            style: TextStyle(
+            style: const TextStyle(
               fontSize: 13,
               color: AppTheme.textSecondary,
               height: 1.45,
@@ -516,7 +620,7 @@ class _HomeScreenState extends State<HomeScreen> {
             onPressed: _isPickingDocument ? null : _pickAndOpenDocument,
             icon: const Icon(CupertinoIcons.arrow_up_doc_fill, size: 16),
             label: const Text(
-              'Open First PDF Document',
+              'Open PDF Document',
               style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5),
             ),
             style: ElevatedButton.styleFrom(
@@ -632,9 +736,9 @@ class _HomeScreenState extends State<HomeScreen> {
               color: AppTheme.primaryPurple,
               size: 20,
             ),
-            tooltip: 'Refresh Cloud Sync',
+            tooltip: 'Sync with Supabase',
             onPressed: () {
-              _fetchCloudDocuments();
+              _syncWithCloud();
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
                   content: const Row(
@@ -674,7 +778,7 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       child: Stack(
         children: [
-          // Subtle background decorative circles
+          // Decorative background circles
           Positioned(
             right: -25,
             top: -25,
@@ -892,13 +996,11 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   /// Single Notebook Item Card (GoodNotes Stationery Style)
-  Widget _buildNotebookCard(Map<String, dynamic> item) {
-    final title = item['title'] as String? ?? 'Untitled';
-    final date = item['date'] as String? ?? 'Recently';
-    final badge = item['badge'] as String? ?? 'Notebook';
-    final color = item['color'] as Color? ?? const Color(0xFFE9E4FC);
-    final accent = item['accent'] as Color? ?? AppTheme.primaryPurple;
-    final icon = item['icon'] as IconData? ?? CupertinoIcons.doc_text_fill;
+  Widget _buildNotebookCard(DocumentItem doc) {
+    final palette = _coverPalettes[doc.paletteIndex % _coverPalettes.length];
+    final color = palette['color']!;
+    final accent = palette['accent']!;
+    final hasLocalPath = doc.filePath != null && File(doc.filePath!).existsSync();
 
     return Container(
       decoration: BoxDecoration(
@@ -912,7 +1014,8 @@ class _HomeScreenState extends State<HomeScreen> {
         borderRadius: BorderRadius.circular(20),
         child: InkWell(
           borderRadius: BorderRadius.circular(20),
-          onTap: () => _openDocumentCard(item),
+          onTap: () => _openDocument(doc),
+          onLongPress: () => _confirmDeleteDocument(doc),
           child: Padding(
             padding: const EdgeInsets.all(14.0),
             child: Column(
@@ -947,14 +1050,18 @@ class _HomeScreenState extends State<HomeScreen> {
                             ),
                           ),
                         ),
+
                         // Center icon
                         Center(
                           child: Icon(
-                            icon,
+                            hasLocalPath
+                                ? CupertinoIcons.doc_text_fill
+                                : CupertinoIcons.cloud_download_fill,
                             size: 36,
                             color: accent,
                           ),
                         ),
+
                         // Top Right Tag
                         Positioned(
                           top: 8,
@@ -966,13 +1073,28 @@ class _HomeScreenState extends State<HomeScreen> {
                               color: Colors.white.withValues(alpha: 0.85),
                               borderRadius: BorderRadius.circular(6),
                             ),
-                            child: Text(
-                              badge,
-                              style: TextStyle(
-                                fontSize: 9.5,
-                                fontWeight: FontWeight.w700,
-                                color: accent,
-                              ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (doc.isCloudSynced) ...[
+                                  const Icon(
+                                    CupertinoIcons.cloud_fill,
+                                    size: 10,
+                                    color: AppTheme.primaryPurple,
+                                  ),
+                                  const SizedBox(width: 3),
+                                ],
+                                Text(
+                                  doc.annotationsCount > 0
+                                      ? '${doc.annotationsCount} edits'
+                                      : (hasLocalPath ? 'Local' : 'Cloud'),
+                                  style: TextStyle(
+                                    fontSize: 9.5,
+                                    fontWeight: FontWeight.w700,
+                                    color: accent,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ),
@@ -985,7 +1107,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
                 // Title
                 Text(
-                  title,
+                  doc.fileName,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
@@ -1004,18 +1126,20 @@ class _HomeScreenState extends State<HomeScreen> {
                   children: [
                     Expanded(
                       child: Text(
-                        badge,
+                        hasLocalPath ? 'Available on device' : 'Synced on Cloud',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 11,
+                        style: TextStyle(
+                          fontSize: 10.5,
                           fontWeight: FontWeight.w600,
-                          color: AppTheme.textMuted,
+                          color: hasLocalPath
+                              ? const Color(0xFF10B981)
+                              : AppTheme.primaryPurple,
                         ),
                       ),
                     ),
                     Text(
-                      date,
+                      doc.formattedRelativeDate,
                       style: const TextStyle(
                         fontSize: 10,
                         color: AppTheme.textMuted,
