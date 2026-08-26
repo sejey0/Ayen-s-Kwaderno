@@ -14,14 +14,12 @@ import '../models/stroke_model.dart';
 import '../models/text_annotation_model.dart';
 import '../services/document_storage_service.dart';
 import '../theme/app_theme.dart';
-import '../widgets/handwriting_canvas.dart';
 
-/// Supported annotation tool types
+/// Supported annotation tool types in document editor
 enum AnnotationTool {
   none, // Pan & Zoom Navigation Mode
   highlighter, // Semi-transparent highlighter drawing
   straightLine, // Auto-straightened coordinate lines
-  handwritingText, // Google ML Kit digital ink canvas
   addImage, // Draggable/resizable image overlay
 }
 
@@ -63,7 +61,7 @@ class _EditorScreenState extends State<EditorScreen>
   final List<Stroke> _redoHistory = [];
   Stroke? _currentStroke;
 
-  // Digital Text Annotations state (from ML Kit Handwriting recognition)
+  // Digital Text Annotations state (Saved notes)
   final List<TextAnnotation> _textAnnotations = [];
   String? _selectedTextId;
 
@@ -268,7 +266,6 @@ class _EditorScreenState extends State<EditorScreen>
                 .toList() ??
             [];
 
-        // Update if cloud has data and local was empty or we're online
         if (loadedStrokes.isNotEmpty ||
             loadedTexts.isNotEmpty ||
             loadedImages.isNotEmpty ||
@@ -295,11 +292,9 @@ class _EditorScreenState extends State<EditorScreen>
           );
         }
       } else {
-        // If nothing in cloud yet, mark as synced or saved locally
         setState(() => _syncStatus = SyncStatus.synced);
       }
     } catch (_) {
-      // Offline mode: keep local data seamlessly
       if (mounted) {
         setState(() => _syncStatus = SyncStatus.offline);
       }
@@ -333,7 +328,8 @@ class _EditorScreenState extends State<EditorScreen>
 
     // 2. DEBOUNCED CLOUD SYNC TO SUPABASE (1.2s debounce)
     _cloudSyncDebounceTimer?.cancel();
-    _cloudSyncDebounceTimer = Timer(const Duration(milliseconds: 1200), () async {
+    _cloudSyncDebounceTimer =
+        Timer(const Duration(milliseconds: 1200), () async {
       await _syncToSupabaseDirect();
     });
   }
@@ -370,7 +366,6 @@ class _EditorScreenState extends State<EditorScreen>
       if (!mounted) return;
       setState(() => _syncStatus = SyncStatus.synced);
     } catch (_) {
-      // Offline fallback: data is securely saved in local storage!
       if (!mounted) return;
       setState(() => _syncStatus = SyncStatus.offline);
     }
@@ -384,63 +379,8 @@ class _EditorScreenState extends State<EditorScreen>
       _selectedTextId = null;
     });
 
-    if (tool == AnnotationTool.handwritingText) {
-      _launchHandwritingRecognitionDialog();
-    } else if (tool == AnnotationTool.addImage) {
+    if (tool == AnnotationTool.addImage) {
       _pickAndInsertImage();
-    }
-  }
-
-  /// Launches Google ML Kit Handwriting Canvas Bottom Sheet
-  Future<void> _launchHandwritingRecognitionDialog() async {
-    final recognizedText = await HandwritingCanvasDialog.show(context);
-
-    if (!mounted) return;
-
-    if (recognizedText != null && recognizedText.trim().isNotEmpty) {
-      final screenSize = MediaQuery.of(context).size;
-      setState(() {
-        _textAnnotations.add(
-          TextAnnotation(
-            text: recognizedText.trim(),
-            position: Offset(screenSize.width * 0.15, screenSize.height * 0.35),
-            fontSize: 16.0,
-            color: _selectedColor == AppTheme.highlighterColors[0]
-                ? AppTheme.textPrimary
-                : _selectedColor,
-          ),
-        );
-        _activeTool = AnnotationTool.none;
-      });
-
-      _autoSaveAndSync();
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              const Icon(CupertinoIcons.sparkles,
-                  color: Color(0xFFE9D5FF), size: 18),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  'Added: "${recognizedText.trim()}"',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
-          ),
-          backgroundColor: AppTheme.primaryPurpleDark,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          duration: const Duration(seconds: 2),
-        ),
-      );
-    } else {
-      setState(() => _activeTool = AnnotationTool.none);
     }
   }
 
@@ -744,7 +684,7 @@ class _EditorScreenState extends State<EditorScreen>
                               );
                             }),
 
-                            // 4. Digital Text Notes (Handwriting)
+                            // 4. Digital Text Notes (Saved Notes)
                             ..._textAnnotations.map((annotation) {
                               return Positioned(
                                 left: annotation.position.dx,
@@ -1457,17 +1397,7 @@ class _EditorScreenState extends State<EditorScreen>
 
                 const SizedBox(width: 4),
 
-                // 3. Write Text (ML Kit Handwriting Recognizer)
-                _buildToolButton(
-                  tool: AnnotationTool.handwritingText,
-                  icon: CupertinoIcons.textformat,
-                  label: 'Write Text',
-                  tooltip: 'Handwriting to Text',
-                ),
-
-                const SizedBox(width: 4),
-
-                // 4. Add Image (Gallery Picker + Resize)
+                // 3. Add Image (Gallery Picker + Resize)
                 _buildToolButton(
                   tool: AnnotationTool.addImage,
                   icon: CupertinoIcons.photo,
@@ -1663,8 +1593,6 @@ class _EditorScreenState extends State<EditorScreen>
         return 'Highlighter';
       case AnnotationTool.straightLine:
         return 'Straight Line';
-      case AnnotationTool.handwritingText:
-        return 'Handwriting Text';
       case AnnotationTool.addImage:
         return 'Image Insert';
       case AnnotationTool.none:

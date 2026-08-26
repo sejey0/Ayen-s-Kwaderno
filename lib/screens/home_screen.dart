@@ -1,11 +1,13 @@
 import 'dart:io';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:file_picker/file_picker.dart';
+import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/document_item_model.dart';
 import '../services/document_storage_service.dart';
 import '../theme/app_theme.dart';
+import '../widgets/handwriting_canvas.dart';
 import 'editor_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -148,7 +150,7 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       setState(() => _isPickingDocument = true);
 
-      final pickedFile = await FilePicker.pickFile(
+      final picked = await FilePicker.pickFile(
         type: FileType.custom,
         allowedExtensions: ['pdf'],
       );
@@ -156,16 +158,18 @@ class _HomeScreenState extends State<HomeScreen> {
       if (!mounted) return;
       setState(() => _isPickingDocument = false);
 
-      if (pickedFile != null && pickedFile.path != null) {
-        final filePath = pickedFile.path!;
-        final fileName = pickedFile.name;
+      if (picked != null && picked.path != null) {
+        final filePath = picked.path!;
+        final fileName = picked.name;
 
-        // Persist document immediately
+        // Persist document to local storage
         final newDoc = DocumentItem(
           fileName: fileName,
           filePath: filePath,
           lastOpenedAt: DateTime.now(),
+          annotationsCount: 0,
           paletteIndex: _documents.length % _coverPalettes.length,
+          isCloudSynced: false,
         );
 
         await DocumentStorageService.saveOrUpdateDocument(newDoc);
@@ -176,8 +180,9 @@ class _HomeScreenState extends State<HomeScreen> {
           _documents.insert(0, newDoc);
         });
 
-        // Navigate to EditorScreen
         if (!mounted) return;
+
+        // Smooth PageRoute transition into Editor
         await Navigator.of(context).push(
           PageRouteBuilder(
             pageBuilder: (context, animation, secondaryAnimation) =>
@@ -190,9 +195,11 @@ class _HomeScreenState extends State<HomeScreen> {
               const begin = Offset(0.0, 0.05);
               const end = Offset.zero;
               const curve = Curves.easeOutCubic;
+
               final tween =
                   Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
-              final fadeTween = Tween<double>(begin: 0.0, end: 1.0);
+              final fadeTween = Tween<double>(begin: 0.0, end: 1.0)
+                  .chain(CurveTween(curve: curve));
 
               return SlideTransition(
                 position: animation.drive(tween),
@@ -237,6 +244,100 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       );
     }
+  }
+
+  /// Launches Google ML Kit Handwriting Recognition from Home Screen
+  Future<void> _launchHandwritingToText() async {
+    final recognizedText = await HandwritingCanvasDialog.show(context);
+
+    if (!mounted) return;
+
+    if (recognizedText != null && recognizedText.trim().isNotEmpty) {
+      _showRecognizedResultDialog(recognizedText.trim());
+    }
+  }
+
+  /// Displays the recognized text result modal with Copy and Share actions
+  void _showRecognizedResultDialog(String text) {
+    showCupertinoDialog(
+      context: context,
+      builder: (context) => CupertinoAlertDialog(
+        title: const Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(CupertinoIcons.sparkles, color: AppTheme.primaryPurple, size: 18),
+            SizedBox(width: 6),
+            Text('Recognized Text'),
+          ],
+        ),
+        content: Padding(
+          padding: const EdgeInsets.only(top: 14.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: AppTheme.dividerColor),
+                ),
+                child: SelectableText(
+                  text,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    color: AppTheme.textPrimary,
+                    height: 1.4,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+              const Text(
+                'Handwriting converted via Google ML Kit Digital Ink.',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: AppTheme.textMuted,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          CupertinoDialogAction(
+            child: const Text('Close'),
+            onPressed: () => Navigator.pop(context),
+          ),
+          CupertinoDialogAction(
+            isDefaultAction: true,
+            onPressed: () {
+              Clipboard.setData(ClipboardData(text: text));
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: const Row(
+                    children: [
+                      Icon(CupertinoIcons.doc_on_clipboard_fill,
+                          color: Colors.white, size: 18),
+                      SizedBox(width: 8),
+                      Text('Copied text to clipboard! 📋'),
+                    ],
+                  ),
+                  backgroundColor: AppTheme.primaryPurpleDark,
+                  behavior: SnackBarBehavior.floating,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  duration: const Duration(seconds: 2),
+                ),
+              );
+            },
+            child: const Text('Copy Text'),
+          ),
+        ],
+      ),
+    );
   }
 
   /// Opens a saved document card
@@ -285,8 +386,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 allowedExtensions: ['pdf'],
               );
               if (picked != null && picked.path != null) {
+                final selectedPath = picked.path!;
                 final updatedDoc = doc.copyWith(
-                  filePath: picked.path,
+                  filePath: selectedPath,
                   lastOpenedAt: DateTime.now(),
                 );
                 await DocumentStorageService.saveOrUpdateDocument(updatedDoc);
@@ -295,7 +397,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 await Navigator.of(context).push(
                   MaterialPageRoute(
                     builder: (context) => EditorScreen(
-                      pdfPath: picked.path!,
+                      pdfPath: selectedPath,
                       fileName: doc.fileName,
                     ),
                   ),
@@ -383,7 +485,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
 
-              // Hero Upload Dropzone Banner
+              // Hero Quick Action Banner (Open PDF & Handwriting to Text)
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20.0),
@@ -443,7 +545,8 @@ class _HomeScreenState extends State<HomeScreen> {
                           color: AppTheme.primaryPurple,
                         ),
                         tooltip: 'Sync with Cloud',
-                        onPressed: _isLoadingCloudDocuments ? null : _syncWithCloud,
+                        onPressed:
+                            _isLoadingCloudDocuments ? null : _syncWithCloud,
                       ),
                     ],
                   ),
@@ -463,17 +566,17 @@ class _HomeScreenState extends State<HomeScreen> {
                 )
               else if (displayDocs.isEmpty && _isLoadingCloudDocuments)
                 SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 40.0),
+                  child: const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 40.0),
                     child: Center(
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const CircularProgressIndicator(
+                          CircularProgressIndicator(
                             color: AppTheme.primaryPurple,
                             strokeWidth: 2.5,
                           ),
-                          const SizedBox(height: 14),
+                          SizedBox(height: 14),
                           Text(
                             'Loading notebooks...',
                             style: TextStyle(
@@ -551,31 +654,23 @@ class _HomeScreenState extends State<HomeScreen> {
       decoration: BoxDecoration(
         color: AppTheme.surfaceWhite,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(
-          color: AppTheme.dividerColor,
-          width: 1.5,
-        ),
+        border: Border.all(color: AppTheme.dividerColor),
         boxShadow: AppTheme.softShadow,
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Pastel illustration ring
           Container(
-            width: 76,
-            height: 76,
+            width: 70,
+            height: 70,
             decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFFEFEBFF), Color(0xFFFFEEF3)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
+              color: AppTheme.primaryPurpleLight,
               shape: BoxShape.circle,
               boxShadow: [
                 BoxShadow(
                   color: AppTheme.primaryPurple.withValues(alpha: 0.15),
-                  blurRadius: 16,
-                  offset: const Offset(0, 6),
+                  blurRadius: 14,
+                  offset: const Offset(0, 4),
                 ),
               ],
             ),
@@ -604,7 +699,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
           Text(
             _selectedFilter == 'All Documents'
-                ? 'Import your PDF slides, reviewers, or textbooks to start highlighting, handwriting notes, and syncing to the cloud.'
+                ? 'Import your PDF slides, reviewers, or textbooks to start highlighting and syncing to the cloud.'
                 : 'Tap "Open PDF Document" below to import your study material into this section.',
             textAlign: TextAlign.center,
             style: const TextStyle(
@@ -764,7 +859,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  /// Big Upload / Open Document Hero Card
+  /// Big Action Hero Card (Open PDF & Handwriting to Text)
   Widget _buildUploadHeroCard() {
     return Container(
       decoration: BoxDecoration(
@@ -805,7 +900,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
 
           Padding(
-            padding: const EdgeInsets.all(22.0),
+            padding: const EdgeInsets.all(20.0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -814,8 +909,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   children: [
                     // Icon Container
                     Container(
-                      width: 52,
-                      height: 52,
+                      width: 50,
+                      height: 50,
                       decoration: BoxDecoration(
                         gradient: const LinearGradient(
                           colors: [Color(0xFFEFEBFF), Color(0xFFFFEEF3)],
@@ -828,7 +923,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         child: Icon(
                           CupertinoIcons.doc_text_viewfinder,
                           color: AppTheme.primaryPurple,
-                          size: 28,
+                          size: 26,
                         ),
                       ),
                     ),
@@ -838,7 +933,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Annotate Document',
+                            'Quick Study Actions',
                             style: TextStyle(
                               fontSize: 17,
                               fontWeight: FontWeight.w700,
@@ -846,9 +941,9 @@ class _HomeScreenState extends State<HomeScreen> {
                               letterSpacing: -0.2,
                             ),
                           ),
-                          SizedBox(height: 4),
+                          SizedBox(height: 3),
                           Text(
-                            'Import any PDF slide, textbook, or reviewer to highlight and annotate.',
+                            'Import PDF reviewers or convert digital ink handwriting into clean text.',
                             style: TextStyle(
                               fontSize: 12.5,
                               color: AppTheme.textSecondary,
@@ -860,77 +955,128 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 18),
+                const SizedBox(height: 16),
 
-                // Action Upload Button
-                SizedBox(
-                  width: double.infinity,
-                  height: 50,
-                  child: ElevatedButton(
-                    onPressed: _isPickingDocument ? null : _pickAndOpenDocument,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.transparent,
-                      shadowColor: Colors.transparent,
-                      padding: EdgeInsets.zero,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                    ),
-                    child: Ink(
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [
-                            AppTheme.primaryPurple,
-                            Color(0xFF9E8AF0),
-                            AppTheme.accentPink,
-                          ],
-                          begin: Alignment.centerLeft,
-                          end: Alignment.centerRight,
-                        ),
-                        borderRadius: BorderRadius.circular(16),
-                        boxShadow: [
-                          BoxShadow(
-                            color:
-                                AppTheme.primaryPurple.withValues(alpha: 0.35),
-                            blurRadius: 14,
-                            offset: const Offset(0, 6),
+                // Action Buttons Row: [ Open PDF ] & [ Handwriting to Text ]
+                Row(
+                  children: [
+                    // 1. Open PDF Document Button
+                    Expanded(
+                      flex: 6,
+                      child: SizedBox(
+                        height: 48,
+                        child: ElevatedButton(
+                          onPressed:
+                              _isPickingDocument ? null : _pickAndOpenDocument,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.transparent,
+                            shadowColor: Colors.transparent,
+                            padding: EdgeInsets.zero,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
                           ),
-                        ],
-                      ),
-                      child: Container(
-                        alignment: Alignment.center,
-                        child: _isPickingDocument
-                            ? const SizedBox(
-                                width: 22,
-                                height: 22,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2.5,
-                                  color: Colors.white,
-                                ),
-                              )
-                            : const Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(
-                                    CupertinoIcons.arrow_up_doc_fill,
-                                    size: 19,
-                                    color: Colors.white,
-                                  ),
-                                  SizedBox(width: 10),
-                                  Text(
-                                    'Upload / Open PDF Document',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.w700,
-                                      letterSpacing: 0.2,
-                                    ),
-                                  ),
+                          child: Ink(
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(
+                                colors: [
+                                  AppTheme.primaryPurple,
+                                  Color(0xFF9E8AF0),
+                                  AppTheme.accentPink,
                                 ],
+                                begin: Alignment.centerLeft,
+                                end: Alignment.centerRight,
                               ),
+                              borderRadius: BorderRadius.circular(14),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: AppTheme.primaryPurple
+                                      .withValues(alpha: 0.35),
+                                  blurRadius: 10,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ],
+                            ),
+                            child: Container(
+                              alignment: Alignment.center,
+                              child: _isPickingDocument
+                                  ? const SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: Colors.white,
+                                      ),
+                                    )
+                                  : const Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        Icon(CupertinoIcons.folder_badge_plus,
+                                            size: 17, color: Colors.white),
+                                        SizedBox(width: 7),
+                                        Text(
+                                          'Open PDF',
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 13.5,
+                                            fontWeight: FontWeight.w700,
+                                            letterSpacing: 0.1,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                            ),
+                          ),
+                        ),
                       ),
                     ),
-                  ),
+
+                    const SizedBox(width: 10),
+
+                    // 2. Handwriting to Text Button
+                    Expanded(
+                      flex: 5,
+                      child: SizedBox(
+                        height: 48,
+                        child: OutlinedButton(
+                          onPressed: _launchHandwritingToText,
+                          style: OutlinedButton.styleFrom(
+                            backgroundColor: AppTheme.primaryPurpleLight
+                                .withValues(alpha: 0.6),
+                            side: const BorderSide(
+                              color: AppTheme.primaryPurple,
+                              width: 1.4,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            padding:
+                                const EdgeInsets.symmetric(horizontal: 10),
+                          ),
+                          child: const Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                CupertinoIcons.textformat,
+                                size: 17,
+                                color: AppTheme.primaryPurpleDark,
+                              ),
+                              SizedBox(width: 6),
+                              Text(
+                                'Handwriting',
+                                style: TextStyle(
+                                  color: AppTheme.primaryPurpleDark,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -940,9 +1086,10 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  /// Horizontal category filter tabs
+  /// Filter tabs (All Documents, Recently Opened, Cloud Synced)
   Widget _buildFilterChips() {
     final filters = ['All Documents', 'Recently Opened', 'Cloud Synced'];
+
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       physics: const BouncingScrollPhysics(),
@@ -950,14 +1097,13 @@ class _HomeScreenState extends State<HomeScreen> {
         children: filters.map((filter) {
           final isSelected = _selectedFilter == filter;
           return Padding(
-            padding: const EdgeInsets.only(right: 10.0),
-            child: InkWell(
+            padding: const EdgeInsets.only(right: 8.0),
+            child: GestureDetector(
               onTap: () => setState(() => _selectedFilter = filter),
-              borderRadius: BorderRadius.circular(20),
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 16.0, vertical: 9.0),
                 decoration: BoxDecoration(
                   color: isSelected
                       ? AppTheme.primaryPurple
@@ -995,163 +1141,159 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  /// Single Notebook Item Card (GoodNotes Stationery Style)
+  /// Study Notebook Card
   Widget _buildNotebookCard(DocumentItem doc) {
     final palette = _coverPalettes[doc.paletteIndex % _coverPalettes.length];
     final color = palette['color']!;
     final accent = palette['accent']!;
-    final hasLocalPath = doc.filePath != null && File(doc.filePath!).existsSync();
 
-    return Container(
-      decoration: BoxDecoration(
-        color: AppTheme.surfaceWhite,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: AppTheme.softShadow,
-        border: Border.all(color: AppTheme.dividerColor),
-      ),
-      child: Material(
-        color: Colors.transparent,
-        borderRadius: BorderRadius.circular(20),
-        child: InkWell(
+    return GestureDetector(
+      onTap: () => _openDocument(doc),
+      onLongPress: () => _confirmDeleteDocument(doc),
+      child: Container(
+        decoration: BoxDecoration(
+          color: AppTheme.surfaceWhite,
           borderRadius: BorderRadius.circular(20),
-          onTap: () => _openDocument(doc),
-          onLongPress: () => _confirmDeleteDocument(doc),
-          child: Padding(
-            padding: const EdgeInsets.all(14.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Notebook Cover Preview Mockup
-                Expanded(
-                  child: Container(
-                    width: double.infinity,
+          boxShadow: AppTheme.softShadow,
+          border: Border.all(color: AppTheme.dividerColor),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Notebook Cover Preview
+            Expanded(
+              child: Stack(
+                children: [
+                  Container(
                     decoration: BoxDecoration(
                       color: color,
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(
-                        color: accent.withValues(alpha: 0.2),
+                      borderRadius: const BorderRadius.only(
+                        topLeft: Radius.circular(19),
+                        topRight: Radius.circular(19),
                       ),
                     ),
-                    child: Stack(
-                      children: [
-                        // Left decorative binder spine
-                        Positioned(
-                          left: 0,
-                          top: 0,
-                          bottom: 0,
-                          width: 8,
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: accent.withValues(alpha: 0.3),
-                              borderRadius: const BorderRadius.only(
-                                topLeft: Radius.circular(14),
-                                bottomLeft: Radius.circular(14),
+                    child: Center(
+                      child: Icon(
+                        CupertinoIcons.doc_text_fill,
+                        size: 44,
+                        color: accent.withValues(alpha: 0.7),
+                      ),
+                    ),
+                  ),
+
+                  // Left Spine / Wire Binding Effect
+                  Positioned(
+                    left: 0,
+                    top: 0,
+                    bottom: 0,
+                    child: Container(
+                      width: 14,
+                      decoration: BoxDecoration(
+                        color: accent.withValues(alpha: 0.25),
+                        borderRadius: const BorderRadius.only(
+                          topLeft: Radius.circular(19),
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  // Cloud Synced Badge
+                  if (doc.isCloudSynced)
+                    Positioned(
+                      top: 8,
+                      right: 8,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.9),
+                          borderRadius: BorderRadius.circular(12),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.06),
+                              blurRadius: 4,
+                            ),
+                          ],
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              CupertinoIcons.cloud_upload_fill,
+                              size: 11,
+                              color: Color(0xFF10B981),
+                            ),
+                            SizedBox(width: 3),
+                            Text(
+                              'Synced',
+                              style: TextStyle(
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFF065F46),
                               ),
                             ),
-                          ),
-                        ),
-
-                        // Center icon
-                        Center(
-                          child: Icon(
-                            hasLocalPath
-                                ? CupertinoIcons.doc_text_fill
-                                : CupertinoIcons.cloud_download_fill,
-                            size: 36,
-                            color: accent,
-                          ),
-                        ),
-
-                        // Top Right Tag
-                        Positioned(
-                          top: 8,
-                          right: 8,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.85),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                if (doc.isCloudSynced) ...[
-                                  const Icon(
-                                    CupertinoIcons.cloud_fill,
-                                    size: 10,
-                                    color: AppTheme.primaryPurple,
-                                  ),
-                                  const SizedBox(width: 3),
-                                ],
-                                Text(
-                                  doc.annotationsCount > 0
-                                      ? '${doc.annotationsCount} edits'
-                                      : (hasLocalPath ? 'Local' : 'Cloud'),
-                                  style: TextStyle(
-                                    fontSize: 9.5,
-                                    fontWeight: FontWeight.w700,
-                                    color: accent,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-
-                const SizedBox(height: 10),
-
-                // Title
-                Text(
-                  doc.fileName,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 13.5,
-                    color: AppTheme.textPrimary,
-                    letterSpacing: -0.2,
-                  ),
-                ),
-
-                const SizedBox(height: 4),
-
-                // Subtitle / page status & timestamp
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        hasLocalPath ? 'Available on device' : 'Synced on Cloud',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 10.5,
-                          fontWeight: FontWeight.w600,
-                          color: hasLocalPath
-                              ? const Color(0xFF10B981)
-                              : AppTheme.primaryPurple,
+                          ],
                         ),
                       ),
                     ),
-                    Text(
-                      doc.formattedRelativeDate,
-                      style: const TextStyle(
-                        fontSize: 10,
-                        color: AppTheme.textMuted,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
+
+            // Document Details
+            Padding(
+              padding: const EdgeInsets.all(12.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    doc.fileName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w700,
+                      color: AppTheme.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        '${doc.annotationsCount} mark${doc.annotationsCount == 1 ? '' : 's'}',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: AppTheme.primaryPurple,
+                        ),
+                      ),
+                      Text(
+                        _formatTimestamp(doc.lastOpenedAt),
+                        style: const TextStyle(
+                          fontSize: 10.5,
+                          color: AppTheme.textMuted,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );
+  }
+
+  String _formatTimestamp(DateTime dt) {
+    final now = DateTime.now();
+    final diff = now.difference(dt);
+
+    if (diff.inMinutes < 1) return 'Just now';
+    if (diff.inHours < 1) return '${diff.inMinutes}m ago';
+    if (diff.inDays < 1) return '${diff.inHours}h ago';
+    if (diff.inDays == 1) return 'Yesterday';
+    return '${dt.month}/${dt.day}';
   }
 }
