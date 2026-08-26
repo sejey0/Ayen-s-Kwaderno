@@ -8,9 +8,10 @@ import '../models/document_item_model.dart';
 import '../models/handwriting_note_model.dart';
 import '../services/document_storage_service.dart';
 import '../theme/app_theme.dart';
-import '../widgets/handwriting_canvas.dart';
 import '../widgets/pdf_thumbnail_widget.dart';
+import '../widgets/type_note_dialog.dart';
 import '../widgets/upload_document_dialog.dart';
+import '../widgets/write_note_choice_dialog.dart';
 import 'editor_screen.dart';
 
 enum LibrarySection {
@@ -195,9 +196,9 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  /// Launches Handwriting & Notes Creator from Home Screen
+  /// Launches Write a Note Choice Modal (Handwritten Note vs Type Note)
   Future<void> _launchHandwritingToText() async {
-    final savedNote = await HandwritingCanvasDialog.show(context);
+    final savedNote = await WriteNoteChoiceDialog.show(context);
 
     if (!mounted || savedNote == null) return;
 
@@ -221,7 +222,7 @@ class _HomeScreenState extends State<HomeScreen> {
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                'Saved "${savedNote.title}" to Handwriting Notes! ✍️',
+                'Saved "${savedNote.title}" to Written Notes! ✍️',
                 style: const TextStyle(fontWeight: FontWeight.w600),
               ),
             ),
@@ -314,110 +315,16 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   /// Displays and allows editing a saved handwriting note
-  void _openHandwritingNoteDialog(HandwritingNote note) {
-    final titleController = TextEditingController(text: note.title);
-    final contentController = TextEditingController(text: note.content);
-
-    showCupertinoDialog(
-      context: context,
-      builder: (context) => CupertinoAlertDialog(
-        title: const Text('Handwriting Note'),
-        content: Padding(
-          padding: const EdgeInsets.only(top: 12.0),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              CupertinoTextField(
-                controller: titleController,
-                placeholder: 'Title',
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: AppTheme.dividerColor),
-                ),
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 10),
-              CupertinoTextField(
-                controller: contentController,
-                placeholder: 'Note Content',
-                maxLines: 6,
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: AppTheme.dividerColor),
-                ),
-                style: const TextStyle(fontSize: 13.5, height: 1.4),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          CupertinoDialogAction(
-            child: const Text('Cancel'),
-            onPressed: () => Navigator.pop(context),
-          ),
-          CupertinoDialogAction(
-            onPressed: () {
-              Clipboard.setData(ClipboardData(text: contentController.text));
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: const Row(
-                    children: [
-                      Icon(CupertinoIcons.doc_on_clipboard_fill,
-                          color: Colors.white, size: 18),
-                      SizedBox(width: 8),
-                      Text('Copied note to clipboard! 📋'),
-                    ],
-                  ),
-                  backgroundColor: AppTheme.primaryPurpleDark,
-                  behavior: SnackBarBehavior.floating,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  duration: const Duration(seconds: 2),
-                ),
-              );
-            },
-            child: const Text('Copy'),
-          ),
-          CupertinoDialogAction(
-            isDefaultAction: true,
-            onPressed: () async {
-              final updatedNote = note.copyWith(
-                title: titleController.text.trim().isNotEmpty
-                    ? titleController.text.trim()
-                    : 'Quick Note',
-                content: contentController.text.trim(),
-                updatedAt: DateTime.now(),
-              );
-
-              await DocumentStorageService.saveOrUpdateHandwritingNote(
-                  updatedNote);
-
-              setState(() {
-                final index =
-                    _handwritingNotes.indexWhere((n) => n.id == note.id);
-                if (index >= 0) {
-                  _handwritingNotes[index] = updatedNote;
-                }
-              });
-
-              if (!context.mounted) return;
-              Navigator.pop(context);
-            },
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
+  Future<void> _openHandwritingNoteDialog(HandwritingNote note) async {
+    final updated = await TypeNoteDialog.show(context, existingNote: note);
+    if (updated != null && mounted) {
+      setState(() {
+        final idx = _handwritingNotes.indexWhere((n) => n.id == updated.id);
+        if (idx >= 0) {
+          _handwritingNotes[idx] = updated;
+        }
+      });
+    }
   }
 
   /// Deletes a document from the recent list with confirmation

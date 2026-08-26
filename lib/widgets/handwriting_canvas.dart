@@ -6,6 +6,21 @@ import '../models/handwriting_note_model.dart';
 import '../services/document_storage_service.dart';
 import '../theme/app_theme.dart';
 
+class HandwritingStroke {
+  final List<Offset> points;
+  final Color color;
+  final double strokeWidth;
+  final bool isHighlighter;
+
+  HandwritingStroke({
+    required this.points,
+    required this.color,
+    required this.strokeWidth,
+    this.isHighlighter = false,
+  });
+}
+
+/// Full screen pure white canvas studio for handwritten notes
 class HandwritingCanvasDialog extends StatefulWidget {
   final String languageCode;
 
@@ -20,7 +35,7 @@ class HandwritingCanvasDialog extends StatefulWidget {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      barrierColor: Colors.black.withValues(alpha: 0.4),
+      barrierColor: Colors.black.withValues(alpha: 0.5),
       builder: (context) => const HandwritingCanvasDialog(),
     );
   }
@@ -36,24 +51,42 @@ class _HandwritingCanvasDialogState extends State<HandwritingCanvasDialog> {
   late mlkit.DigitalInkRecognizer _recognizer;
 
   final TextEditingController _titleController = TextEditingController();
-  final TextEditingController _typeTextController = TextEditingController();
 
-  // Mode: 0 = Handwriting Pad, 1 = Type Note
-  int _currentTab = 0;
+  // Full Screen / Resize state
+  bool _isFullscreen = true; // Default full size white space
+  bool _showTools = true; // Toggle for tools overlay
+
+  // Drawing Tools
+  bool _isEraser = false;
+  Color _selectedColor = const Color(0xFF1E293B); // Charcoal Black
+  double _selectedStrokeWidth = 3.5;
+
+  // 7 Ink Colors
+  static const List<Color> _inkColors = [
+    Color(0xFF1E293B), // Charcoal Black
+    Color(0xFF7C3AED), // Royal Purple
+    Color(0xFFEC4899), // Pink Rose
+    Color(0xFF2563EB), // Ocean Blue
+    Color(0xFF059669), // Emerald Green
+    Color(0xFFD97706), // Amber Orange
+    Color(0xFFFACC15), // Highlighter Yellow
+  ];
+
+  // Pen stroke widths
+  static const List<double> _strokeWidths = [2.0, 3.5, 6.0, 12.0];
 
   // ML Kit Digital Ink Data
   final mlkit.Ink _ink = mlkit.Ink();
   mlkit.Stroke? _currentInkStroke;
 
-  // UI Drawing Points for instant local visual rendering
-  final List<List<Offset>> _drawnStrokes = [];
-  List<Offset> _currentDrawnPoints = [];
+  // Drawing Strokes
+  final List<HandwritingStroke> _strokes = [];
+  final List<HandwritingStroke> _undoHistory = [];
+  List<Offset> _currentPoints = [];
 
   // State
-  bool _isDownloadingModel = false;
   bool _isRecognizing = false;
   bool _hasPluginError = false;
-  String _statusMessage = 'Write your notes or formulas below ✨';
 
   @override
   void initState() {
@@ -69,7 +102,6 @@ class _HandwritingCanvasDialogState extends State<HandwritingCanvasDialog> {
       _recognizer.close();
     } catch (_) {}
     _titleController.dispose();
-    _typeTextController.dispose();
     super.dispose();
   }
 
@@ -78,748 +110,743 @@ class _HandwritingCanvasDialogState extends State<HandwritingCanvasDialog> {
       final isDownloaded =
           await _modelManager.isModelDownloaded(widget.languageCode);
       if (!isDownloaded) {
-        setState(() {
-          _isDownloadingModel = true;
-          _statusMessage = 'Downloading language model (${widget.languageCode})...';
-        });
-
         await _modelManager.downloadModel(widget.languageCode);
       }
-
-      if (mounted) {
-        setState(() {
-          _isDownloadingModel = false;
-          _hasPluginError = false;
-          _statusMessage = 'AI Model ready • Write on the pad below';
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _isDownloadingModel = false;
-          _hasPluginError = true;
-          _statusMessage = 'Tip: Rebuild via run.bat [4] for ML Kit. You can type or write notes below!';
-        });
-      }
+    } catch (_) {
+      if (mounted) setState(() => _hasPluginError = true);
     }
   }
 
   void _onPanStart(DragStartDetails details) {
-    _currentInkStroke = mlkit.Stroke();
-    final point = mlkit.StrokePoint(
-      x: details.localPosition.dx,
-      y: details.localPosition.dy,
-      t: DateTime.now().millisecondsSinceEpoch,
-    );
-    _currentInkStroke!.points.add(point);
+    final localPosition = details.localPosition;
+    if (_isEraser) {
+      _eraseAtPoint(localPosition);
+      return;
+    }
 
     setState(() {
-      _currentDrawnPoints = [details.localPosition];
+      _currentPoints = [localPosition];
+      _currentInkStroke = mlkit.Stroke();
+      _currentInkStroke!.points.add(
+        mlkit.StrokePoint(
+          x: localPosition.dx,
+          y: localPosition.dy,
+          t: DateTime.now().millisecondsSinceEpoch,
+        ),
+      );
     });
   }
 
   void _onPanUpdate(DragUpdateDetails details) {
-    final point = mlkit.StrokePoint(
-      x: details.localPosition.dx,
-      y: details.localPosition.dy,
-      t: DateTime.now().millisecondsSinceEpoch,
-    );
-    _currentInkStroke?.points.add(point);
+    final localPosition = details.localPosition;
+    if (_isEraser) {
+      _eraseAtPoint(localPosition);
+      return;
+    }
 
     setState(() {
-      _currentDrawnPoints.add(details.localPosition);
+      _currentPoints.add(localPosition);
+      _currentInkStroke?.points.add(
+        mlkit.StrokePoint(
+          x: localPosition.dx,
+          y: localPosition.dy,
+          t: DateTime.now().millisecondsSinceEpoch,
+        ),
+      );
     });
   }
 
   void _onPanEnd(DragEndDetails details) {
-    if (_currentInkStroke != null) {
-      _ink.strokes.add(_currentInkStroke!);
-      _currentInkStroke = null;
-    }
+    if (_isEraser) return;
 
-    if (_currentDrawnPoints.isNotEmpty) {
+    if (_currentPoints.isNotEmpty) {
       setState(() {
-        _drawnStrokes.add(List.from(_currentDrawnPoints));
-        _currentDrawnPoints.clear();
+        _strokes.add(
+          HandwritingStroke(
+            points: List.from(_currentPoints),
+            color: _selectedColor,
+            strokeWidth: _selectedStrokeWidth,
+            isHighlighter: _selectedColor == const Color(0xFFFACC15),
+          ),
+        );
+        _undoHistory.clear();
+        _currentPoints = [];
+
+        if (_currentInkStroke != null) {
+          _ink.strokes.add(_currentInkStroke!);
+          _currentInkStroke = null;
+        }
+      });
+    }
+  }
+
+  void _eraseAtPoint(Offset point) {
+    const double threshold = 28.0;
+    bool erasedAny = false;
+
+    setState(() {
+      _strokes.removeWhere((stroke) {
+        for (final p in stroke.points) {
+          if ((p - point).distance <= threshold) {
+            erasedAny = true;
+            return true;
+          }
+        }
+        return false;
+      });
+    });
+
+    if (erasedAny && _ink.strokes.isNotEmpty) {
+      _ink.strokes.clear();
+    }
+  }
+
+  void _undo() {
+    if (_strokes.isNotEmpty) {
+      setState(() {
+        _undoHistory.add(_strokes.removeLast());
+        if (_ink.strokes.isNotEmpty) {
+          _ink.strokes.removeLast();
+        }
+      });
+    }
+  }
+
+  void _redo() {
+    if (_undoHistory.isNotEmpty) {
+      setState(() {
+        _strokes.add(_undoHistory.removeLast());
       });
     }
   }
 
   void _clearCanvas() {
     setState(() {
+      _strokes.clear();
+      _undoHistory.clear();
+      _currentPoints.clear();
       _ink.strokes.clear();
-      _currentInkStroke = null;
-      _drawnStrokes.clear();
-      _currentDrawnPoints.clear();
-      _statusMessage = 'Canvas cleared';
     });
   }
 
-  /// Saves the note directly and returns the HandwritingNote to HomeScreen
-  Future<void> _saveAndSubmitNote() async {
-    String finalContent = '';
+  Future<String> _recognizeHandwriting() async {
+    if (_strokes.isEmpty || _hasPluginError) {
+      return '';
+    }
 
-    if (_currentTab == 1) {
-      // Typing Tab
-      finalContent = _typeTextController.text.trim();
-      if (finalContent.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Please enter content for your note.'),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-        return;
-      }
-    } else {
-      // Handwriting Pad Tab
-      if (_ink.strokes.isEmpty && _typeTextController.text.trim().isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Please write your note on the pad first.'),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-        return;
-      }
-
-      setState(() {
-        _isRecognizing = true;
-        _statusMessage = 'Recognizing handwriting...';
-      });
-
-      try {
-        final candidates = await _recognizer.recognize(_ink);
-        if (candidates.isNotEmpty && candidates.first.text.trim().isNotEmpty) {
-          finalContent = candidates.first.text.trim();
-        }
-      } catch (e) {
-        debugPrint('ML Kit recognition fallback: $e');
-        _hasPluginError = true;
-      }
-
-      // If ML Kit wasn't compiled or failed, fallback to typed text or default note
-      if (finalContent.isEmpty) {
-        if (_typeTextController.text.trim().isNotEmpty) {
-          finalContent = _typeTextController.text.trim();
-        } else {
-          finalContent = 'Handwritten note created on ${DateTime.now().month}/${DateTime.now().day}';
-        }
-      }
-
-      if (!mounted) return;
+    try {
+      setState(() => _isRecognizing = true);
+      final candidates = await _recognizer.recognize(_ink);
       setState(() => _isRecognizing = false);
-    }
 
-    // Determine title
-    String finalTitle = _titleController.text.trim();
-    if (finalTitle.isEmpty) {
-      if (finalContent.length > 20) {
-        finalTitle = '${finalContent.substring(0, 20)}...';
-      } else {
-        finalTitle = finalContent.isNotEmpty ? finalContent : 'Quick Note';
+      if (candidates.isNotEmpty) {
+        return candidates.first.text;
       }
+    } catch (_) {
+      if (mounted) setState(() => _isRecognizing = false);
     }
+    return '';
+  }
+
+  Future<void> _saveHandwrittenNote() async {
+    final title = _titleController.text.trim().isNotEmpty
+        ? _titleController.text.trim()
+        : 'Note ${DateTime.now().month}/${DateTime.now().day}';
+
+    final recognized = await _recognizeHandwriting();
+    final content = recognized.isNotEmpty
+        ? recognized
+        : 'Handwritten drawing (${_strokes.length} strokes)';
 
     final newNote = HandwritingNote(
-      title: finalTitle,
-      content: finalContent,
+      id: 'note_${DateTime.now().millisecondsSinceEpoch}',
+      title: title,
+      content: content,
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+      paletteIndex: DateTime.now().millisecond % 5,
+      isCloudSynced: false,
     );
 
-    // Save to local storage & background Supabase
     await DocumentStorageService.saveOrUpdateHandwritingNote(newNote);
 
     if (!mounted) return;
     Navigator.of(context).pop(newNote);
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Saved "$title" to Written Notes! ✍️'),
+        backgroundColor: AppTheme.textPrimary,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+    final mediaQuery = MediaQuery.of(context);
+    final safeTop = mediaQuery.viewPadding.top > 0
+        ? mediaQuery.viewPadding.top
+        : mediaQuery.padding.top;
+    final safeBottom = mediaQuery.viewPadding.bottom > 0
+        ? mediaQuery.viewPadding.bottom
+        : mediaQuery.padding.bottom;
+    final screenHeight = mediaQuery.size.height;
+    final targetHeight =
+        _isFullscreen ? screenHeight : screenHeight * 0.82;
 
-    return Container(
-      height: MediaQuery.of(context).size.height * 0.75 + bottomInset,
-      decoration: const BoxDecoration(
-        color: AppTheme.surfaceWhite,
-        borderRadius: BorderRadius.only(
-          topLeft: Radius.circular(32),
-          topRight: Radius.circular(32),
-        ),
+    final topMargin = _isFullscreen
+        ? (safeTop > 0 ? safeTop + 8 : 34.0)
+        : 12.0;
+    final bottomMargin = safeBottom > 0 ? safeBottom + 10 : 16.0;
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeOutCubic,
+      height: targetHeight,
+      decoration: BoxDecoration(
+        color: Colors.white, // PURE WHITE BACKGROUND
+        borderRadius: _isFullscreen
+            ? BorderRadius.zero
+            : const BorderRadius.only(
+                topLeft: Radius.circular(28),
+                topRight: Radius.circular(28),
+              ),
       ),
-      child: Column(
+      child: Stack(
         children: [
-          // Top Sheet Handle & Header
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
-            child: Column(
-              children: [
-                Center(
-                  child: Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: AppTheme.dividerColor,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
+          // 1. FULL SCREEN PURE WHITE CANVAS
+          Positioned.fill(
+            child: GestureDetector(
+              onPanStart: _onPanStart,
+              onPanUpdate: _onPanUpdate,
+              onPanEnd: _onPanEnd,
+              child: CustomPaint(
+                painter: _HandwritingPainter(
+                  strokes: _strokes,
+                  currentStrokePoints: _currentPoints,
+                  currentColor: _selectedColor,
+                  currentStrokeWidth: _selectedStrokeWidth,
+                  isEraser: _isEraser,
                 ),
-                const SizedBox(height: 10),
-
-                // Title Row
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                child: Stack(
                   children: [
-                    Row(
-                      children: [
-                        Container(
-                          width: 36,
-                          height: 36,
-                          decoration: BoxDecoration(
-                            gradient: const LinearGradient(
-                              colors: [
-                                AppTheme.primaryPurple,
-                                AppTheme.accentPink,
-                              ],
-                            ),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: const Icon(
-                            CupertinoIcons.pencil_ellipsis_rectangle,
-                            color: Colors.white,
-                            size: 20,
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        const Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                    if (_strokes.isEmpty && _currentPoints.isEmpty)
+                      Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
                           children: [
-                            Text(
-                              'Handwriting & Notes',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w700,
-                                color: AppTheme.textPrimary,
-                                letterSpacing: -0.2,
-                              ),
+                            Icon(
+                              _isEraser
+                                  ? CupertinoIcons.trash
+                                  : CupertinoIcons.hand_draw,
+                              size: 44,
+                              color:
+                                  AppTheme.textMuted.withValues(alpha: 0.35),
                             ),
+                            const SizedBox(height: 10),
                             Text(
-                              'Digital Ink & Instant Note Creator',
+                              _isEraser
+                                  ? 'Eraser Active • Drag over strokes to erase'
+                                  : 'Write, sketch, or draw notes freely ✍️',
                               style: TextStyle(
-                                fontSize: 11,
-                                color: AppTheme.textSecondary,
-                                fontWeight: FontWeight.w500,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color:
+                                    AppTheme.textMuted.withValues(alpha: 0.55),
                               ),
                             ),
                           ],
                         ),
-                      ],
-                    ),
-
-                    IconButton(
-                      icon: const Icon(
-                        CupertinoIcons.xmark_circle_fill,
-                        color: AppTheme.textMuted,
-                        size: 24,
                       ),
-                      onPressed: () => Navigator.pop(context),
+                  ],
+                ),
+              ),
+            ),
+          ),
+
+          // 2. TOP BAR: Title, Fullscreen/Resize, Tools Toggle, Save & Close
+          Positioned(
+            top: topMargin,
+            left: 12,
+            right: 12,
+            child: Container(
+              height: 48,
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.96),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: AppTheme.dividerColor),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.07),
+                    blurRadius: 10,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  // Close / Back Button
+                  IconButton(
+                    icon: const Icon(
+                      CupertinoIcons.xmark_circle_fill,
+                      color: AppTheme.textMuted,
+                      size: 22,
+                    ),
+                    tooltip: 'Close',
+                    onPressed: () => Navigator.pop(context),
+                    constraints:
+                        const BoxConstraints(minWidth: 32, minHeight: 32),
+                    padding: EdgeInsets.zero,
+                  ),
+
+                  // Inline Title Input Field
+                  Expanded(
+                    child: Container(
+                      height: 36,
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF8FAFC),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: TextField(
+                        controller: _titleController,
+                        decoration: const InputDecoration(
+                          hintText: 'Note Title...',
+                          hintStyle: TextStyle(
+                            fontSize: 12.5,
+                            color: AppTheme.textMuted,
+                          ),
+                          border: InputBorder.none,
+                          isDense: true,
+                          contentPadding: EdgeInsets.symmetric(vertical: 8),
+                        ),
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: AppTheme.textPrimary,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+
+                  // Resize / Fullscreen Button
+                  GestureDetector(
+                    onTap: () {
+                      setState(() => _isFullscreen = !_isFullscreen);
+                    },
+                    child: Container(
+                      width: 34,
+                      height: 34,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF1F5F9),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(
+                        _isFullscreen
+                            ? CupertinoIcons.fullscreen_exit
+                            : CupertinoIcons.fullscreen,
+                        color: AppTheme.primaryPurple,
+                        size: 17,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+
+                  // Tools Toggle Button
+                  GestureDetector(
+                    onTap: () => setState(() => _showTools = !_showTools),
+                    child: Container(
+                      height: 34,
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      decoration: BoxDecoration(
+                        color: _showTools
+                            ? AppTheme.primaryPurple
+                            : AppTheme.primaryPurpleLight,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            CupertinoIcons.slider_horizontal_3,
+                            size: 14,
+                            color: _showTools
+                                ? Colors.white
+                                : AppTheme.primaryPurpleDark,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            _showTools ? 'Hide' : 'Tools',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: _showTools
+                                  ? Colors.white
+                                  : AppTheme.primaryPurpleDark,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+
+                  // Direct Save Button
+                  ElevatedButton(
+                    onPressed: _isRecognizing ? null : _saveHandwrittenNote,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.accentPink,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 0),
+                      minimumSize: const Size(54, 34),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                    child: _isRecognizing
+                        ? const SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(CupertinoIcons.checkmark_alt, size: 14),
+                              SizedBox(width: 3),
+                              Text(
+                                'Save',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ],
+                          ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // 3. COLLAPSIBLE FLOATING TOOLS PANEL
+          if (_showTools)
+            Positioned(
+              bottom: bottomMargin,
+              left: 12,
+              right: 12,
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.96),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: AppTheme.dividerColor),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.09),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
                     ),
                   ],
                 ),
-                const SizedBox(height: 8),
-
-                // Note Title TextField
-                Container(
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF8FAFC),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: AppTheme.dividerColor),
-                  ),
-                  child: TextField(
-                    controller: _titleController,
-                    decoration: const InputDecoration(
-                      hintText: 'Note Title (Optional)...',
-                      hintStyle: TextStyle(
-                        fontSize: 12.5,
-                        color: AppTheme.textMuted,
-                      ),
-                      prefixIcon: Icon(
-                        CupertinoIcons.tag,
-                        size: 16,
-                        color: AppTheme.primaryPurple,
-                      ),
-                      border: InputBorder.none,
-                      contentPadding:
-                          EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                    ),
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      color: AppTheme.textPrimary,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 8),
-
-                // Mode Tabs (Draw / Type)
-                Container(
-                  padding: const EdgeInsets.all(3),
-                  decoration: BoxDecoration(
-                    color: AppTheme.background,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      Expanded(
-                        child: GestureDetector(
-                          onTap: () => setState(() => _currentTab = 0),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(vertical: 6),
-                            decoration: BoxDecoration(
-                              color: _currentTab == 0
-                                  ? Colors.white
-                                  : Colors.transparent,
-                              borderRadius: BorderRadius.circular(10),
-                              boxShadow: _currentTab == 0
-                                  ? [
-                                      BoxShadow(
-                                        color: Colors.black
-                                            .withValues(alpha: 0.04),
-                                        blurRadius: 4,
+                      // Row 1: Pen, Eraser, 7 Color Swatches
+                      Row(
+                        children: [
+                          // Pen Mode Button
+                          _buildToolChip(
+                            icon: CupertinoIcons.pen,
+                            label: 'Pen',
+                            isSelected: !_isEraser,
+                            onTap: () => setState(() => _isEraser = false),
+                          ),
+                          const SizedBox(width: 6),
+
+                          // Eraser Button
+                          _buildToolChip(
+                            icon: CupertinoIcons.trash,
+                            label: 'Eraser',
+                            isSelected: _isEraser,
+                            onTap: () => setState(() => _isEraser = true),
+                          ),
+
+                          const SizedBox(width: 8),
+                          Container(
+                              width: 1,
+                              height: 22,
+                              color: AppTheme.dividerColor),
+                          const SizedBox(width: 8),
+
+                          // Color Swatches
+                          Expanded(
+                            child: SingleChildScrollView(
+                              scrollDirection: Axis.horizontal,
+                              child: Row(
+                                children: _inkColors.map((c) {
+                                  final isSelected =
+                                      !_isEraser && _selectedColor == c;
+                                  return GestureDetector(
+                                    onTap: () {
+                                      setState(() {
+                                        _selectedColor = c;
+                                        _isEraser = false;
+                                      });
+                                    },
+                                    child: Container(
+                                      margin: const EdgeInsets.symmetric(
+                                          horizontal: 3.5),
+                                      width: 24,
+                                      height: 24,
+                                      decoration: BoxDecoration(
+                                        color: c,
+                                        shape: BoxShape.circle,
+                                        border: Border.all(
+                                          color: isSelected
+                                              ? AppTheme.primaryPurple
+                                              : Colors.black
+                                                  .withValues(alpha: 0.1),
+                                          width: isSelected ? 2.5 : 1,
+                                        ),
+                                        boxShadow: isSelected
+                                            ? [
+                                                BoxShadow(
+                                                  color:
+                                                      c.withValues(alpha: 0.45),
+                                                  blurRadius: 4,
+                                                  offset: const Offset(0, 2),
+                                                ),
+                                              ]
+                                            : null,
                                       ),
-                                    ]
-                                  : null,
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  CupertinoIcons.pencil,
-                                  size: 14,
-                                  color: _currentTab == 0
-                                      ? AppTheme.primaryPurple
-                                      : AppTheme.textSecondary,
-                                ),
-                                const SizedBox(width: 6),
-                                Text(
-                                  'Handwriting Pad',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: _currentTab == 0
-                                        ? FontWeight.w700
-                                        : FontWeight.w500,
-                                    color: _currentTab == 0
-                                        ? AppTheme.primaryPurple
-                                        : AppTheme.textSecondary,
-                                  ),
-                                ),
-                              ],
+                                    ),
+                                  );
+                                }).toList(),
+                              ),
                             ),
                           ),
-                        ),
+                        ],
                       ),
-                      Expanded(
-                        child: GestureDetector(
-                          onTap: () => setState(() => _currentTab = 1),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(vertical: 6),
-                            decoration: BoxDecoration(
-                              color: _currentTab == 1
-                                  ? Colors.white
-                                  : Colors.transparent,
-                              borderRadius: BorderRadius.circular(10),
-                              boxShadow: _currentTab == 1
-                                  ? [
-                                      BoxShadow(
-                                        color: Colors.black
-                                            .withValues(alpha: 0.04),
-                                        blurRadius: 4,
+                      const SizedBox(height: 6),
+
+                      // Row 2: Stroke Sizes & Undo/Redo/Clear
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          // Stroke Widths
+                          Row(
+                            children: _strokeWidths.map((w) {
+                              final isSelected = _selectedStrokeWidth == w;
+                              return GestureDetector(
+                                onTap: () =>
+                                    setState(() => _selectedStrokeWidth = w),
+                                child: Container(
+                                  margin: const EdgeInsets.only(right: 6),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 8, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: isSelected
+                                        ? AppTheme.primaryPurpleLight
+                                        : const Color(0xFFF8FAFC),
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(
+                                      color: isSelected
+                                          ? AppTheme.primaryPurple
+                                          : AppTheme.dividerColor,
+                                    ),
+                                  ),
+                                  child: Center(
+                                    child: Container(
+                                      width: w > 8 ? 16 : w * 2.2,
+                                      height: w > 8 ? 6 : w,
+                                      decoration: BoxDecoration(
+                                        color: isSelected
+                                            ? AppTheme.primaryPurple
+                                            : AppTheme.textMuted,
+                                        borderRadius: BorderRadius.circular(3),
                                       ),
-                                    ]
-                                  : null,
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  CupertinoIcons.keyboard,
-                                  size: 14,
-                                  color: _currentTab == 1
-                                      ? AppTheme.primaryPurple
-                                      : AppTheme.textSecondary,
-                                ),
-                                const SizedBox(width: 6),
-                                Text(
-                                  'Type Note',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: _currentTab == 1
-                                        ? FontWeight.w700
-                                        : FontWeight.w500,
-                                    color: _currentTab == 1
-                                        ? AppTheme.primaryPurple
-                                        : AppTheme.textSecondary,
+                                    ),
                                   ),
                                 ),
-                              ],
-                            ),
+                              );
+                            }).toList(),
                           ),
-                        ),
+
+                          // Undo, Redo, Clear All
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                icon: const Icon(CupertinoIcons.arrow_uturn_left,
+                                    size: 16),
+                                color: _strokes.isNotEmpty
+                                    ? AppTheme.textPrimary
+                                    : AppTheme.textMuted,
+                                tooltip: 'Undo',
+                                onPressed: _strokes.isNotEmpty ? _undo : null,
+                                constraints: const BoxConstraints(
+                                    minWidth: 26, minHeight: 26),
+                                padding: EdgeInsets.zero,
+                              ),
+                              IconButton(
+                                icon: const Icon(
+                                    CupertinoIcons.arrow_uturn_right,
+                                    size: 16),
+                                color: _undoHistory.isNotEmpty
+                                    ? AppTheme.textPrimary
+                                    : AppTheme.textMuted,
+                                tooltip: 'Redo',
+                                onPressed:
+                                    _undoHistory.isNotEmpty ? _redo : null,
+                                constraints: const BoxConstraints(
+                                    minWidth: 26, minHeight: 26),
+                                padding: EdgeInsets.zero,
+                              ),
+                              IconButton(
+                                icon: const Icon(CupertinoIcons.clear_thick,
+                                    size: 16),
+                                color: _strokes.isNotEmpty
+                                    ? AppTheme.accentPink
+                                    : AppTheme.textMuted,
+                                tooltip: 'Clear All',
+                                onPressed:
+                                    _strokes.isNotEmpty ? _clearCanvas : null,
+                                constraints: const BoxConstraints(
+                                    minWidth: 26, minHeight: 26),
+                                padding: EdgeInsets.zero,
+                              ),
+                            ],
+                          ),
+                        ],
                       ),
                     ],
                   ),
                 ),
-              ],
+              ),
+          ],
+        ),
+      );
+  }
+
+  Widget _buildToolChip({
+    required IconData icon,
+    required String label,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+        decoration: BoxDecoration(
+          color: isSelected ? AppTheme.primaryPurple : const Color(0xFFF1F5F9),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 12,
+              color: isSelected ? Colors.white : AppTheme.textPrimary,
             ),
-          ),
-
-          // Status / Model downloading indicator bar
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-            color: _isDownloadingModel
-                ? AppTheme.accentPinkLight
-                : AppTheme.background,
-            child: Row(
-              children: [
-                if (_isDownloadingModel || _isRecognizing) ...[
-                  const SizedBox(
-                    width: 12,
-                    height: 12,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: AppTheme.primaryPurple,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                ] else if (_hasPluginError) ...[
-                  const Icon(
-                    CupertinoIcons.info_circle_fill,
-                    size: 13,
-                    color: Color(0xFFD97706),
-                  ),
-                  const SizedBox(width: 6),
-                ] else ...[
-                  const Icon(
-                    CupertinoIcons.checkmark_alt_circle_fill,
-                    size: 13,
-                    color: Color(0xFF10B981),
-                  ),
-                  const SizedBox(width: 6),
-                ],
-                Expanded(
-                  child: Text(
-                    _statusMessage,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: _hasPluginError
-                          ? const Color(0xFFB45309)
-                          : AppTheme.textSecondary,
-                    ),
-                  ),
-                ),
-              ],
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: isSelected ? Colors.white : AppTheme.textPrimary,
+              ),
             ),
-          ),
-
-          // Main Canvas or Typing Area
-          Expanded(
-            child: _currentTab == 0
-                ? Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 6, 20, 8),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: AppTheme.primaryPurpleLight,
-                          width: 1.5,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: AppTheme.primaryPurple.withValues(alpha: 0.06),
-                            blurRadius: 12,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(18),
-                        child: Stack(
-                          children: [
-                            // Lined Paper Background
-                            CustomPaint(
-                              painter: LinedPaperPainter(),
-                              size: Size.infinite,
-                            ),
-
-                            // Watermark Guide
-                            if (_drawnStrokes.isEmpty &&
-                                _currentDrawnPoints.isEmpty)
-                              Center(
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      CupertinoIcons.pencil_outline,
-                                      size: 34,
-                                      color: AppTheme.primaryPurple
-                                          .withValues(alpha: 0.25),
-                                    ),
-                                    const SizedBox(height: 8),
-                                    Text(
-                                      'Write your notes or formulas here ✨',
-                                      style: TextStyle(
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w600,
-                                        color: AppTheme.textMuted
-                                            .withValues(alpha: 0.6),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-
-                            // Touch Drawing Layer
-                            GestureDetector(
-                              behavior: HitTestBehavior.opaque,
-                              onPanStart: _onPanStart,
-                              onPanUpdate: _onPanUpdate,
-                              onPanEnd: _onPanEnd,
-                              child: CustomPaint(
-                                painter: HandwritingDrawingPainter(
-                                  strokes: _drawnStrokes,
-                                  currentStroke: _currentDrawnPoints,
-                                ),
-                                size: Size.infinite,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  )
-                : Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 6, 20, 8),
-                    child: Container(
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: AppTheme.primaryPurpleLight,
-                          width: 1.5,
-                        ),
-                      ),
-                      child: TextField(
-                        controller: _typeTextController,
-                        maxLines: null,
-                        expands: true,
-                        decoration: const InputDecoration(
-                          hintText:
-                              'Type or paste your study notes, formulas, or review pointers...',
-                          hintStyle: TextStyle(
-                            color: AppTheme.textMuted,
-                            fontSize: 13.5,
-                          ),
-                          border: InputBorder.none,
-                        ),
-                        style: const TextStyle(
-                          fontSize: 14,
-                          color: AppTheme.textPrimary,
-                          height: 1.4,
-                        ),
-                      ),
-                    ),
-                  ),
-          ),
-
-          // Bottom Action Bar (Clear & Direct Save Note)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 4, 20, 16),
-            child: Row(
-              children: [
-                // Clear Button
-                if (_currentTab == 0)
-                  Expanded(
-                    flex: 4,
-                    child: SizedBox(
-                      height: 48,
-                      child: OutlinedButton.icon(
-                        onPressed: _drawnStrokes.isNotEmpty ? _clearCanvas : null,
-                        icon: const Icon(CupertinoIcons.trash, size: 16),
-                        label: const Text('Clear'),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: AppTheme.textSecondary,
-                          side: BorderSide(
-                            color: AppTheme.dividerColor.withValues(alpha: 0.8),
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-
-                if (_currentTab == 0) const SizedBox(width: 12),
-
-                // Direct Save Note Button
-                Expanded(
-                  flex: _currentTab == 0 ? 7 : 12,
-                  child: SizedBox(
-                    height: 48,
-                    child: ElevatedButton(
-                      onPressed: _isRecognizing ? null : _saveAndSubmitNote,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.transparent,
-                        shadowColor: Colors.transparent,
-                        padding: EdgeInsets.zero,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                      ),
-                      child: Ink(
-                        decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: [
-                              AppTheme.primaryPurple,
-                              AppTheme.accentPink,
-                            ],
-                          ),
-                          borderRadius: BorderRadius.circular(16),
-                          boxShadow: [
-                            BoxShadow(
-                              color:
-                                  AppTheme.primaryPurple.withValues(alpha: 0.35),
-                              blurRadius: 10,
-                              offset: const Offset(0, 4),
-                            ),
-                          ],
-                        ),
-                        child: Container(
-                          alignment: Alignment.center,
-                          child: _isRecognizing
-                              ? const SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: Colors.white,
-                                  ),
-                                )
-                              : const Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(
-                                      CupertinoIcons.checkmark_alt_circle_fill,
-                                      size: 18,
-                                      color: Colors.white,
-                                    ),
-                                    SizedBox(width: 8),
-                                    Text(
-                                      'Save Note',
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 }
 
-/// Painter that renders subtle study notebook lines
-class LinedPaperPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = const Color(0xFFE2E8F0).withValues(alpha: 0.7)
-      ..strokeWidth = 1.0;
+/// Custom painter for multi-color strokes with highlighter transparency
+class _HandwritingPainter extends CustomPainter {
+  final List<HandwritingStroke> strokes;
+  final List<Offset> currentStrokePoints;
+  final Color currentColor;
+  final double currentStrokeWidth;
+  final bool isEraser;
 
-    const double lineSpacing = 32.0;
-    for (double y = lineSpacing; y < size.height; y += lineSpacing) {
-      canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
-
-/// Painter for rendering active ink strokes with ink pen effect
-class HandwritingDrawingPainter extends CustomPainter {
-  final List<List<Offset>> strokes;
-  final List<Offset> currentStroke;
-
-  HandwritingDrawingPainter({
+  _HandwritingPainter({
     required this.strokes,
-    required this.currentStroke,
+    required this.currentStrokePoints,
+    required this.currentColor,
+    required this.currentStrokeWidth,
+    required this.isEraser,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = const Color(0xFF1E1B4B)
-      ..strokeWidth = 3.2
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round
-      ..style = PaintingStyle.stroke;
-
-    // Draw completed strokes
+    // 1. Render all strokes
     for (final stroke in strokes) {
-      _drawSmoothStroke(canvas, stroke, paint);
+      if (stroke.points.isEmpty) continue;
+
+      final paint = Paint()
+        ..color = stroke.isHighlighter
+            ? stroke.color.withValues(alpha: 0.4)
+            : stroke.color
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round
+        ..strokeWidth = stroke.strokeWidth
+        ..style = PaintingStyle.stroke;
+
+      if (stroke.points.length == 1) {
+        canvas.drawCircle(stroke.points.first, stroke.strokeWidth / 2,
+            paint..style = PaintingStyle.fill);
+      } else {
+        final path = Path();
+        path.moveTo(stroke.points.first.dx, stroke.points.first.dy);
+        for (int i = 1; i < stroke.points.length; i++) {
+          path.lineTo(stroke.points[i].dx, stroke.points[i].dy);
+        }
+        canvas.drawPath(path, paint);
+      }
     }
 
-    // Draw current active stroke
-    if (currentStroke.isNotEmpty) {
-      _drawSmoothStroke(canvas, currentStroke, paint);
+    // 2. Render active stroke
+    if (!isEraser && currentStrokePoints.isNotEmpty) {
+      final activePaint = Paint()
+        ..color = (currentColor == const Color(0xFFFACC15))
+            ? currentColor.withValues(alpha: 0.4)
+            : currentColor
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round
+        ..strokeWidth = currentStrokeWidth
+        ..style = PaintingStyle.stroke;
+
+      if (currentStrokePoints.length == 1) {
+        canvas.drawCircle(currentStrokePoints.first, currentStrokeWidth / 2,
+            activePaint..style = PaintingStyle.fill);
+      } else {
+        final activePath = Path();
+        activePath.moveTo(
+            currentStrokePoints.first.dx, currentStrokePoints.first.dy);
+        for (int i = 1; i < currentStrokePoints.length; i++) {
+          activePath.lineTo(
+              currentStrokePoints[i].dx, currentStrokePoints[i].dy);
+        }
+        canvas.drawPath(activePath, activePaint);
+      }
     }
-  }
-
-  void _drawSmoothStroke(Canvas canvas, List<Offset> points, Paint paint) {
-    if (points.isEmpty) return;
-
-    if (points.length == 1) {
-      canvas.drawCircle(
-        points.first,
-        paint.strokeWidth / 2,
-        paint..style = PaintingStyle.fill,
-      );
-      paint.style = PaintingStyle.stroke;
-      return;
-    }
-
-    final path = Path();
-    path.moveTo(points[0].dx, points[0].dy);
-
-    for (int i = 1; i < points.length - 1; i++) {
-      final p0 = points[i];
-      final p1 = points[i + 1];
-      final midX = (p0.dx + p1.dx) / 2;
-      final midY = (p0.dy + p1.dy) / 2;
-      path.quadraticBezierTo(p0.dx, p0.dy, midX, midY);
-    }
-
-    path.lineTo(points.last.dx, points.last.dy);
-    canvas.drawPath(path, paint);
   }
 
   @override
-  bool shouldRepaint(covariant HandwritingDrawingPainter oldDelegate) => true;
+  bool shouldRepaint(covariant _HandwritingPainter oldDelegate) => true;
 }
