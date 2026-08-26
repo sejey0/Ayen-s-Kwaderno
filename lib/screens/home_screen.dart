@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/document_item_model.dart';
 import '../models/handwriting_note_model.dart';
+import '../services/auto_sync_service.dart';
 import '../services/document_storage_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/handwriting_canvas.dart';
@@ -69,11 +70,26 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    AutoSyncService.instance.statusNotifier
+        .addListener(_onSyncStatusUpdated);
     _loadInitialData();
   }
 
+  @override
+  void dispose() {
+    AutoSyncService.instance.statusNotifier
+        .removeListener(_onSyncStatusUpdated);
+    super.dispose();
+  }
+
+  void _onSyncStatusUpdated() {
+    if (mounted) {
+      _loadInitialData(triggerCloudFetch: false);
+    }
+  }
+
   /// Initial load: loads local cache instantly, then syncs with Supabase in background
-  Future<void> _loadInitialData() async {
+  Future<void> _loadInitialData({bool triggerCloudFetch = true}) async {
     // 1. Instant local load
     final localDocs = await DocumentStorageService.loadSavedDocuments();
     final localNotes = await DocumentStorageService.loadHandwritingNotes();
@@ -85,7 +101,9 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     // 2. Background Supabase sync
-    await _syncWithCloud();
+    if (triggerCloudFetch) {
+      await _syncWithCloud();
+    }
   }
 
   /// Fetches saved document annotations from Supabase and merges with local list
@@ -833,89 +851,109 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
             ),
-            const SizedBox(width: 14),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    const Text(
-                      "Ayen's Kwaderno",
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w800,
-                        color: AppTheme.textPrimary,
-                        letterSpacing: -0.4,
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 7, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: AppTheme.accentPinkLight,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Text(
-                        'PRO',
-                        style: TextStyle(
-                          color: AppTheme.accentPinkDark,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 2),
-                const Text(
-                  'Your Study Notebooks & Handwritten Notes ✨',
-                  style: TextStyle(
-                    fontSize: 12.5,
-                    color: AppTheme.textSecondary,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ],
+            const SizedBox(width: 12),
+            const Text(
+              "Ayen's Kwaderno",
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w800,
+                color: AppTheme.textPrimary,
+                letterSpacing: -0.3,
+              ),
             ),
           ],
         ),
-        Container(
-          decoration: BoxDecoration(
-            color: AppTheme.surfaceWhite,
-            shape: BoxShape.circle,
-            boxShadow: AppTheme.softShadow,
-            border: Border.all(color: AppTheme.dividerColor),
-          ),
-          child: IconButton(
-            icon: const Icon(
-              CupertinoIcons.cloud_upload,
-              color: AppTheme.primaryPurple,
-              size: 20,
-            ),
-            tooltip: 'Sync with Supabase',
-            onPressed: () {
-              _syncWithCloud();
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: const Row(
-                    children: [
-                      Icon(Icons.check_circle_outline_rounded,
-                          color: Colors.white, size: 18),
-                      SizedBox(width: 8),
-                      Text('Cloud Sync refreshed from Supabase ✨'),
-                    ],
+        ValueListenableBuilder<AutoSyncStatus>(
+          valueListenable: AutoSyncService.instance.statusNotifier,
+          builder: (context, status, _) {
+            Color iconColor = const Color(0xFF10B981);
+            IconData iconData = CupertinoIcons.cloud_fill;
+            String tooltip =
+                'Auto-uploaded to Supabase Database ✨ (Tap to refresh)';
+            Widget? customChild;
+
+            switch (status) {
+              case AutoSyncStatus.syncing:
+                iconColor = AppTheme.primaryPurple;
+                tooltip = 'Auto-uploading to Supabase Cloud...';
+                customChild = const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.2,
+                    color: AppTheme.primaryPurple,
                   ),
-                  backgroundColor: AppTheme.primaryPurpleDark,
-                  behavior: SnackBarBehavior.floating,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  duration: const Duration(seconds: 2),
+                );
+                break;
+              case AutoSyncStatus.offline:
+                iconColor = const Color(0xFF94A3B8);
+                iconData = Icons.cloud_off_rounded;
+                tooltip =
+                    'Offline • Changes saved locally & will auto-upload online';
+                break;
+              case AutoSyncStatus.error:
+                iconColor = const Color(0xFFEF4444);
+                iconData = CupertinoIcons.exclamationmark_triangle;
+                tooltip = 'Sync notice • Tap to retry';
+                break;
+              case AutoSyncStatus.synced:
+                iconColor = const Color(0xFF10B981);
+                iconData = CupertinoIcons.cloud_fill;
+                tooltip =
+                    'Auto-uploaded to Supabase Database ✨ (Tap to refresh)';
+                break;
+            }
+
+            return Container(
+              decoration: BoxDecoration(
+                color: AppTheme.surfaceWhite,
+                shape: BoxShape.circle,
+                boxShadow: AppTheme.softShadow,
+                border: Border.all(
+                  color: status == AutoSyncStatus.synced
+                      ? const Color(0xFF10B981).withValues(alpha: 0.3)
+                      : AppTheme.dividerColor,
                 ),
-              );
-            },
-          ),
+              ),
+              child: IconButton(
+                icon: customChild ??
+                    Icon(iconData, color: iconColor, size: 20),
+                tooltip: tooltip,
+                onPressed: () {
+                  AutoSyncService.instance.triggerSync(immediate: true);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Row(
+                        children: [
+                          Icon(
+                            status == AutoSyncStatus.offline
+                                ? CupertinoIcons.wifi_slash
+                                : CupertinoIcons.checkmark_circle_fill,
+                            color: Colors.white,
+                            size: 18,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              status == AutoSyncStatus.offline
+                                  ? 'Offline mode active. All notes will auto-upload the instant you go online! ⚡'
+                                  : 'Database auto-sync refreshed with Supabase! ✨',
+                            ),
+                          ),
+                        ],
+                      ),
+                      backgroundColor: AppTheme.primaryPurpleDark,
+                      behavior: SnackBarBehavior.floating,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      duration: const Duration(seconds: 2),
+                    ),
+                  );
+                },
+              ),
+            );
+          },
         ),
       ],
     );

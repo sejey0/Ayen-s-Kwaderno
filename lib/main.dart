@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'screens/home_screen.dart';
+import 'services/auto_sync_service.dart';
 import 'theme/app_theme.dart';
 
 Future<void> main() async {
@@ -41,6 +42,9 @@ Future<void> main() async {
   } catch (e) {
     debugPrint('Supabase initialization error: $e');
   }
+
+  // Initialize automated background sync & connectivity monitoring
+  AutoSyncService.instance.initialize();
 
   runApp(const AyensKwadernoApp());
 }

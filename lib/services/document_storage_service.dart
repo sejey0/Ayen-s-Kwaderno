@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/document_item_model.dart';
@@ -7,8 +6,10 @@ import '../models/handwriting_note_model.dart';
 import '../models/image_annotation_model.dart';
 import '../models/stroke_model.dart';
 import '../models/text_annotation_model.dart';
+import 'auto_sync_service.dart';
 
-/// Manages persistent local storage of recently opened/imported documents, annotations, and handwriting notes using SharedPreferences and background Supabase sync
+/// Manages persistent local storage of recently opened/imported documents, annotations,
+/// and handwriting notes using SharedPreferences with automated real-time Supabase sync.
 class DocumentStorageService {
   static const String _documentsKey = 'ayens_kwaderno_recent_documents_v2';
   static const String _handwritingNotesKey =
@@ -44,13 +45,17 @@ class DocumentStorageService {
     }
   }
 
-  /// Saves or updates a document in persistent storage
-  static Future<void> saveOrUpdateDocument(DocumentItem doc) async {
+  /// Saves or updates a document in persistent storage and triggers auto cloud sync
+  static Future<void> saveOrUpdateDocument(
+    DocumentItem doc, {
+    bool triggerCloudSync = true,
+  }) async {
     try {
       final docs = await loadSavedDocuments();
 
       // Remove existing entry by filename if any
-      final existingIndex = docs.indexWhere((d) => d.fileName == doc.fileName);
+      final existingIndex =
+          docs.indexWhere((d) => d.fileName == doc.fileName);
 
       if (existingIndex >= 0) {
         final existing = docs[existingIndex];
@@ -72,25 +77,41 @@ class DocumentStorageService {
       }
 
       await _persistDocumentsList(docs);
+
+      if (triggerCloudSync) {
+        AutoSyncService.instance.triggerSync();
+      }
     } catch (_) {}
   }
 
-  /// Removes a document from local storage
+  /// Removes a document from local storage and Supabase
   static Future<void> deleteDocument(String fileName) async {
     try {
       final docs = await loadSavedDocuments();
       docs.removeWhere((d) => d.fileName == fileName);
       await _persistDocumentsList(docs);
       await clearLocalAnnotations(fileName);
+
+      // Async background deletion from Supabase
+      try {
+        final client = Supabase.instance.client;
+        await client
+            .from('document_annotations')
+            .delete()
+            .eq('document_name', fileName);
+      } catch (_) {}
+
+      AutoSyncService.instance.triggerSync();
     } catch (_) {}
   }
 
-  /// Saves full annotation payload (strokes, texts, images) to local SharedPreferences
+  /// Saves full annotation payload (strokes, texts, images) to local SharedPreferences & triggers cloud auto-upload
   static Future<void> saveLocalAnnotations(
     String documentName, {
     required List<Stroke> strokes,
     required List<TextAnnotation> texts,
     required List<ImageAnnotation> images,
+    bool triggerCloudSync = true,
   }) async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -100,7 +121,12 @@ class DocumentStorageService {
         'images': images.map((i) => i.toJson()).toList(),
         'updated_at': DateTime.now().toUtc().toIso8601String(),
       };
-      await prefs.setString(_annotationsKey(documentName), jsonEncode(data));
+      await prefs.setString(
+          _annotationsKey(documentName), jsonEncode(data));
+
+      if (triggerCloudSync) {
+        AutoSyncService.instance.triggerSync();
+      }
     } catch (_) {}
   }
 
@@ -128,7 +154,8 @@ class DocumentStorageService {
   /// Saves the complete document list to SharedPreferences
   static Future<void> _persistDocumentsList(List<DocumentItem> docs) async {
     final prefs = await SharedPreferences.getInstance();
-    final String encoded = jsonEncode(docs.map((d) => d.toJson()).toList());
+    final String encoded =
+        jsonEncode(docs.map((d) => d.toJson()).toList());
     await prefs.setString(_documentsKey, encoded);
   }
 
@@ -146,10 +173,11 @@ class DocumentStorageService {
         return [];
       }
 
-      final List<dynamic> decodedList = jsonDecode(jsonString) as List<dynamic>;
+      final List<dynamic> decodedList =
+          jsonDecode(jsonString) as List<dynamic>;
       final List<HandwritingNote> notes = decodedList
-          .map((item) =>
-              HandwritingNote.fromJson(Map<String, dynamic>.from(item as Map)))
+          .map((item) => HandwritingNote.fromJson(
+              Map<String, dynamic>.from(item as Map)))
           .toList();
 
       // Sort newest first
@@ -160,8 +188,11 @@ class DocumentStorageService {
     }
   }
 
-  /// Saves or updates a handwriting note in persistent storage and syncs to Supabase
-  static Future<void> saveOrUpdateHandwritingNote(HandwritingNote note) async {
+  /// Saves or updates a handwriting note in persistent storage and triggers cloud auto-sync
+  static Future<void> saveOrUpdateHandwritingNote(
+    HandwritingNote note, {
+    bool triggerCloudSync = true,
+  }) async {
     try {
       final notes = await loadHandwritingNotes();
       final existingIndex = notes.indexWhere((n) => n.id == note.id);
@@ -179,26 +210,10 @@ class DocumentStorageService {
 
       await _persistHandwritingNotesList(notes);
 
-      // Async background sync to Supabase table `handwriting_notes`
-      _syncNoteToCloudBackground(note);
+      if (triggerCloudSync) {
+        AutoSyncService.instance.triggerSync();
+      }
     } catch (_) {}
-  }
-
-  /// Background sync to Supabase
-  static Future<void> _syncNoteToCloudBackground(HandwritingNote note) async {
-    try {
-      final client = Supabase.instance.client;
-      await client.from('handwriting_notes').upsert({
-        'id': note.id,
-        'title': note.title,
-        'content': note.content,
-        'palette_index': note.paletteIndex,
-        'updated_at': DateTime.now().toUtc().toIso8601String(),
-        'created_at': note.createdAt.toUtc().toIso8601String(),
-      }, onConflict: 'id');
-    } catch (e) {
-      debugPrint('Cloud note sync notice (unconfigured table or offline): $e');
-    }
   }
 
   /// Deletes a handwriting note from local storage and Supabase
@@ -213,6 +228,8 @@ class DocumentStorageService {
         final client = Supabase.instance.client;
         await client.from('handwriting_notes').delete().eq('id', id);
       } catch (_) {}
+
+      AutoSyncService.instance.triggerSync();
     } catch (_) {}
   }
 
@@ -220,7 +237,8 @@ class DocumentStorageService {
   static Future<void> _persistHandwritingNotesList(
       List<HandwritingNote> notes) async {
     final prefs = await SharedPreferences.getInstance();
-    final String encoded = jsonEncode(notes.map((n) => n.toJson()).toList());
+    final String encoded =
+        jsonEncode(notes.map((n) => n.toJson()).toList());
     await prefs.setString(_handwritingNotesKey, encoded);
   }
 }
