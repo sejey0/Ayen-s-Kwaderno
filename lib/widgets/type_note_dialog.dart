@@ -73,6 +73,7 @@ class _TypeNoteDialogState extends State<TypeNoteDialog> {
       updatedAt: DateTime.now(),
       paletteIndex: _selectedPaletteIndex,
       isCloudSynced: false,
+      isHandwritten: false,
     );
 
     await DocumentStorageService.saveOrUpdateHandwritingNote(note);

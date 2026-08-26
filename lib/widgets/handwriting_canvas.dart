@@ -18,25 +18,56 @@ class HandwritingStroke {
     required this.strokeWidth,
     this.isHighlighter = false,
   });
+
+  Map<String, dynamic> toJson() {
+    return {
+      'points': points.map((p) => {'x': p.dx, 'y': p.dy}).toList(),
+      'color': color.toARGB32(),
+      'strokeWidth': strokeWidth,
+      'isHighlighter': isHighlighter,
+    };
+  }
+
+  factory HandwritingStroke.fromJson(Map<String, dynamic> json) {
+    final rawPts = json['points'] as List<dynamic>? ?? [];
+    final pts = rawPts.map((pt) {
+      final m = pt as Map<String, dynamic>;
+      return Offset(
+        (m['x'] as num).toDouble(),
+        (m['y'] as num).toDouble(),
+      );
+    }).toList();
+
+    return HandwritingStroke(
+      points: pts,
+      color: Color(json['color'] as int? ?? 0xFF1E293B),
+      strokeWidth: (json['strokeWidth'] as num?)?.toDouble() ?? 3.5,
+      isHighlighter: json['isHighlighter'] as bool? ?? false,
+    );
+  }
 }
 
 /// Full screen pure white canvas studio for handwritten notes
 class HandwritingCanvasDialog extends StatefulWidget {
   final String languageCode;
+  final HandwritingNote? existingNote;
 
   const HandwritingCanvasDialog({
     super.key,
     this.languageCode = 'en-US',
+    this.existingNote,
   });
 
   /// Static helper to launch the dialog and return the created/saved HandwritingNote
-  static Future<HandwritingNote?> show(BuildContext context) {
+  static Future<HandwritingNote?> show(BuildContext context,
+      {HandwritingNote? existingNote}) {
     return showModalBottomSheet<HandwritingNote>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       barrierColor: Colors.black.withValues(alpha: 0.5),
-      builder: (context) => const HandwritingCanvasDialog(),
+      builder: (context) =>
+          HandwritingCanvasDialog(existingNote: existingNote),
     );
   }
 
@@ -94,12 +125,22 @@ class _HandwritingCanvasDialogState extends State<HandwritingCanvasDialog> {
     _recognizer =
         mlkit.DigitalInkRecognizer(languageCode: widget.languageCode);
     _initializeModel();
+
+    // Preload existing note if editing
+    if (widget.existingNote != null) {
+      _titleController.text = widget.existingNote!.title;
+      if (widget.existingNote!.strokesJson != null) {
+        for (final sJson in widget.existingNote!.strokesJson!) {
+          _strokes.add(HandwritingStroke.fromJson(sJson));
+        }
+      }
+    }
   }
 
   @override
   void dispose() {
     try {
-      _recognizer.close();
+      _recognizer.close().catchError((_) {});
     } catch (_) {}
     _titleController.dispose();
     super.dispose();
@@ -259,13 +300,17 @@ class _HandwritingCanvasDialogState extends State<HandwritingCanvasDialog> {
         : 'Handwritten drawing (${_strokes.length} strokes)';
 
     final newNote = HandwritingNote(
-      id: 'note_${DateTime.now().millisecondsSinceEpoch}',
+      id: widget.existingNote?.id ??
+          'note_${DateTime.now().millisecondsSinceEpoch}',
       title: title,
       content: content,
-      createdAt: DateTime.now(),
+      createdAt: widget.existingNote?.createdAt ?? DateTime.now(),
       updatedAt: DateTime.now(),
-      paletteIndex: DateTime.now().millisecond % 5,
+      paletteIndex: widget.existingNote?.paletteIndex ??
+          (DateTime.now().millisecond % 5),
       isCloudSynced: false,
+      isHandwritten: true,
+      strokesJson: _strokes.map((s) => s.toJson()).toList(),
     );
 
     await DocumentStorageService.saveOrUpdateHandwritingNote(newNote);
@@ -322,7 +367,7 @@ class _HandwritingCanvasDialogState extends State<HandwritingCanvasDialog> {
               onPanUpdate: _onPanUpdate,
               onPanEnd: _onPanEnd,
               child: CustomPaint(
-                painter: _HandwritingPainter(
+                painter: HandwritingCanvasPainter(
                   strokes: _strokes,
                   currentStrokePoints: _currentPoints,
                   currentColor: _selectedColor,
@@ -558,184 +603,184 @@ class _HandwritingCanvasDialogState extends State<HandwritingCanvasDialog> {
                     ),
                   ],
                 ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      // Row 1: Pen, Eraser, 7 Color Swatches
-                      Row(
-                        children: [
-                          // Pen Mode Button
-                          _buildToolChip(
-                            icon: CupertinoIcons.pen,
-                            label: 'Pen',
-                            isSelected: !_isEraser,
-                            onTap: () => setState(() => _isEraser = false),
-                          ),
-                          const SizedBox(width: 6),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Row 1: Pen, Eraser, 7 Color Swatches
+                    Row(
+                      children: [
+                        // Pen Mode Button
+                        _buildToolChip(
+                          icon: CupertinoIcons.pen,
+                          label: 'Pen',
+                          isSelected: !_isEraser,
+                          onTap: () => setState(() => _isEraser = false),
+                        ),
+                        const SizedBox(width: 6),
 
-                          // Eraser Button
-                          _buildToolChip(
-                            icon: CupertinoIcons.trash,
-                            label: 'Eraser',
-                            isSelected: _isEraser,
-                            onTap: () => setState(() => _isEraser = true),
-                          ),
+                        // Eraser Button
+                        _buildToolChip(
+                          icon: CupertinoIcons.trash,
+                          label: 'Eraser',
+                          isSelected: _isEraser,
+                          onTap: () => setState(() => _isEraser = true),
+                        ),
 
-                          const SizedBox(width: 8),
-                          Container(
-                              width: 1,
-                              height: 22,
-                              color: AppTheme.dividerColor),
-                          const SizedBox(width: 8),
+                        const SizedBox(width: 8),
+                        Container(
+                            width: 1,
+                            height: 22,
+                            color: AppTheme.dividerColor),
+                        const SizedBox(width: 8),
 
-                          // Color Swatches
-                          Expanded(
-                            child: SingleChildScrollView(
-                              scrollDirection: Axis.horizontal,
-                              child: Row(
-                                children: _inkColors.map((c) {
-                                  final isSelected =
-                                      !_isEraser && _selectedColor == c;
-                                  return GestureDetector(
-                                    onTap: () {
-                                      setState(() {
-                                        _selectedColor = c;
-                                        _isEraser = false;
-                                      });
-                                    },
-                                    child: Container(
-                                      margin: const EdgeInsets.symmetric(
-                                          horizontal: 3.5),
-                                      width: 24,
-                                      height: 24,
-                                      decoration: BoxDecoration(
-                                        color: c,
-                                        shape: BoxShape.circle,
-                                        border: Border.all(
-                                          color: isSelected
-                                              ? AppTheme.primaryPurple
-                                              : Colors.black
-                                                  .withValues(alpha: 0.1),
-                                          width: isSelected ? 2.5 : 1,
-                                        ),
-                                        boxShadow: isSelected
-                                            ? [
-                                                BoxShadow(
-                                                  color:
-                                                      c.withValues(alpha: 0.45),
-                                                  blurRadius: 4,
-                                                  offset: const Offset(0, 2),
-                                                ),
-                                              ]
-                                            : null,
+                        // Color Swatches
+                        Expanded(
+                          child: SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: Row(
+                              children: _inkColors.map((c) {
+                                final isSelected =
+                                    !_isEraser && _selectedColor == c;
+                                return GestureDetector(
+                                  onTap: () {
+                                    setState(() {
+                                      _selectedColor = c;
+                                      _isEraser = false;
+                                    });
+                                  },
+                                  child: Container(
+                                    margin: const EdgeInsets.symmetric(
+                                        horizontal: 3.5),
+                                    width: 24,
+                                    height: 24,
+                                    decoration: BoxDecoration(
+                                      color: c,
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                        color: isSelected
+                                            ? AppTheme.primaryPurple
+                                            : Colors.black
+                                                .withValues(alpha: 0.1),
+                                        width: isSelected ? 2.5 : 1,
                                       ),
+                                      boxShadow: isSelected
+                                          ? [
+                                              BoxShadow(
+                                                color:
+                                                    c.withValues(alpha: 0.45),
+                                                blurRadius: 4,
+                                                offset: const Offset(0, 2),
+                                              ),
+                                            ]
+                                          : null,
                                     ),
-                                  );
-                                }).toList(),
-                              ),
+                                  ),
+                                );
+                              }).toList(),
                             ),
                           ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
 
-                      // Row 2: Stroke Sizes & Undo/Redo/Clear
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          // Stroke Widths
-                          Row(
-                            children: _strokeWidths.map((w) {
-                              final isSelected = _selectedStrokeWidth == w;
-                              return GestureDetector(
-                                onTap: () =>
-                                    setState(() => _selectedStrokeWidth = w),
-                                child: Container(
-                                  margin: const EdgeInsets.only(right: 6),
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 8, vertical: 3),
-                                  decoration: BoxDecoration(
+                    // Row 2: Stroke Sizes & Undo/Redo/Clear
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        // Stroke Widths
+                        Row(
+                          children: _strokeWidths.map((w) {
+                            final isSelected = _selectedStrokeWidth == w;
+                            return GestureDetector(
+                              onTap: () =>
+                                  setState(() => _selectedStrokeWidth = w),
+                              child: Container(
+                                margin: const EdgeInsets.only(right: 6),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(
                                     color: isSelected
                                         ? AppTheme.primaryPurpleLight
                                         : const Color(0xFFF8FAFC),
-                                    borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                    color: isSelected
+                                        ? AppTheme.primaryPurple
+                                        : AppTheme.dividerColor,
+                                  ),
+                                ),
+                                child: Center(
+                                  child: Container(
+                                    width: w > 8 ? 16 : w * 2.2,
+                                    height: w > 8 ? 6 : w,
+                                    decoration: BoxDecoration(
                                       color: isSelected
                                           ? AppTheme.primaryPurple
-                                          : AppTheme.dividerColor,
-                                    ),
-                                  ),
-                                  child: Center(
-                                    child: Container(
-                                      width: w > 8 ? 16 : w * 2.2,
-                                      height: w > 8 ? 6 : w,
-                                      decoration: BoxDecoration(
-                                        color: isSelected
-                                            ? AppTheme.primaryPurple
-                                            : AppTheme.textMuted,
-                                        borderRadius: BorderRadius.circular(3),
-                                      ),
+                                          : AppTheme.textMuted,
+                                      borderRadius: BorderRadius.circular(3),
                                     ),
                                   ),
                                 ),
-                              );
-                            }).toList(),
-                          ),
+                              ),
+                            );
+                          }).toList(),
+                        ),
 
-                          // Undo, Redo, Clear All
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              IconButton(
-                                icon: const Icon(CupertinoIcons.arrow_uturn_left,
-                                    size: 16),
-                                color: _strokes.isNotEmpty
-                                    ? AppTheme.textPrimary
-                                    : AppTheme.textMuted,
-                                tooltip: 'Undo',
-                                onPressed: _strokes.isNotEmpty ? _undo : null,
-                                constraints: const BoxConstraints(
-                                    minWidth: 26, minHeight: 26),
-                                padding: EdgeInsets.zero,
-                              ),
-                              IconButton(
-                                icon: const Icon(
-                                    CupertinoIcons.arrow_uturn_right,
-                                    size: 16),
-                                color: _undoHistory.isNotEmpty
-                                    ? AppTheme.textPrimary
-                                    : AppTheme.textMuted,
-                                tooltip: 'Redo',
-                                onPressed:
-                                    _undoHistory.isNotEmpty ? _redo : null,
-                                constraints: const BoxConstraints(
-                                    minWidth: 26, minHeight: 26),
-                                padding: EdgeInsets.zero,
-                              ),
-                              IconButton(
-                                icon: const Icon(CupertinoIcons.clear_thick,
-                                    size: 16),
-                                color: _strokes.isNotEmpty
-                                    ? AppTheme.accentPink
-                                    : AppTheme.textMuted,
-                                tooltip: 'Clear All',
-                                onPressed:
-                                    _strokes.isNotEmpty ? _clearCanvas : null,
-                                constraints: const BoxConstraints(
-                                    minWidth: 26, minHeight: 26),
-                                padding: EdgeInsets.zero,
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
+                        // Undo, Redo, Clear All
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: const Icon(CupertinoIcons.arrow_uturn_left,
+                                  size: 16),
+                              color: _strokes.isNotEmpty
+                                  ? AppTheme.textPrimary
+                                  : AppTheme.textMuted,
+                              tooltip: 'Undo',
+                              onPressed: _strokes.isNotEmpty ? _undo : null,
+                              constraints: const BoxConstraints(
+                                  minWidth: 26, minHeight: 26),
+                              padding: EdgeInsets.zero,
+                            ),
+                            IconButton(
+                              icon: const Icon(
+                                  CupertinoIcons.arrow_uturn_right,
+                                  size: 16),
+                              color: _undoHistory.isNotEmpty
+                                  ? AppTheme.textPrimary
+                                  : AppTheme.textMuted,
+                              tooltip: 'Redo',
+                              onPressed:
+                                  _undoHistory.isNotEmpty ? _redo : null,
+                              constraints: const BoxConstraints(
+                                  minWidth: 26, minHeight: 26),
+                              padding: EdgeInsets.zero,
+                            ),
+                            IconButton(
+                              icon: const Icon(CupertinoIcons.clear_thick,
+                                  size: 16),
+                              color: _strokes.isNotEmpty
+                                  ? AppTheme.accentPink
+                                  : AppTheme.textMuted,
+                              tooltip: 'Clear All',
+                              onPressed:
+                                  _strokes.isNotEmpty ? _clearCanvas : null,
+                              constraints: const BoxConstraints(
+                                  minWidth: 26, minHeight: 26),
+                              padding: EdgeInsets.zero,
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
               ),
-          ],
-        ),
-      );
+            ),
+        ],
+      ),
+    );
   }
 
   Widget _buildToolChip({
@@ -777,23 +822,58 @@ class _HandwritingCanvasDialogState extends State<HandwritingCanvasDialog> {
 }
 
 /// Custom painter for multi-color strokes with highlighter transparency
-class _HandwritingPainter extends CustomPainter {
+class HandwritingCanvasPainter extends CustomPainter {
   final List<HandwritingStroke> strokes;
   final List<Offset> currentStrokePoints;
   final Color currentColor;
   final double currentStrokeWidth;
   final bool isEraser;
+  final bool fitThumbnail;
 
-  _HandwritingPainter({
+  HandwritingCanvasPainter({
     required this.strokes,
-    required this.currentStrokePoints,
-    required this.currentColor,
-    required this.currentStrokeWidth,
-    required this.isEraser,
+    this.currentStrokePoints = const [],
+    this.currentColor = const Color(0xFF1E293B),
+    this.currentStrokeWidth = 3.5,
+    this.isEraser = false,
+    this.fitThumbnail = false,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
+    if (strokes.isEmpty && currentStrokePoints.isEmpty) return;
+
+    // Optional scale matrix for thumbnail preview
+    if (fitThumbnail && strokes.isNotEmpty) {
+      double minX = double.infinity, minY = double.infinity;
+      double maxX = double.negativeInfinity, maxY = double.negativeInfinity;
+
+      for (final s in strokes) {
+        for (final p in s.points) {
+          if (p.dx < minX) minX = p.dx;
+          if (p.dx > maxX) maxX = p.dx;
+          if (p.dy < minY) minY = p.dy;
+          if (p.dy > maxY) maxY = p.dy;
+        }
+      }
+
+      final strokeWidth = maxX - minX;
+      final strokeHeight = maxY - minY;
+
+      if (strokeWidth > 10 && strokeHeight > 10) {
+        final scaleX = (size.width - 24) / strokeWidth;
+        final scaleY = (size.height - 24) / strokeHeight;
+        final scale = scaleX < scaleY ? scaleX : scaleY;
+
+        canvas.save();
+        canvas.translate(
+          (size.width - strokeWidth * scale) / 2 - minX * scale,
+          (size.height - strokeHeight * scale) / 2 - minY * scale,
+        );
+        canvas.scale(scale);
+      }
+    }
+
     // 1. Render all strokes
     for (final stroke in strokes) {
       if (stroke.points.isEmpty) continue;
@@ -845,8 +925,14 @@ class _HandwritingPainter extends CustomPainter {
         canvas.drawPath(activePath, activePaint);
       }
     }
+
+    if (fitThumbnail && strokes.isNotEmpty) {
+      try {
+        canvas.restore();
+      } catch (_) {}
+    }
   }
 
   @override
-  bool shouldRepaint(covariant _HandwritingPainter oldDelegate) => true;
+  bool shouldRepaint(covariant HandwritingCanvasPainter oldDelegate) => true;
 }

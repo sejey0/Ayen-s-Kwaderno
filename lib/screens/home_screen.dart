@@ -8,6 +8,7 @@ import '../models/document_item_model.dart';
 import '../models/handwriting_note_model.dart';
 import '../services/document_storage_service.dart';
 import '../theme/app_theme.dart';
+import '../widgets/handwriting_canvas.dart';
 import '../widgets/pdf_thumbnail_widget.dart';
 import '../widgets/type_note_dialog.dart';
 import '../widgets/upload_document_dialog.dart';
@@ -198,20 +199,31 @@ class _HomeScreenState extends State<HomeScreen> {
 
   /// Launches Write a Note Choice Modal (Handwritten Note vs Type Note)
   Future<void> _launchHandwritingToText() async {
-    final savedNote = await WriteNoteChoiceDialog.show(context);
+    final mode = await WriteNoteChoiceDialog.show(context);
+    if (!mounted || mode == null) return;
+
+    HandwritingNote? savedNote;
+    if (mode == NoteCreationMode.handwritten) {
+      savedNote = await HandwritingCanvasDialog.show(context);
+    } else {
+      savedNote = await TypeNoteDialog.show(context);
+    }
 
     if (!mounted || savedNote == null) return;
+    final note = savedNote;
 
     setState(() {
       final existingIndex =
-          _handwritingNotes.indexWhere((n) => n.id == savedNote.id);
+          _handwritingNotes.indexWhere((n) => n.id == note.id);
       if (existingIndex >= 0) {
-        _handwritingNotes[existingIndex] = savedNote;
+        _handwritingNotes[existingIndex] = note;
       } else {
-        _handwritingNotes.insert(0, savedNote);
+        _handwritingNotes.insert(0, note);
       }
       _currentSection = LibrarySection.notes;
     });
+
+    _loadInitialData();
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -222,7 +234,7 @@ class _HomeScreenState extends State<HomeScreen> {
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                'Saved "${savedNote.title}" to Written Notes! ✍️',
+                'Saved "${note.title}" to Written Notes! ✍️',
                 style: const TextStyle(fontWeight: FontWeight.w600),
               ),
             ),
@@ -314,16 +326,25 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  /// Displays and allows editing a saved handwriting note
+  /// Displays and allows editing a saved handwriting or typed note
   Future<void> _openHandwritingNoteDialog(HandwritingNote note) async {
-    final updated = await TypeNoteDialog.show(context, existingNote: note);
+    HandwritingNote? updated;
+    if (note.isHandwritten) {
+      updated =
+          await HandwritingCanvasDialog.show(context, existingNote: note);
+    } else {
+      updated = await TypeNoteDialog.show(context, existingNote: note);
+    }
+
     if (updated != null && mounted) {
+      final noteResult = updated;
       setState(() {
-        final idx = _handwritingNotes.indexWhere((n) => n.id == updated.id);
+        final idx = _handwritingNotes.indexWhere((n) => n.id == noteResult.id);
         if (idx >= 0) {
-          _handwritingNotes[idx] = updated;
+          _handwritingNotes[idx] = noteResult;
         }
       });
+      _loadInitialData();
     }
   }
 
@@ -1320,8 +1341,104 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  /// Handwriting Sticky Note Card
+  /// Handwriting Sticky Note Card (or Real Handwritten Canvas Preview)
   Widget _buildHandwritingNoteCard(HandwritingNote note) {
+    if (note.isHandwritten) {
+      final strokes = (note.strokesJson ?? [])
+          .map((s) => HandwritingStroke.fromJson(s))
+          .toList();
+
+      return GestureDetector(
+        onTap: () => _openHandwritingNoteDialog(note),
+        onLongPress: () => _confirmDeleteNote(note),
+        child: Container(
+          decoration: BoxDecoration(
+            color: AppTheme.surfaceWhite,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: AppTheme.dividerColor),
+            boxShadow: AppTheme.softShadow,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Real Handwritten Drawing Canvas Preview
+              Expanded(
+                child: Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: AppTheme.primaryPurple.withValues(alpha: 0.15),
+                    ),
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: CustomPaint(
+                      painter: HandwritingCanvasPainter(
+                        strokes: strokes,
+                        fitThumbnail: true,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      note.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(
+                              CupertinoIcons.pencil,
+                              size: 11,
+                              color: AppTheme.primaryPurple,
+                            ),
+                            const SizedBox(width: 3),
+                            Text(
+                              '${strokes.length} stroke${strokes.length == 1 ? '' : 's'}',
+                              style: const TextStyle(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w600,
+                                color: AppTheme.primaryPurple,
+                              ),
+                            ),
+                          ],
+                        ),
+                        Text(
+                          _formatTimestamp(note.updatedAt),
+                          style: const TextStyle(
+                            fontSize: 10,
+                            color: AppTheme.textMuted,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     final palette = _notePalettes[note.paletteIndex % _notePalettes.length];
     final bg = palette['bg']!;
     final border = palette['border']!;

@@ -1,17 +1,19 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import '../models/handwriting_note_model.dart';
 import '../theme/app_theme.dart';
-import 'handwriting_canvas.dart';
-import 'type_note_dialog.dart';
+
+enum NoteCreationMode {
+  handwritten,
+  typed,
+}
 
 /// Modal bottom sheet providing 2 distinct buttons to choose between Handwritten Note & Type Note
 class WriteNoteChoiceDialog extends StatelessWidget {
   const WriteNoteChoiceDialog({super.key});
 
-  /// Static helper to launch the choice modal
-  static Future<HandwritingNote?> show(BuildContext context) {
-    return showModalBottomSheet<HandwritingNote>(
+  /// Static helper to launch the choice modal and return the user's selected mode
+  static Future<NoteCreationMode?> show(BuildContext context) {
+    return showModalBottomSheet<NoteCreationMode>(
       context: context,
       backgroundColor: Colors.transparent,
       barrierColor: Colors.black.withValues(alpha: 0.45),
@@ -89,13 +91,8 @@ class WriteNoteChoiceDialog extends StatelessWidget {
 
           // OPTION 1: Handwritten Note (Full Screen White Canvas)
           InkWell(
-            onTap: () async {
-              Navigator.pop(context);
-              final saved = await HandwritingCanvasDialog.show(context);
-              if (saved != null && context.mounted) {
-                // Handled in caller
-              }
-            },
+            onTap: () =>
+                Navigator.pop(context, NoteCreationMode.handwritten),
             borderRadius: BorderRadius.circular(20),
             child: Container(
               width: double.infinity,
@@ -185,13 +182,7 @@ class WriteNoteChoiceDialog extends StatelessWidget {
 
           // OPTION 2: Type Note (Keyboard Editor)
           InkWell(
-            onTap: () async {
-              Navigator.pop(context);
-              final saved = await TypeNoteDialog.show(context);
-              if (saved != null && context.mounted) {
-                // Handled in caller
-              }
-            },
+            onTap: () => Navigator.pop(context, NoteCreationMode.typed),
             borderRadius: BorderRadius.circular(20),
             child: Container(
               width: double.infinity,
