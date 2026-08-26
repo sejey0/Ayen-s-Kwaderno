@@ -176,11 +176,35 @@ class _HomeScreenState extends State<HomeScreen> {
       final mergedList = docMap.values.toList()
         ..sort((a, b) => b.lastOpenedAt.compareTo(a.lastOpenedAt));
 
-      final localNotes = await DocumentStorageService.loadHandwritingNotes();
+      // 2. Fetch and merge Handwriting Notes from Supabase
+      List<HandwritingNote> mergedNotes =
+          await DocumentStorageService.loadHandwritingNotes();
+      try {
+        final notesResponse = await client
+            .from('handwriting_notes')
+            .select()
+            .order('updated_at', ascending: false);
+
+        final Map<String, HandwritingNote> noteMap = {
+          for (var n in mergedNotes) n.id: n
+        };
+
+        for (final row in notesResponse) {
+          final note = HandwritingNote.fromJson(Map<String, dynamic>.from(row))
+              .copyWith(isCloudSynced: true);
+          noteMap[note.id] = note;
+          await DocumentStorageService.saveOrUpdateHandwritingNote(note);
+        }
+
+        mergedNotes = noteMap.values.toList()
+          ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+      } catch (noteErr) {
+        debugPrint('Supabase handwriting_notes notice (offline or table pending): $noteErr');
+      }
 
       setState(() {
         _documents = mergedList;
-        _handwritingNotes = localNotes;
+        _handwritingNotes = mergedNotes;
         _isLoadingCloudDocuments = false;
       });
     } catch (e) {

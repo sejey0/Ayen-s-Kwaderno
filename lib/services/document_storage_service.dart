@@ -1,15 +1,18 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/document_item_model.dart';
 import '../models/handwriting_note_model.dart';
 import '../models/image_annotation_model.dart';
 import '../models/stroke_model.dart';
 import '../models/text_annotation_model.dart';
 
-/// Manages persistent local storage of recently opened/imported documents, annotations, and handwriting notes using SharedPreferences
+/// Manages persistent local storage of recently opened/imported documents, annotations, and handwriting notes using SharedPreferences and background Supabase sync
 class DocumentStorageService {
   static const String _documentsKey = 'ayens_kwaderno_recent_documents_v2';
-  static const String _handwritingNotesKey = 'ayens_kwaderno_handwriting_notes_v1';
+  static const String _handwritingNotesKey =
+      'ayens_kwaderno_handwriting_notes_v1';
   static String _annotationsKey(String documentName) =>
       'ayens_kwaderno_annotations_$documentName';
 
@@ -130,7 +133,7 @@ class DocumentStorageService {
   }
 
   // ==========================================
-  // HANDWRITING NOTES PERSISTENCE
+  // HANDWRITING NOTES PERSISTENCE & CLOUD SYNC
   // ==========================================
 
   /// Loads all saved handwriting notes from SharedPreferences
@@ -157,7 +160,7 @@ class DocumentStorageService {
     }
   }
 
-  /// Saves or updates a handwriting note in persistent storage
+  /// Saves or updates a handwriting note in persistent storage and syncs to Supabase
   static Future<void> saveOrUpdateHandwritingNote(HandwritingNote note) async {
     try {
       final notes = await loadHandwritingNotes();
@@ -175,15 +178,41 @@ class DocumentStorageService {
       }
 
       await _persistHandwritingNotesList(notes);
+
+      // Async background sync to Supabase table `handwriting_notes`
+      _syncNoteToCloudBackground(note);
     } catch (_) {}
   }
 
-  /// Deletes a handwriting note from local storage
+  /// Background sync to Supabase
+  static Future<void> _syncNoteToCloudBackground(HandwritingNote note) async {
+    try {
+      final client = Supabase.instance.client;
+      await client.from('handwriting_notes').upsert({
+        'id': note.id,
+        'title': note.title,
+        'content': note.content,
+        'palette_index': note.paletteIndex,
+        'updated_at': DateTime.now().toUtc().toIso8601String(),
+        'created_at': note.createdAt.toUtc().toIso8601String(),
+      }, onConflict: 'id');
+    } catch (e) {
+      debugPrint('Cloud note sync notice (unconfigured table or offline): $e');
+    }
+  }
+
+  /// Deletes a handwriting note from local storage and Supabase
   static Future<void> deleteHandwritingNote(String id) async {
     try {
       final notes = await loadHandwritingNotes();
       notes.removeWhere((n) => n.id == id);
       await _persistHandwritingNotesList(notes);
+
+      // Async background deletion from Supabase
+      try {
+        final client = Supabase.instance.client;
+        await client.from('handwriting_notes').delete().eq('id', id);
+      } catch (_) {}
     } catch (_) {}
   }
 
