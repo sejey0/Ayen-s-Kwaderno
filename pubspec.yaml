@@ -38,6 +38,7 @@ dependencies:
   syncfusion_flutter_pdfviewer: ^34.2.5
   provider: ^6.1.5+1
   image_picker: ^1.2.3
+  google_mlkit_digital_ink_recognition: ^0.15.0
 
 dev_dependencies:
   flutter_test:

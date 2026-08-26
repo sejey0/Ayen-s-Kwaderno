@@ -4,7 +4,9 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 import '../models/stroke_model.dart';
+import '../models/text_annotation_model.dart';
 import '../theme/app_theme.dart';
+import '../widgets/handwriting_canvas.dart';
 
 /// Supported annotation tool types
 enum AnnotationTool {
@@ -44,6 +46,10 @@ class _EditorScreenState extends State<EditorScreen>
   final List<Stroke> _redoHistory = [];
   Stroke? _currentStroke;
 
+  // Digital Text Annotations state (from ML Kit Handwriting recognition)
+  final List<TextAnnotation> _textAnnotations = [];
+  String? _selectedTextId;
+
   // Document page state
   int _currentPage = 1;
   int _pageCount = 1;
@@ -62,6 +68,11 @@ class _EditorScreenState extends State<EditorScreen>
   }
 
   void _onToolSelected(AnnotationTool tool) {
+    if (tool == AnnotationTool.handwritingText) {
+      _showHandwritingCanvas();
+      return;
+    }
+
     setState(() {
       if (_activeTool == tool) {
         _activeTool = AnnotationTool.none; // Toggle off to allow normal PDF scroll
@@ -78,6 +89,61 @@ class _EditorScreenState extends State<EditorScreen>
 
     if (tool == AnnotationTool.addImage) {
       _showImagePickerPlaceholder();
+    }
+  }
+
+  /// Opens the Google ML Kit Digital Ink Handwriting popup paper
+  Future<void> _showHandwritingCanvas() async {
+    final recognizedText = await HandwritingCanvasDialog.show(context);
+
+    if (!mounted) return;
+
+    if (recognizedText != null && recognizedText.trim().isNotEmpty) {
+      final size = MediaQuery.of(context).size;
+      final newAnnotation = TextAnnotation(
+        text: recognizedText.trim(),
+        position: Offset(
+          (size.width - 220) / 2,
+          (size.height - 120) / 2,
+        ),
+        color: AppTheme.textPrimary,
+        fontSize: 16.0,
+      );
+
+      setState(() {
+        _textAnnotations.add(newAnnotation);
+        _selectedTextId = newAnnotation.id;
+        _activeTool = AnnotationTool.none; // Return to navigate/pan mode
+      });
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(CupertinoIcons.sparkles,
+                  color: Colors.white, size: 18),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Added "$recognizedText". Drag it anywhere on the document!',
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: AppTheme.primaryPurpleDark,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 80),
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    } else {
+      setState(() {
+        _activeTool = AnnotationTool.none;
+      });
     }
   }
 
@@ -100,14 +166,14 @@ class _EditorScreenState extends State<EditorScreen>
   }
 
   void _clearAnnotations() {
-    if (_strokes.isEmpty) return;
+    if (_strokes.isEmpty && _textAnnotations.isEmpty) return;
 
     showCupertinoDialog(
       context: context,
       builder: (context) => CupertinoAlertDialog(
         title: const Text('Clear Annotations'),
         content: const Text(
-            'Are you sure you want to clear all highlights and drawn lines?'),
+            'Are you sure you want to clear all highlights, lines, and text notes?'),
         actions: [
           CupertinoDialogAction(
             isDefaultAction: true,
@@ -120,10 +186,56 @@ class _EditorScreenState extends State<EditorScreen>
               setState(() {
                 _strokes.clear();
                 _redoHistory.clear();
+                _textAnnotations.clear();
+                _selectedTextId = null;
               });
               Navigator.pop(context);
             },
             child: const Text('Clear All'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _deleteTextAnnotation(String id) {
+    setState(() {
+      _textAnnotations.removeWhere((a) => a.id == id);
+      if (_selectedTextId == id) _selectedTextId = null;
+    });
+  }
+
+  void _editTextAnnotation(TextAnnotation annotation) {
+    final controller = TextEditingController(text: annotation.text);
+    showCupertinoDialog(
+      context: context,
+      builder: (context) => CupertinoAlertDialog(
+        title: const Text('Edit Note'),
+        content: Padding(
+          padding: const EdgeInsets.only(top: 12.0),
+          child: CupertinoTextField(
+            controller: controller,
+            maxLines: 3,
+            autofocus: true,
+            placeholder: 'Enter text note...',
+          ),
+        ),
+        actions: [
+          CupertinoDialogAction(
+            child: const Text('Cancel'),
+            onPressed: () => Navigator.pop(context),
+          ),
+          CupertinoDialogAction(
+            isDefaultAction: true,
+            onPressed: () {
+              if (controller.text.trim().isNotEmpty) {
+                setState(() {
+                  annotation.text = controller.text.trim();
+                });
+              }
+              Navigator.pop(context);
+            },
+            child: const Text('Save'),
           ),
         ],
       ),
@@ -138,7 +250,7 @@ class _EditorScreenState extends State<EditorScreen>
             Icon(CupertinoIcons.photo_on_rectangle,
                 color: Colors.white, size: 18),
             SizedBox(width: 10),
-            Text('Insert Image tool selected (Configured for Phase 3)'),
+            Text('Insert Image tool selected (Configured for Phase 4)'),
           ],
         ),
         backgroundColor: AppTheme.primaryPurpleDark,
@@ -248,6 +360,18 @@ class _EditorScreenState extends State<EditorScreen>
             ),
 
             // ==========================================
+            // TEXT ANNOTATION LAYER: Draggable Digital Text Notes
+            // (Converted from Google ML Kit Handwriting)
+            // ==========================================
+            ..._textAnnotations.map((annotation) {
+              return Positioned(
+                left: annotation.position.dx,
+                top: annotation.position.dy,
+                child: _buildDraggableTextWidget(annotation),
+              );
+            }),
+
+            // ==========================================
             // TOP BAR: Navigation, Document Title & Page Status
             // ==========================================
             Positioned(
@@ -277,6 +401,107 @@ class _EditorScreenState extends State<EditorScreen>
                   // Main Floating Annotation Toolbar
                   _buildFloatingBottomToolbar(),
                 ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Draggable Digital Text Note Widget
+  Widget _buildDraggableTextWidget(TextAnnotation annotation) {
+    final isSelected = _selectedTextId == annotation.id;
+
+    return GestureDetector(
+      onPanUpdate: (DragUpdateDetails details) {
+        setState(() {
+          annotation.position += details.delta;
+          _selectedTextId = annotation.id;
+        });
+      },
+      onTap: () {
+        setState(() {
+          _selectedTextId = isSelected ? null : annotation.id;
+        });
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        constraints: const BoxConstraints(maxWidth: 280),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.94),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: isSelected ? AppTheme.primaryPurple : AppTheme.dividerColor,
+            width: isSelected ? 2.0 : 1.0,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: isSelected
+                  ? AppTheme.primaryPurple.withValues(alpha: 0.25)
+                  : const Color(0xFF2D2640).withValues(alpha: 0.08),
+              blurRadius: isSelected ? 12 : 8,
+              offset: const Offset(0, 3),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Selected Actions Toolbar (Edit / Delete / Drag Handle)
+            if (isSelected)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6.0),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      CupertinoIcons.move,
+                      size: 13,
+                      color: AppTheme.primaryPurple,
+                    ),
+                    const SizedBox(width: 4),
+                    const Text(
+                      'Drag',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.primaryPurple,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    GestureDetector(
+                      onTap: () => _editTextAnnotation(annotation),
+                      child: const Icon(
+                        CupertinoIcons.pencil,
+                        size: 14,
+                        color: AppTheme.textSecondary,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    GestureDetector(
+                      onTap: () => _deleteTextAnnotation(annotation.id),
+                      child: const Icon(
+                        CupertinoIcons.trash,
+                        size: 14,
+                        color: AppTheme.accentPink,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+            // Converted Text
+            Text(
+              annotation.text,
+              style: TextStyle(
+                fontSize: annotation.fontSize,
+                fontWeight: FontWeight.w600,
+                color: annotation.color,
+                height: 1.3,
+                letterSpacing: -0.1,
               ),
             ),
           ],
@@ -383,10 +608,11 @@ class _EditorScreenState extends State<EditorScreen>
                               fontWeight: FontWeight.w600,
                             ),
                           ),
-                        if (_strokes.isNotEmpty) ...[
+                        if (_strokes.isNotEmpty ||
+                            _textAnnotations.isNotEmpty) ...[
                           const SizedBox(width: 6),
                           Text(
-                            '(${_strokes.length} mark${_strokes.length == 1 ? '' : 's'})',
+                            '(${_strokes.length + _textAnnotations.length} items)',
                             style: const TextStyle(
                               fontSize: 11,
                               color: AppTheme.textMuted,
@@ -427,7 +653,7 @@ class _EditorScreenState extends State<EditorScreen>
               ),
 
               // Clear Annotations Button
-              if (_strokes.isNotEmpty)
+              if (_strokes.isNotEmpty || _textAnnotations.isNotEmpty)
                 IconButton(
                   icon: const Icon(
                     CupertinoIcons.trash,
@@ -459,6 +685,8 @@ class _EditorScreenState extends State<EditorScreen>
                   child: InkWell(
                     borderRadius: BorderRadius.circular(12),
                     onTap: () {
+                      final totalItems =
+                          _strokes.length + _textAnnotations.length;
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
                           content: Row(
@@ -467,7 +695,7 @@ class _EditorScreenState extends State<EditorScreen>
                                   color: Colors.white, size: 18),
                               const SizedBox(width: 10),
                               Text(
-                                  'Saved ${_strokes.length} annotations to Supabase!'),
+                                  'Saved $totalItems annotations to Supabase!'),
                             ],
                           ),
                           backgroundColor: AppTheme.primaryPurpleDark,
@@ -563,7 +791,7 @@ class _EditorScreenState extends State<EditorScreen>
 
                 const SizedBox(width: 4),
 
-                // 3. Write Text
+                // 3. Write Text (ML Kit Handwriting Recognizer)
                 _buildToolButton(
                   tool: AnnotationTool.handwritingText,
                   icon: CupertinoIcons.textformat,
