@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 import '../models/image_annotation_model.dart';
 import '../models/stroke_model.dart';
@@ -62,16 +63,179 @@ class _EditorScreenState extends State<EditorScreen>
   int _pageCount = 1;
   bool _isDocumentLoaded = false;
 
+  // Supabase Cloud Sync State
+  bool _isSyncing = false;
+  bool _isLoadingCloudData = false;
+
+  String get _documentIdentifier =>
+      widget.fileName ?? widget.pdfPath.split(Platform.pathSeparator).last;
+
   @override
   void initState() {
     super.initState();
     _pdfViewerController = PdfViewerController();
+    _loadAnnotationsFromSupabase();
   }
 
   @override
   void dispose() {
     _pdfViewerController.dispose();
     super.dispose();
+  }
+
+  /// Automatically loads existing document annotations from Supabase
+  Future<void> _loadAnnotationsFromSupabase() async {
+    try {
+      setState(() => _isLoadingCloudData = true);
+
+      final client = Supabase.instance.client;
+      final response = await client
+          .from('document_annotations')
+          .select()
+          .eq('document_name', _documentIdentifier)
+          .maybeSingle();
+
+      if (!mounted) return;
+      setState(() => _isLoadingCloudData = false);
+
+      if (response != null) {
+        final List<dynamic>? strokesJson = response['strokes_data'];
+        final List<dynamic>? textsJson = response['texts_data'];
+        final List<dynamic>? imagesJson = response['images_data'];
+
+        final loadedStrokes = strokesJson
+                ?.map((e) => Stroke.fromJson(Map<String, dynamic>.from(e)))
+                .toList() ??
+            [];
+
+        final loadedTexts = textsJson
+                ?.map((e) =>
+                    TextAnnotation.fromJson(Map<String, dynamic>.from(e)))
+                .toList() ??
+            [];
+
+        final loadedImages = imagesJson
+                ?.map((e) =>
+                    ImageAnnotation.fromJson(Map<String, dynamic>.from(e)))
+                .toList() ??
+            [];
+
+        setState(() {
+          _strokes.clear();
+          _strokes.addAll(loadedStrokes);
+
+          _textAnnotations.clear();
+          _textAnnotations.addAll(loadedTexts);
+
+          _imageAnnotations.clear();
+          _imageAnnotations.addAll(loadedImages);
+        });
+
+        final totalLoaded =
+            loadedStrokes.length + loadedTexts.length + loadedImages.length;
+        if (totalLoaded > 0) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(CupertinoIcons.cloud_download,
+                      color: Colors.white, size: 18),
+                  const SizedBox(width: 10),
+                  Text('Loaded $totalLoaded annotations from Supabase Cloud ✨'),
+                ],
+              ),
+              backgroundColor: AppTheme.primaryPurpleDark,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              margin: const EdgeInsets.all(16),
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isLoadingCloudData = false);
+      debugPrint('Cloud load notice (Supabase offline or unconfigured): $e');
+    }
+  }
+
+  /// Saves current document annotations (Strokes, Texts, Images) to Supabase PostgreSQL
+  Future<void> _saveAnnotationsToSupabase() async {
+    try {
+      setState(() => _isSyncing = true);
+
+      final client = Supabase.instance.client;
+      final payload = {
+        'document_name': _documentIdentifier,
+        'strokes_data': _strokes.map((s) => s.toJson()).toList(),
+        'texts_data': _textAnnotations.map((t) => t.toJson()).toList(),
+        'images_data': _imageAnnotations.map((i) => i.toJson()).toList(),
+        'updated_at': DateTime.now().toUtc().toIso8601String(),
+      };
+
+      await client
+          .from('document_annotations')
+          .upsert(payload, onConflict: 'document_name');
+
+      if (!mounted) return;
+      setState(() => _isSyncing = false);
+
+      final totalItems =
+          _strokes.length + _textAnnotations.length + _imageAnnotations.length;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(CupertinoIcons.checkmark_circle_fill,
+                  color: Color(0xFF10B981), size: 20),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Saved $totalItems annotation${totalItems == 1 ? '' : 's'} to Supabase Cloud!',
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: AppTheme.textPrimary,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+          margin: const EdgeInsets.all(16),
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isSyncing = false);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.cloud_off_rounded,
+                  color: Colors.white, size: 20),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text('Cloud sync notice: $e'),
+              ),
+            ],
+          ),
+          backgroundColor: AppTheme.accentPinkDark,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+          margin: const EdgeInsets.all(16),
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    }
   }
 
   void _onToolSelected(AnnotationTool tool) {
@@ -462,6 +626,48 @@ class _EditorScreenState extends State<EditorScreen>
               );
             }),
 
+            // Cloud Data Loading Shimmer / Banner
+            if (_isLoadingCloudData)
+              Positioned(
+                top: MediaQuery.of(context).padding.top + 60,
+                left: 20,
+                right: 20,
+                child: Center(
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: AppTheme.surfaceWhite.withValues(alpha: 0.95),
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: AppTheme.softShadow,
+                      border: Border.all(color: AppTheme.dividerColor),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: AppTheme.primaryPurple,
+                          ),
+                        ),
+                        SizedBox(width: 8),
+                        Text(
+                          'Loading cloud annotations...',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: AppTheme.primaryPurpleDark,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+
             // ==========================================
             // TOP BAR: Navigation, Document Title & Page Status
             // ==========================================
@@ -763,7 +969,7 @@ class _EditorScreenState extends State<EditorScreen>
     );
   }
 
-  /// Elegant glassmorphic Top App Bar
+  /// Elegant glassmorphic Top App Bar with Supabase Save Action
   Widget _buildTopAppBar(String title, int totalAnnotationsCount) {
     return ClipRRect(
       child: BackdropFilter(
@@ -916,7 +1122,7 @@ class _EditorScreenState extends State<EditorScreen>
                   onPressed: _clearAnnotations,
                 ),
 
-              // Save / Supabase Sync Button
+              // Supabase Cloud Save Button
               Container(
                 margin: const EdgeInsets.only(left: 4),
                 decoration: BoxDecoration(
@@ -936,45 +1142,46 @@ class _EditorScreenState extends State<EditorScreen>
                   color: Colors.transparent,
                   child: InkWell(
                     borderRadius: BorderRadius.circular(12),
-                    onTap: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Row(
-                            children: [
-                              const Icon(CupertinoIcons.cloud_upload_fill,
-                                  color: Colors.white, size: 18),
-                              const SizedBox(width: 10),
-                              Text(
-                                  'Saved $totalAnnotationsCount annotations to Supabase!'),
-                            ],
-                          ),
-                          backgroundColor: AppTheme.primaryPurpleDark,
-                          behavior: SnackBarBehavior.floating,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                      );
-                    },
-                    child: const Padding(
-                      padding:
-                          EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    onTap: _isSyncing ? null : _saveAnnotationsToSupabase,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 8),
                       child: Row(
                         children: [
-                          Icon(
-                            CupertinoIcons.bookmark_fill,
-                            color: Colors.white,
-                            size: 14,
-                          ),
-                          SizedBox(width: 6),
-                          Text(
-                            'Save',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700,
+                          if (_isSyncing) ...[
+                            const SizedBox(
+                              width: 14,
+                              height: 14,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
                             ),
-                          ),
+                            const SizedBox(width: 8),
+                            const Text(
+                              'Saving...',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ] else ...[
+                            const Icon(
+                              CupertinoIcons.cloud_upload_fill,
+                              color: Colors.white,
+                              size: 15,
+                            ),
+                            const SizedBox(width: 6),
+                            const Text(
+                              'Save',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     ),
