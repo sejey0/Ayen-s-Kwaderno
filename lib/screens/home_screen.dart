@@ -38,6 +38,11 @@ class _HomeScreenState extends State<HomeScreen> {
   List<DocumentItem> _documents = [];
   List<HandwritingNote> _handwritingNotes = [];
 
+  // Multi-select mode state
+  bool _isSelectionMode = false;
+  final Set<String> _selectedDocFileNames = {};
+  final Set<String> _selectedNoteIds = {};
+
   // Palette generator for handwriting sticky notes
   static const List<Map<String, Color>> _notePalettes = [
     {
@@ -378,14 +383,119 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  /// Deletes a document from the recent list with confirmation
-  void _confirmDeleteDocument(DocumentItem doc) {
+
+  // ==========================================
+  // MULTI-SELECT BULK DELETE HELPERS
+  // ==========================================
+
+  void _enterSelectionMode() {
+    setState(() {
+      _isSelectionMode = true;
+      _selectedDocFileNames.clear();
+      _selectedNoteIds.clear();
+    });
+  }
+
+  void _exitSelectionMode() {
+    setState(() {
+      _isSelectionMode = false;
+      _selectedDocFileNames.clear();
+      _selectedNoteIds.clear();
+    });
+  }
+
+  void _toggleDocSelection(String fileName) {
+    setState(() {
+      if (_selectedDocFileNames.contains(fileName)) {
+        _selectedDocFileNames.remove(fileName);
+      } else {
+        _selectedDocFileNames.add(fileName);
+      }
+    });
+  }
+
+  void _toggleNoteSelection(String noteId) {
+    setState(() {
+      if (_selectedNoteIds.contains(noteId)) {
+        _selectedNoteIds.remove(noteId);
+      } else {
+        _selectedNoteIds.add(noteId);
+      }
+    });
+  }
+
+  void _selectAllVisible() {
+    setState(() {
+      final showDocs = _currentSection == LibrarySection.all ||
+          _currentSection == LibrarySection.documents;
+      final showNotes = _currentSection == LibrarySection.all ||
+          _currentSection == LibrarySection.notes;
+
+      if (showDocs) {
+        for (final doc in _documents) {
+          _selectedDocFileNames.add(doc.fileName);
+        }
+      }
+      if (showNotes) {
+        for (final note in _handwritingNotes) {
+          _selectedNoteIds.add(note.id);
+        }
+      }
+    });
+  }
+
+  void _deselectAll() {
+    setState(() {
+      _selectedDocFileNames.clear();
+      _selectedNoteIds.clear();
+    });
+  }
+
+  int get _totalSelectedCount =>
+      _selectedDocFileNames.length + _selectedNoteIds.length;
+
+  int get _visibleItemsCount {
+    final showDocs = _currentSection == LibrarySection.all ||
+        _currentSection == LibrarySection.documents;
+    final showNotes = _currentSection == LibrarySection.all ||
+        _currentSection == LibrarySection.notes;
+
+    int count = 0;
+    if (showDocs) count += _documents.length;
+    if (showNotes) count += _handwritingNotes.length;
+    return count;
+  }
+
+  bool get _isAllVisibleSelected {
+    if (_visibleItemsCount == 0) return false;
+    final showDocs = _currentSection == LibrarySection.all ||
+        _currentSection == LibrarySection.documents;
+    final showNotes = _currentSection == LibrarySection.all ||
+        _currentSection == LibrarySection.notes;
+
+    if (showDocs) {
+      for (final d in _documents) {
+        if (!_selectedDocFileNames.contains(d.fileName)) return false;
+      }
+    }
+    if (showNotes) {
+      for (final n in _handwritingNotes) {
+        if (!_selectedNoteIds.contains(n.id)) return false;
+      }
+    }
+    return true;
+  }
+
+  void _confirmBulkDelete() {
+    final count = _totalSelectedCount;
+    if (count == 0) return;
+
     showCupertinoDialog(
       context: context,
       builder: (context) => CupertinoAlertDialog(
-        title: const Text('Remove from Recent?'),
+        title: const Text('Delete Selected?'),
         content: Text(
-          'Do you want to remove "${doc.fileName}" from your documents list? Cloud annotations will remain preserved.',
+          'Are you sure you want to delete $count selected item${count == 1 ? '' : 's'}? This cannot be undone.',
         ),
         actions: [
           CupertinoDialogAction(
@@ -394,13 +504,10 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           CupertinoDialogAction(
             isDestructiveAction: true,
-            child: const Text('Remove'),
+            child: Text('Delete $count Item${count == 1 ? '' : 's'}'),
             onPressed: () async {
               Navigator.pop(context);
-              await DocumentStorageService.deleteDocument(doc.fileName);
-              setState(() {
-                _documents.removeWhere((d) => d.fileName == doc.fileName);
-              });
+              await _executeBulkDelete();
             },
           ),
         ],
@@ -408,28 +515,112 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  /// Deletes a handwriting note with confirmation
-  void _confirmDeleteNote(HandwritingNote note) {
-    showCupertinoDialog(
-      context: context,
-      builder: (context) => CupertinoAlertDialog(
-        title: const Text('Delete Note?'),
-        content: Text('Do you want to delete "${note.title}"?'),
-        actions: [
-          CupertinoDialogAction(
-            child: const Text('Cancel'),
-            onPressed: () => Navigator.pop(context),
+  Future<void> _executeBulkDelete() async {
+    final count = _totalSelectedCount;
+
+    // Delete selected documents
+    for (final fileName in _selectedDocFileNames) {
+      await DocumentStorageService.deleteDocument(fileName);
+    }
+    // Delete selected notes
+    for (final noteId in _selectedNoteIds) {
+      await DocumentStorageService.deleteHandwritingNote(noteId);
+    }
+
+    setState(() {
+      _documents.removeWhere(
+          (d) => _selectedDocFileNames.contains(d.fileName));
+      _handwritingNotes.removeWhere(
+          (n) => _selectedNoteIds.contains(n.id));
+      _isSelectionMode = false;
+      _selectedDocFileNames.clear();
+      _selectedNoteIds.clear();
+    });
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(CupertinoIcons.trash_fill,
+                  color: Colors.white, size: 18),
+              const SizedBox(width: 8),
+              Text(
+                'Deleted $count item${count == 1 ? '' : 's'} successfully! 🗑️',
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+            ],
           ),
-          CupertinoDialogAction(
-            isDestructiveAction: true,
-            child: const Text('Delete'),
-            onPressed: () async {
-              Navigator.pop(context);
-              await DocumentStorageService.deleteHandwritingNote(note.id);
-              setState(() {
-                _handwritingNotes.removeWhere((n) => n.id == note.id);
-              });
-            },
+          backgroundColor: const Color(0xFFEF4444),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
+  /// Floating Action Bar shown during multi-select mode
+  Widget _buildSelectionBottomBar() {
+    final count = _totalSelectedCount;
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppTheme.surfaceWhite,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.12),
+            blurRadius: 20,
+            offset: const Offset(0, 6),
+          ),
+        ],
+        border: Border.all(
+          color: count > 0
+              ? const Color(0xFFEF4444).withValues(alpha: 0.3)
+              : AppTheme.dividerColor,
+        ),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          TextButton(
+            onPressed: _exitSelectionMode,
+            child: const Text(
+              'Cancel',
+              style: TextStyle(
+                color: AppTheme.textSecondary,
+                fontWeight: FontWeight.w600,
+                fontSize: 14,
+              ),
+            ),
+          ),
+          ElevatedButton.icon(
+            onPressed: count > 0 ? _confirmBulkDelete : null,
+            icon: const Icon(CupertinoIcons.trash_fill, size: 16),
+            label: Text(
+              count > 0 ? 'Delete ($count)' : 'Delete',
+              style: const TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 14,
+              ),
+            ),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFEF4444),
+              foregroundColor: Colors.white,
+              disabledBackgroundColor:
+                  const Color(0xFFEF4444).withValues(alpha: 0.35),
+              disabledForegroundColor: Colors.white.withValues(alpha: 0.7),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+              elevation: count > 0 ? 3 : 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+            ),
           ),
         ],
       ),
@@ -690,31 +881,38 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ),
 
-      // Floating Action Button for Quick Upload or Note Creation
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _currentSection == LibrarySection.notes
-            ? _launchHandwritingToText
-            : _pickAndOpenDocument,
-        backgroundColor: _currentSection == LibrarySection.notes
-            ? AppTheme.primaryPurple
-            : AppTheme.accentPink,
-        foregroundColor: Colors.white,
-        elevation: 4,
-        icon: Icon(
-          _currentSection == LibrarySection.notes
-              ? CupertinoIcons.pencil_outline
-              : CupertinoIcons.cloud_upload_fill,
-          size: 20,
-        ),
-        label: Text(
-          _currentSection == LibrarySection.notes ? 'Write a Note' : 'Upload Document',
-          style: const TextStyle(
-            fontWeight: FontWeight.w700,
-            fontSize: 14,
-            letterSpacing: 0.2,
-          ),
-        ),
-      ),
+      // Floating Action Button or Multi-Select Bottom Bar
+      floatingActionButtonLocation: _isSelectionMode
+          ? FloatingActionButtonLocation.centerFloat
+          : FloatingActionButtonLocation.endFloat,
+      floatingActionButton: _isSelectionMode
+          ? _buildSelectionBottomBar()
+          : FloatingActionButton.extended(
+              onPressed: _currentSection == LibrarySection.notes
+                  ? _launchHandwritingToText
+                  : _pickAndOpenDocument,
+              backgroundColor: _currentSection == LibrarySection.notes
+                  ? AppTheme.primaryPurple
+                  : AppTheme.accentPink,
+              foregroundColor: Colors.white,
+              elevation: 4,
+              icon: Icon(
+                _currentSection == LibrarySection.notes
+                    ? CupertinoIcons.pencil_outline
+                    : CupertinoIcons.cloud_upload_fill,
+                size: 20,
+              ),
+              label: Text(
+                _currentSection == LibrarySection.notes
+                    ? 'Write a Note'
+                    : 'Upload Document',
+                style: const TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 14,
+                  letterSpacing: 0.2,
+                ),
+              ),
+            ),
     );
   }
 
@@ -815,8 +1013,76 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  /// Top Profile & Greeting Row
+  /// Top Profile & Greeting Row or Multi-Select Header
   Widget _buildHeader() {
+    if (_isSelectionMode) {
+      final allSelected = _isAllVisibleSelected;
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: AppTheme.surfaceWhite,
+          borderRadius: BorderRadius.circular(18),
+          boxShadow: AppTheme.softShadow,
+          border: Border.all(
+            color: AppTheme.primaryPurple.withValues(alpha: 0.35),
+            width: 1.5,
+          ),
+        ),
+        child: Row(
+          children: [
+            IconButton(
+              icon: const Icon(CupertinoIcons.xmark_circle_fill,
+                  color: AppTheme.textSecondary, size: 24),
+              tooltip: 'Cancel selection',
+              onPressed: _exitSelectionMode,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                '$_totalSelectedCount Selected',
+                style: const TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w800,
+                  color: AppTheme.textPrimary,
+                  letterSpacing: -0.3,
+                ),
+              ),
+            ),
+            TextButton.icon(
+              onPressed: allSelected ? _deselectAll : _selectAllVisible,
+              icon: Icon(
+                allSelected
+                    ? CupertinoIcons.clear_circled
+                    : CupertinoIcons.checkmark_circle_fill,
+                size: 16,
+                color: AppTheme.primaryPurple,
+              ),
+              label: Text(
+                allSelected ? 'Deselect All' : 'Select All',
+                style: const TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 12.5,
+                  color: AppTheme.primaryPurple,
+                ),
+              ),
+              style: TextButton.styleFrom(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                backgroundColor: AppTheme.primaryPurpleLight,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final hasItems = _documents.isNotEmpty || _handwritingNotes.isNotEmpty;
+
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -863,97 +1129,118 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ],
         ),
-        ValueListenableBuilder<AutoSyncStatus>(
-          valueListenable: AutoSyncService.instance.statusNotifier,
-          builder: (context, status, _) {
-            Color iconColor = const Color(0xFF10B981);
-            IconData iconData = CupertinoIcons.cloud_fill;
-            String tooltip =
-                'Auto-uploaded to Supabase Database ✨ (Tap to refresh)';
-            Widget? customChild;
-
-            switch (status) {
-              case AutoSyncStatus.syncing:
-                iconColor = AppTheme.primaryPurple;
-                tooltip = 'Auto-uploading to Supabase Cloud...';
-                customChild = const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2.2,
-                    color: AppTheme.primaryPurple,
-                  ),
-                );
-                break;
-              case AutoSyncStatus.offline:
-                iconColor = const Color(0xFF94A3B8);
-                iconData = Icons.cloud_off_rounded;
-                tooltip =
-                    'Offline • Changes saved locally & will auto-upload online';
-                break;
-              case AutoSyncStatus.error:
-                iconColor = const Color(0xFFEF4444);
-                iconData = CupertinoIcons.exclamationmark_triangle;
-                tooltip = 'Sync notice • Tap to retry';
-                break;
-              case AutoSyncStatus.synced:
-                iconColor = const Color(0xFF10B981);
-                iconData = CupertinoIcons.cloud_fill;
-                tooltip =
-                    'Auto-uploaded to Supabase Database ✨ (Tap to refresh)';
-                break;
-            }
-
-            return Container(
-              decoration: BoxDecoration(
-                color: AppTheme.surfaceWhite,
-                shape: BoxShape.circle,
-                boxShadow: AppTheme.softShadow,
-                border: Border.all(
-                  color: status == AutoSyncStatus.synced
-                      ? const Color(0xFF10B981).withValues(alpha: 0.3)
-                      : AppTheme.dividerColor,
+        Row(
+          children: [
+            if (hasItems) ...[
+              Container(
+                margin: const EdgeInsets.only(right: 8),
+                decoration: BoxDecoration(
+                  color: AppTheme.surfaceWhite,
+                  shape: BoxShape.circle,
+                  boxShadow: AppTheme.softShadow,
+                  border: Border.all(color: AppTheme.dividerColor),
+                ),
+                child: IconButton(
+                  icon: const Icon(CupertinoIcons.checkmark_circle,
+                      color: AppTheme.primaryPurple, size: 20),
+                  tooltip: 'Select items to delete',
+                  onPressed: _enterSelectionMode,
                 ),
               ),
-              child: IconButton(
-                icon: customChild ??
-                    Icon(iconData, color: iconColor, size: 20),
-                tooltip: tooltip,
-                onPressed: () {
-                  AutoSyncService.instance.triggerSync(immediate: true);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Row(
-                        children: [
-                          Icon(
-                            status == AutoSyncStatus.offline
-                                ? CupertinoIcons.wifi_slash
-                                : CupertinoIcons.checkmark_circle_fill,
-                            color: Colors.white,
-                            size: 18,
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              status == AutoSyncStatus.offline
-                                  ? 'Offline mode active. All notes will auto-upload the instant you go online! ⚡'
-                                  : 'Database auto-sync refreshed with Supabase! ✨',
-                            ),
-                          ),
-                        ],
+            ],
+            ValueListenableBuilder<AutoSyncStatus>(
+              valueListenable: AutoSyncService.instance.statusNotifier,
+              builder: (context, status, _) {
+                Color iconColor = const Color(0xFF10B981);
+                IconData iconData = CupertinoIcons.cloud_fill;
+                String tooltip =
+                    'Auto-uploaded to Supabase Database ✨ (Tap to refresh)';
+                Widget? customChild;
+
+                switch (status) {
+                  case AutoSyncStatus.syncing:
+                    iconColor = AppTheme.primaryPurple;
+                    tooltip = 'Auto-uploading to Supabase Cloud...';
+                    customChild = const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.2,
+                        color: AppTheme.primaryPurple,
                       ),
-                      backgroundColor: AppTheme.primaryPurpleDark,
-                      behavior: SnackBarBehavior.floating,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      duration: const Duration(seconds: 2),
+                    );
+                    break;
+                  case AutoSyncStatus.offline:
+                    iconColor = const Color(0xFF94A3B8);
+                    iconData = Icons.cloud_off_rounded;
+                    tooltip =
+                        'Offline • Changes saved locally & will auto-upload online';
+                    break;
+                  case AutoSyncStatus.error:
+                    iconColor = const Color(0xFFEF4444);
+                    iconData = CupertinoIcons.exclamationmark_triangle;
+                    tooltip = 'Sync notice • Tap to retry';
+                    break;
+                  case AutoSyncStatus.synced:
+                    iconColor = const Color(0xFF10B981);
+                    iconData = CupertinoIcons.cloud_fill;
+                    tooltip =
+                        'Auto-uploaded to Supabase Database ✨ (Tap to refresh)';
+                    break;
+                }
+
+                return Container(
+                  decoration: BoxDecoration(
+                    color: AppTheme.surfaceWhite,
+                    shape: BoxShape.circle,
+                    boxShadow: AppTheme.softShadow,
+                    border: Border.all(
+                      color: status == AutoSyncStatus.synced
+                          ? const Color(0xFF10B981).withValues(alpha: 0.3)
+                          : AppTheme.dividerColor,
                     ),
-                  );
-                },
-              ),
-            );
-          },
+                  ),
+                  child: IconButton(
+                    icon: customChild ??
+                        Icon(iconData, color: iconColor, size: 20),
+                    tooltip: tooltip,
+                    onPressed: () {
+                      AutoSyncService.instance.triggerSync(immediate: true);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Row(
+                            children: [
+                              Icon(
+                                status == AutoSyncStatus.offline
+                                    ? CupertinoIcons.wifi_slash
+                                    : CupertinoIcons.checkmark_circle_fill,
+                                color: Colors.white,
+                                size: 18,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  status == AutoSyncStatus.offline
+                                      ? 'Offline mode active. All notes will auto-upload the instant you go online! ⚡'
+                                      : 'Database auto-sync refreshed with Supabase! ✨',
+                                ),
+                              ),
+                            ],
+                          ),
+                          backgroundColor: AppTheme.primaryPurpleDark,
+                          behavior: SnackBarBehavior.floating,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          duration: const Duration(seconds: 2),
+                        ),
+                      );
+                    },
+                  ),
+                );
+              },
+            ),
+          ],
         ),
       ],
     );
@@ -1248,16 +1535,39 @@ class _HomeScreenState extends State<HomeScreen> {
         pathLower.endsWith('.jpeg') ||
         pathLower.endsWith('.webp') ||
         pathLower.endsWith('.bmp');
+    final isSelected = _selectedDocFileNames.contains(doc.fileName);
 
     return GestureDetector(
-      onTap: () => _openDocument(doc),
-      onLongPress: () => _confirmDeleteDocument(doc),
-      child: Container(
+      onTap: () {
+        if (_isSelectionMode) {
+          _toggleDocSelection(doc.fileName);
+        } else {
+          _openDocument(doc);
+        }
+      },
+      onLongPress: () {
+        if (_isSelectionMode) {
+          _toggleDocSelection(doc.fileName);
+        } else {
+          HapticFeedback.mediumImpact();
+          _enterSelectionMode();
+          _toggleDocSelection(doc.fileName);
+        }
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
         decoration: BoxDecoration(
-          color: AppTheme.surfaceWhite,
+          color: isSelected
+              ? AppTheme.primaryPurpleLight.withValues(alpha: 0.35)
+              : AppTheme.surfaceWhite,
           borderRadius: BorderRadius.circular(20),
           boxShadow: AppTheme.softShadow,
-          border: Border.all(color: AppTheme.dividerColor),
+          border: Border.all(
+            color: isSelected
+                ? AppTheme.primaryPurple
+                : AppTheme.dividerColor,
+            width: isSelected ? 2.2 : 1.0,
+          ),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1280,6 +1590,39 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
                   ),
+
+                  // Selection Checkbox Badge OR Format Badge
+                  if (_isSelectionMode)
+                    Positioned(
+                      top: 8,
+                      right: 8,
+                      child: Container(
+                        width: 24,
+                        height: 24,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: isSelected
+                              ? AppTheme.primaryPurple
+                              : Colors.white.withValues(alpha: 0.95),
+                          border: Border.all(
+                            color: isSelected
+                                ? AppTheme.primaryPurple
+                                : AppTheme.dividerColor,
+                            width: 2.0,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.12),
+                              blurRadius: 4,
+                            ),
+                          ],
+                        ),
+                        child: isSelected
+                            ? const Icon(CupertinoIcons.checkmark,
+                                size: 14, color: Colors.white)
+                            : null,
+                      ),
+                    ),
 
                   // Format Badge (PDF or IMAGE)
                   Positioned(
@@ -1304,8 +1647,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
 
-                  // Cloud Synced Badge
-                  if (doc.isCloudSynced)
+                  // Cloud Synced Badge (only when not in selection mode)
+                  if (doc.isCloudSynced && !_isSelectionMode)
                     Positioned(
                       top: 8,
                       right: 8,
@@ -1393,45 +1736,104 @@ class _HomeScreenState extends State<HomeScreen> {
 
   /// Handwriting Sticky Note Card (or Real Handwritten Canvas Preview)
   Widget _buildHandwritingNoteCard(HandwritingNote note) {
+    final isSelected = _selectedNoteIds.contains(note.id);
+
     if (note.isHandwritten) {
       final strokes = (note.strokesJson ?? [])
           .map((s) => HandwritingStroke.fromJson(s))
           .toList();
 
       return GestureDetector(
-        onTap: () => _openHandwritingNoteDialog(note),
-        onLongPress: () => _confirmDeleteNote(note),
-        child: Container(
+        onTap: () {
+          if (_isSelectionMode) {
+            _toggleNoteSelection(note.id);
+          } else {
+            _openHandwritingNoteDialog(note);
+          }
+        },
+        onLongPress: () {
+          if (_isSelectionMode) {
+            _toggleNoteSelection(note.id);
+          } else {
+            HapticFeedback.mediumImpact();
+            _enterSelectionMode();
+            _toggleNoteSelection(note.id);
+          }
+        },
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
           decoration: BoxDecoration(
-            color: AppTheme.surfaceWhite,
+            color: isSelected
+                ? AppTheme.primaryPurpleLight.withValues(alpha: 0.35)
+                : AppTheme.surfaceWhite,
             borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: AppTheme.dividerColor),
+            border: Border.all(
+              color: isSelected
+                  ? AppTheme.primaryPurple
+                  : AppTheme.dividerColor,
+              width: isSelected ? 2.2 : 1.0,
+            ),
             boxShadow: AppTheme.softShadow,
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Real Handwritten Drawing Canvas Preview
+              // Real Handwritten Drawing Canvas Preview with selection checkbox
               Expanded(
-                child: Container(
-                  width: double.infinity,
-                  margin: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: AppTheme.primaryPurple.withValues(alpha: 0.15),
-                    ),
-                  ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: CustomPaint(
-                      painter: HandwritingCanvasPainter(
-                        strokes: strokes,
-                        fitThumbnail: true,
+                child: Stack(
+                  children: [
+                    Container(
+                      width: double.infinity,
+                      margin: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: AppTheme.primaryPurple.withValues(alpha: 0.15),
+                        ),
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: CustomPaint(
+                          painter: HandwritingCanvasPainter(
+                            strokes: strokes,
+                            fitThumbnail: true,
+                          ),
+                        ),
                       ),
                     ),
-                  ),
+                    if (_isSelectionMode)
+                      Positioned(
+                        top: 12,
+                        right: 12,
+                        child: Container(
+                          width: 24,
+                          height: 24,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: isSelected
+                                ? AppTheme.primaryPurple
+                                : Colors.white.withValues(alpha: 0.95),
+                            border: Border.all(
+                              color: isSelected
+                                  ? AppTheme.primaryPurple
+                                  : AppTheme.dividerColor,
+                              width: 2.0,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.12),
+                                blurRadius: 4,
+                              ),
+                            ],
+                          ),
+                          child: isSelected
+                              ? const Icon(CupertinoIcons.checkmark,
+                                  size: 14, color: Colors.white)
+                              : null,
+                        ),
+                      ),
+                  ],
                 ),
               ),
               Padding(
@@ -1506,14 +1908,34 @@ class _HomeScreenState extends State<HomeScreen> {
     final accent = palette['accent']!;
 
     return GestureDetector(
-      onTap: () => _openHandwritingNoteDialog(note),
-      onLongPress: () => _confirmDeleteNote(note),
-      child: Container(
+      onTap: () {
+        if (_isSelectionMode) {
+          _toggleNoteSelection(note.id);
+        } else {
+          _openHandwritingNoteDialog(note);
+        }
+      },
+      onLongPress: () {
+        if (_isSelectionMode) {
+          _toggleNoteSelection(note.id);
+        } else {
+          HapticFeedback.mediumImpact();
+          _enterSelectionMode();
+          _toggleNoteSelection(note.id);
+        }
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
         padding: const EdgeInsets.all(14.0),
         decoration: BoxDecoration(
-          color: bg,
+          color: isSelected
+              ? AppTheme.primaryPurpleLight.withValues(alpha: 0.35)
+              : bg,
           borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: border, width: 1.2),
+          border: Border.all(
+            color: isSelected ? AppTheme.primaryPurple : border,
+            width: isSelected ? 2.5 : 1.2,
+          ),
           boxShadow: [
             BoxShadow(
               color: accent.withValues(alpha: 0.08),
@@ -1525,41 +1947,73 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Top Bar: Note Pin & Copy action
+            // Top Bar: Note Pin / Selection Checkbox & Copy action
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Row(
-                  children: [
-                    Icon(CupertinoIcons.pin_fill, size: 13, color: accent),
-                    const SizedBox(width: 4),
-                    Text(
-                      _formatTimestamp(note.updatedAt),
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                        color: accent.withValues(alpha: 0.8),
+                if (_isSelectionMode)
+                  Container(
+                    width: 22,
+                    height: 22,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: isSelected
+                          ? AppTheme.primaryPurple
+                          : Colors.white.withValues(alpha: 0.9),
+                      border: Border.all(
+                        color: isSelected
+                            ? AppTheme.primaryPurple
+                            : AppTheme.dividerColor,
+                        width: 1.8,
                       ),
                     ),
-                  ],
-                ),
-                GestureDetector(
-                  onTap: () {
-                    Clipboard.setData(ClipboardData(text: note.content));
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Copied "${note.title}"! 📋'),
-                        duration: const Duration(seconds: 1),
-                        behavior: SnackBarBehavior.floating,
+                    child: isSelected
+                        ? const Icon(CupertinoIcons.checkmark,
+                            size: 13, color: Colors.white)
+                        : null,
+                  )
+                else
+                  Row(
+                    children: [
+                      Icon(CupertinoIcons.pin_fill, size: 13, color: accent),
+                      const SizedBox(width: 4),
+                      Text(
+                        _formatTimestamp(note.updatedAt),
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          color: accent.withValues(alpha: 0.8),
+                        ),
                       ),
-                    );
-                  },
-                  child: Icon(
-                    CupertinoIcons.doc_on_clipboard,
-                    size: 14,
-                    color: accent,
+                    ],
                   ),
-                ),
+                if (!_isSelectionMode)
+                  GestureDetector(
+                    onTap: () {
+                      Clipboard.setData(ClipboardData(text: note.content));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Copied "${note.title}"! 📋'),
+                          duration: const Duration(seconds: 1),
+                          behavior: SnackBarBehavior.floating,
+                        ),
+                      );
+                    },
+                    child: Icon(
+                      CupertinoIcons.doc_on_clipboard,
+                      size: 14,
+                      color: accent,
+                    ),
+                  )
+                else
+                  Text(
+                    _formatTimestamp(note.updatedAt),
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      color: accent.withValues(alpha: 0.8),
+                    ),
+                  ),
               ],
             ),
             const SizedBox(height: 8),
