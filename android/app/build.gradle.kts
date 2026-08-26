@@ -38,3 +38,8 @@ android {
 flutter {
     source = "../.."
 }
+
+// Force override buildToolsVersion if any subproject or plugin injects 25.0.4
+project.afterEvaluate {
+    android.buildToolsVersion = "34.0.0"
+}
