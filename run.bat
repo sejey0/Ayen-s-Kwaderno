@@ -47,20 +47,35 @@ if defined DEVICE_FOUND (
 :SELECT_MODE
 echo.
 echo ==========================================
-echo Select Build Mode:
-echo [1] Debug Mode
-echo [2] Release Mode
+echo Select Run Mode:
+echo [1] Standard Debug Run (Incremental Build)
+echo [2] Fast Attach (No Build / Rekta Debugger kung bukas na ang app)
+echo [3] Release Mode (Full Build)
 echo ==========================================
 
-choice /c 12 /m "Press 1 for Debug or 2 for Release"
-if errorlevel 2 (
-    echo.
-    echo Starting app in RELEASE mode...
-    flutter run --release
-) else if errorlevel 1 (
-    echo.
-    echo Starting app in DEBUG mode...
-    flutter run
-)
+choice /c 123 /m "Piliin ang opsyong gusto mo"
+if errorlevel 3 goto RUN_RELEASE
+if errorlevel 2 goto RUN_ATTACH
+if errorlevel 1 goto RUN_DEBUG
+goto END
 
+:RUN_RELEASE
+echo.
+echo Starting app in RELEASE mode...
+flutter run --release
+goto END
+
+:RUN_ATTACH
+echo.
+echo Attaching to running app (Walang build, instant connect)...
+flutter attach
+goto END
+
+:RUN_DEBUG
+echo.
+echo Starting app in DEBUG mode...
+flutter run
+goto END
+
+:END
 pause
