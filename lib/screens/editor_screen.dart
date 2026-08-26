@@ -2,7 +2,9 @@ import 'dart:io';
 import 'dart:ui';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
+import '../models/image_annotation_model.dart';
 import '../models/stroke_model.dart';
 import '../models/text_annotation_model.dart';
 import '../theme/app_theme.dart';
@@ -35,6 +37,7 @@ class _EditorScreenState extends State<EditorScreen>
     with SingleTickerProviderStateMixin {
   late PdfViewerController _pdfViewerController;
   final GlobalKey<SfPdfViewerState> _pdfViewerKey = GlobalKey();
+  final ImagePicker _imagePicker = ImagePicker();
 
   // Active annotation tool state
   AnnotationTool _activeTool = AnnotationTool.none;
@@ -49,6 +52,10 @@ class _EditorScreenState extends State<EditorScreen>
   // Digital Text Annotations state (from ML Kit Handwriting recognition)
   final List<TextAnnotation> _textAnnotations = [];
   String? _selectedTextId;
+
+  // Image Annotations state (Draggable & Resizable Photos/Screenshots)
+  final List<ImageAnnotation> _imageAnnotations = [];
+  String? _selectedImageId;
 
   // Document page state
   int _currentPage = 1;
@@ -73,11 +80,19 @@ class _EditorScreenState extends State<EditorScreen>
       return;
     }
 
+    if (tool == AnnotationTool.addImage) {
+      _pickAndAddImage();
+      return;
+    }
+
     setState(() {
       if (_activeTool == tool) {
         _activeTool = AnnotationTool.none; // Toggle off to allow normal PDF scroll
       } else {
         _activeTool = tool;
+        _selectedTextId = null;
+        _selectedImageId = null;
+
         // Adjust stroke width based on selected tool default
         if (tool == AnnotationTool.straightLine) {
           _strokeWidth = 4.0;
@@ -86,9 +101,77 @@ class _EditorScreenState extends State<EditorScreen>
         }
       }
     });
+  }
 
-    if (tool == AnnotationTool.addImage) {
-      _showImagePickerPlaceholder();
+  /// Opens the Gallery to pick an image and adds it as a draggable/resizable annotation
+  Future<void> _pickAndAddImage() async {
+    try {
+      final pickedFile = await _imagePicker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 92,
+      );
+
+      if (!mounted) return;
+
+      if (pickedFile != null) {
+        final size = MediaQuery.of(context).size;
+        final newAnnotation = ImageAnnotation(
+          imagePath: pickedFile.path,
+          position: Offset(
+            (size.width - 200) / 2,
+            (size.height - 200) / 2,
+          ),
+          size: const Size(200.0, 200.0),
+        );
+
+        setState(() {
+          _imageAnnotations.add(newAnnotation);
+          _selectedImageId = newAnnotation.id;
+          _selectedTextId = null;
+          _activeTool = AnnotationTool.none; // Return to interaction/pan mode
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Row(
+              children: [
+                Icon(CupertinoIcons.photo_fill, color: Colors.white, size: 18),
+                SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Image inserted! Drag to position, or pull the corner handle to resize.',
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: AppTheme.primaryPurpleDark,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 80),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      } else {
+        setState(() {
+          _activeTool = AnnotationTool.none;
+        });
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _activeTool = AnnotationTool.none);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Could not pick image: $e'),
+          backgroundColor: AppTheme.accentPinkDark,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+      );
     }
   }
 
@@ -113,10 +196,10 @@ class _EditorScreenState extends State<EditorScreen>
       setState(() {
         _textAnnotations.add(newAnnotation);
         _selectedTextId = newAnnotation.id;
+        _selectedImageId = null;
         _activeTool = AnnotationTool.none; // Return to navigate/pan mode
       });
 
-      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Row(
@@ -166,14 +249,18 @@ class _EditorScreenState extends State<EditorScreen>
   }
 
   void _clearAnnotations() {
-    if (_strokes.isEmpty && _textAnnotations.isEmpty) return;
+    if (_strokes.isEmpty &&
+        _textAnnotations.isEmpty &&
+        _imageAnnotations.isEmpty) {
+      return;
+    }
 
     showCupertinoDialog(
       context: context,
       builder: (context) => CupertinoAlertDialog(
         title: const Text('Clear Annotations'),
         content: const Text(
-            'Are you sure you want to clear all highlights, lines, and text notes?'),
+            'Are you sure you want to clear all highlights, lines, text notes, and images?'),
         actions: [
           CupertinoDialogAction(
             isDefaultAction: true,
@@ -187,7 +274,9 @@ class _EditorScreenState extends State<EditorScreen>
                 _strokes.clear();
                 _redoHistory.clear();
                 _textAnnotations.clear();
+                _imageAnnotations.clear();
                 _selectedTextId = null;
+                _selectedImageId = null;
               });
               Navigator.pop(context);
             },
@@ -201,7 +290,18 @@ class _EditorScreenState extends State<EditorScreen>
   void _deleteTextAnnotation(String id) {
     setState(() {
       _textAnnotations.removeWhere((a) => a.id == id);
-      if (_selectedTextId == id) _selectedTextId = null;
+      if (_selectedTextId == id) {
+        _selectedTextId = null;
+      }
+    });
+  }
+
+  void _deleteImageAnnotation(String id) {
+    setState(() {
+      _imageAnnotations.removeWhere((img) => img.id == id);
+      if (_selectedImageId == id) {
+        _selectedImageId = null;
+      }
     });
   }
 
@@ -242,31 +342,11 @@ class _EditorScreenState extends State<EditorScreen>
     );
   }
 
-  void _showImagePickerPlaceholder() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Row(
-          children: [
-            Icon(CupertinoIcons.photo_on_rectangle,
-                color: Colors.white, size: 18),
-            SizedBox(width: 10),
-            Text('Insert Image tool selected (Configured for Phase 4)'),
-          ],
-        ),
-        backgroundColor: AppTheme.primaryPurpleDark,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
-        margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 80),
-        duration: const Duration(seconds: 2),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final displayName = widget.fileName ?? 'Study Document';
+    final totalAnnotationsCount =
+        _strokes.length + _textAnnotations.length + _imageAnnotations.length;
 
     return Scaffold(
       backgroundColor: AppTheme.background,
@@ -360,6 +440,17 @@ class _EditorScreenState extends State<EditorScreen>
             ),
 
             // ==========================================
+            // IMAGE ANNOTATION LAYER: Draggable & Resizable Photos
+            // ==========================================
+            ..._imageAnnotations.map((annotation) {
+              return Positioned(
+                left: annotation.position.dx,
+                top: annotation.position.dy,
+                child: _buildDraggableResizableImageWidget(annotation),
+              );
+            }),
+
+            // ==========================================
             // TEXT ANNOTATION LAYER: Draggable Digital Text Notes
             // (Converted from Google ML Kit Handwriting)
             // ==========================================
@@ -378,7 +469,7 @@ class _EditorScreenState extends State<EditorScreen>
               top: 0,
               left: 0,
               right: 0,
-              child: _buildTopAppBar(displayName),
+              child: _buildTopAppBar(displayName, totalAnnotationsCount),
             ),
 
             // ==========================================
@@ -409,6 +500,166 @@ class _EditorScreenState extends State<EditorScreen>
     );
   }
 
+  /// Draggable & Resizable Image Sticker Widget
+  Widget _buildDraggableResizableImageWidget(ImageAnnotation annotation) {
+    final isSelected = _selectedImageId == annotation.id;
+
+    return GestureDetector(
+      onPanUpdate: (DragUpdateDetails details) {
+        setState(() {
+          annotation.position += details.delta;
+          _selectedImageId = annotation.id;
+          _selectedTextId = null;
+        });
+      },
+      onTap: () {
+        setState(() {
+          _selectedImageId = isSelected ? null : annotation.id;
+          _selectedTextId = null;
+        });
+      },
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          // Base Image Container with Soft Shadow and Selection Border
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 120),
+            width: annotation.size.width,
+            height: annotation.size.height,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: isSelected
+                    ? AppTheme.primaryPurple
+                    : Colors.white.withValues(alpha: 0.9),
+                width: isSelected ? 2.5 : 1.5,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: isSelected
+                      ? AppTheme.primaryPurple.withValues(alpha: 0.35)
+                      : const Color(0xFF2D2640).withValues(alpha: 0.12),
+                  blurRadius: isSelected ? 16 : 8,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(14),
+              child: Image.file(
+                File(annotation.imagePath),
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) => Container(
+                  color: AppTheme.primaryPurpleLight,
+                  child: const Center(
+                    child: Icon(
+                      Icons.broken_image_rounded,
+                      color: AppTheme.textMuted,
+                      size: 32,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+          // Top Action Floating Bar (Drag badge + Delete button)
+          if (isSelected)
+            Positioned(
+              top: -38,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: AppTheme.surfaceWhite,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: AppTheme.dividerColor),
+                    boxShadow: AppTheme.softShadow,
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        CupertinoIcons.move,
+                        size: 13,
+                        color: AppTheme.primaryPurple,
+                      ),
+                      const SizedBox(width: 4),
+                      const Text(
+                        'Image',
+                        style: TextStyle(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w700,
+                          color: AppTheme.primaryPurple,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      GestureDetector(
+                        onTap: () => _deleteImageAnnotation(annotation.id),
+                        child: const Icon(
+                          CupertinoIcons.trash,
+                          size: 14,
+                          color: AppTheme.accentPink,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+
+          // Bottom-Right Corner Resize Grip Handle
+          if (isSelected)
+            Positioned(
+              right: -12,
+              bottom: -12,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onPanUpdate: (DragUpdateDetails details) {
+                  setState(() {
+                    final newWidth = (annotation.size.width + details.delta.dx)
+                        .clamp(50.0, 600.0);
+                    final newHeight =
+                        (annotation.size.height + details.delta.dy)
+                            .clamp(50.0, 600.0);
+                    annotation.size = Size(newWidth, newHeight);
+                  });
+                },
+                child: Container(
+                  width: 30,
+                  height: 30,
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [AppTheme.primaryPurple, AppTheme.accentPink],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white, width: 2),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppTheme.primaryPurple.withValues(alpha: 0.45),
+                        blurRadius: 8,
+                        offset: const Offset(0, 3),
+                      ),
+                    ],
+                  ),
+                  child: const Icon(
+                    CupertinoIcons.arrow_down_right_arrow_up_left,
+                    size: 14,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
   /// Draggable Digital Text Note Widget
   Widget _buildDraggableTextWidget(TextAnnotation annotation) {
     final isSelected = _selectedTextId == annotation.id;
@@ -418,11 +669,13 @@ class _EditorScreenState extends State<EditorScreen>
         setState(() {
           annotation.position += details.delta;
           _selectedTextId = annotation.id;
+          _selectedImageId = null;
         });
       },
       onTap: () {
         setState(() {
           _selectedTextId = isSelected ? null : annotation.id;
+          _selectedImageId = null;
         });
       },
       child: AnimatedContainer(
@@ -511,7 +764,7 @@ class _EditorScreenState extends State<EditorScreen>
   }
 
   /// Elegant glassmorphic Top App Bar
-  Widget _buildTopAppBar(String title) {
+  Widget _buildTopAppBar(String title, int totalAnnotationsCount) {
     return ClipRRect(
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
@@ -608,11 +861,10 @@ class _EditorScreenState extends State<EditorScreen>
                               fontWeight: FontWeight.w600,
                             ),
                           ),
-                        if (_strokes.isNotEmpty ||
-                            _textAnnotations.isNotEmpty) ...[
+                        if (totalAnnotationsCount > 0) ...[
                           const SizedBox(width: 6),
                           Text(
-                            '(${_strokes.length + _textAnnotations.length} items)',
+                            '($totalAnnotationsCount item${totalAnnotationsCount == 1 ? '' : 's'})',
                             style: const TextStyle(
                               fontSize: 11,
                               color: AppTheme.textMuted,
@@ -653,7 +905,7 @@ class _EditorScreenState extends State<EditorScreen>
               ),
 
               // Clear Annotations Button
-              if (_strokes.isNotEmpty || _textAnnotations.isNotEmpty)
+              if (totalAnnotationsCount > 0)
                 IconButton(
                   icon: const Icon(
                     CupertinoIcons.trash,
@@ -685,8 +937,6 @@ class _EditorScreenState extends State<EditorScreen>
                   child: InkWell(
                     borderRadius: BorderRadius.circular(12),
                     onTap: () {
-                      final totalItems =
-                          _strokes.length + _textAnnotations.length;
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
                           content: Row(
@@ -695,7 +945,7 @@ class _EditorScreenState extends State<EditorScreen>
                                   color: Colors.white, size: 18),
                               const SizedBox(width: 10),
                               Text(
-                                  'Saved $totalItems annotations to Supabase!'),
+                                  'Saved $totalAnnotationsCount annotations to Supabase!'),
                             ],
                           ),
                           backgroundColor: AppTheme.primaryPurpleDark,
@@ -801,7 +1051,7 @@ class _EditorScreenState extends State<EditorScreen>
 
                 const SizedBox(width: 4),
 
-                // 4. Add Image
+                // 4. Add Image (Gallery Picker + Resize)
                 _buildToolButton(
                   tool: AnnotationTool.addImage,
                   icon: CupertinoIcons.photo,
