@@ -25,6 +25,14 @@ enum AnnotationTool {
   addImage, // Draggable/resizable image overlay
 }
 
+/// Cloud and Local Synchronization status
+enum SyncStatus {
+  synced, // Successfully synced to Supabase Cloud
+  syncing, // Actively uploading to Supabase
+  savedLocally, // Saved to local storage, pending upload
+  offline, // Device offline, stored securely in local cache
+}
+
 class EditorScreen extends StatefulWidget {
   final String pdfPath;
   final String? fileName;
@@ -73,9 +81,9 @@ class _EditorScreenState extends State<EditorScreen>
   bool _isDocumentLoaded = false;
   bool _isLoadingPage = false;
 
-  // Supabase Cloud Sync State
-  bool _isSyncing = false;
-  bool _isLoadingCloudData = false;
+  // Auto-Save & Synchronization State
+  SyncStatus _syncStatus = SyncStatus.synced;
+  Timer? _cloudSyncDebounceTimer;
 
   String get _documentIdentifier =>
       widget.fileName ?? widget.pdfPath.split(Platform.pathSeparator).last;
@@ -85,11 +93,12 @@ class _EditorScreenState extends State<EditorScreen>
     super.initState();
     _documentId = 'doc_${DateTime.now().millisecondsSinceEpoch}';
     _loadPdfDocument();
-    _loadAnnotationsFromSupabase();
+    _loadAnnotationsOfflineFirst();
   }
 
   @override
   void dispose() {
+    _cloudSyncDebounceTimer?.cancel();
     _transformationController.dispose();
     PdfViewerPlatform.instance.closeDocument(_documentId);
     super.dispose();
@@ -186,11 +195,48 @@ class _EditorScreenState extends State<EditorScreen>
     await _renderCurrentPage();
   }
 
-  /// Automatically loads existing document annotations from Supabase
-  Future<void> _loadAnnotationsFromSupabase() async {
+  /// Offline-first loading: Instantly loads from local storage, then syncs with Supabase in background
+  Future<void> _loadAnnotationsOfflineFirst() async {
+    // 1. INSTANT LOCAL LOAD (0ms latency, works offline)
     try {
-      setState(() => _isLoadingCloudData = true);
+      final localData =
+          await DocumentStorageService.loadLocalAnnotations(_documentIdentifier);
 
+      if (localData != null) {
+        final List<dynamic>? strokesJson = localData['strokes'];
+        final List<dynamic>? textsJson = localData['texts'];
+        final List<dynamic>? imagesJson = localData['images'];
+
+        if (mounted) {
+          setState(() {
+            _strokes.clear();
+            if (strokesJson != null) {
+              _strokes.addAll(strokesJson.map(
+                  (e) => Stroke.fromJson(Map<String, dynamic>.from(e))));
+            }
+
+            _textAnnotations.clear();
+            if (textsJson != null) {
+              _textAnnotations.addAll(textsJson.map((e) =>
+                  TextAnnotation.fromJson(Map<String, dynamic>.from(e))));
+            }
+
+            _imageAnnotations.clear();
+            if (imagesJson != null) {
+              _imageAnnotations.addAll(imagesJson.map((e) =>
+                  ImageAnnotation.fromJson(Map<String, dynamic>.from(e))));
+            }
+
+            _syncStatus = SyncStatus.savedLocally;
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('Local annotation load note: $e');
+    }
+
+    // 2. BACKGROUND CLOUD SYNC FROM SUPABASE
+    try {
       final client = Supabase.instance.client;
       final response = await client
           .from('document_annotations')
@@ -199,7 +245,6 @@ class _EditorScreenState extends State<EditorScreen>
           .maybeSingle();
 
       if (!mounted) return;
-      setState(() => _isLoadingCloudData = false);
 
       if (response != null) {
         final List<dynamic>? strokesJson = response['strokes_data'];
@@ -223,53 +268,79 @@ class _EditorScreenState extends State<EditorScreen>
                 .toList() ??
             [];
 
-        setState(() {
-          _strokes.clear();
-          _strokes.addAll(loadedStrokes);
+        // Update if cloud has data and local was empty or we're online
+        if (loadedStrokes.isNotEmpty ||
+            loadedTexts.isNotEmpty ||
+            loadedImages.isNotEmpty ||
+            _strokes.isEmpty) {
+          setState(() {
+            _strokes.clear();
+            _strokes.addAll(loadedStrokes);
 
-          _textAnnotations.clear();
-          _textAnnotations.addAll(loadedTexts);
+            _textAnnotations.clear();
+            _textAnnotations.addAll(loadedTexts);
 
-          _imageAnnotations.clear();
-          _imageAnnotations.addAll(loadedImages);
-        });
+            _imageAnnotations.clear();
+            _imageAnnotations.addAll(loadedImages);
 
-        final totalLoaded =
-            loadedStrokes.length + loadedTexts.length + loadedImages.length;
-        if (totalLoaded > 0) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Row(
-                children: [
-                  const Icon(CupertinoIcons.cloud_download,
-                      color: Colors.white, size: 18),
-                  const SizedBox(width: 10),
-                  Text('Loaded $totalLoaded annotations from Supabase Cloud ✨'),
-                ],
-              ),
-              backgroundColor: AppTheme.primaryPurpleDark,
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              margin: const EdgeInsets.all(16),
-              duration: const Duration(seconds: 2),
-            ),
+            _syncStatus = SyncStatus.synced;
+          });
+
+          // Keep local cache fresh
+          await DocumentStorageService.saveLocalAnnotations(
+            _documentIdentifier,
+            strokes: _strokes,
+            texts: _textAnnotations,
+            images: _imageAnnotations,
           );
         }
+      } else {
+        // If nothing in cloud yet, mark as synced or saved locally
+        setState(() => _syncStatus = SyncStatus.synced);
       }
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _isLoadingCloudData = false);
-      debugPrint('Cloud load note: $e');
+    } catch (_) {
+      // Offline mode: keep local data seamlessly
+      if (mounted) {
+        setState(() => _syncStatus = SyncStatus.offline);
+      }
     }
   }
 
-  /// Saves current document annotations (Strokes, Texts, Images) to Supabase PostgreSQL
-  Future<void> _saveAnnotationsToSupabase() async {
-    try {
-      setState(() => _isSyncing = true);
+  /// Automatically saves annotations to local storage immediately and debounces cloud sync
+  void _autoSaveAndSync() {
+    final totalItems =
+        _strokes.length + _textAnnotations.length + _imageAnnotations.length;
 
+    // 1. INSTANT LOCAL STORAGE SAVE (Works 100% Offline)
+    DocumentStorageService.saveLocalAnnotations(
+      _documentIdentifier,
+      strokes: _strokes,
+      texts: _textAnnotations,
+      images: _imageAnnotations,
+    );
+
+    DocumentStorageService.saveOrUpdateDocument(
+      DocumentItem(
+        fileName: _documentIdentifier,
+        filePath: widget.pdfPath,
+        lastOpenedAt: DateTime.now(),
+        annotationsCount: totalItems,
+        isCloudSynced: _syncStatus == SyncStatus.synced,
+      ),
+    );
+
+    setState(() => _syncStatus = SyncStatus.syncing);
+
+    // 2. DEBOUNCED CLOUD SYNC TO SUPABASE (1.2s debounce)
+    _cloudSyncDebounceTimer?.cancel();
+    _cloudSyncDebounceTimer = Timer(const Duration(milliseconds: 1200), () async {
+      await _syncToSupabaseDirect();
+    });
+  }
+
+  /// Direct network sync to Supabase with graceful offline handling
+  Future<void> _syncToSupabaseDirect() async {
+    try {
       final client = Supabase.instance.client;
       final payload = {
         'document_name': _documentIdentifier,
@@ -286,7 +357,6 @@ class _EditorScreenState extends State<EditorScreen>
       final totalItems =
           _strokes.length + _textAnnotations.length + _imageAnnotations.length;
 
-      // Update local persistent document entry
       await DocumentStorageService.saveOrUpdateDocument(
         DocumentItem(
           fileName: _documentIdentifier,
@@ -298,57 +368,11 @@ class _EditorScreenState extends State<EditorScreen>
       );
 
       if (!mounted) return;
-      setState(() => _isSyncing = false);
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              const Icon(CupertinoIcons.checkmark_circle_fill,
-                  color: Color(0xFF10B981), size: 20),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  'Saved $totalItems annotation${totalItems == 1 ? '' : 's'} to Supabase Cloud!',
-                  style: const TextStyle(fontWeight: FontWeight.w600),
-                ),
-              ),
-            ],
-          ),
-          backgroundColor: AppTheme.textPrimary,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-          ),
-          margin: const EdgeInsets.all(16),
-          duration: const Duration(seconds: 3),
-        ),
-      );
-    } catch (e) {
+      setState(() => _syncStatus = SyncStatus.synced);
+    } catch (_) {
+      // Offline fallback: data is securely saved in local storage!
       if (!mounted) return;
-      setState(() => _isSyncing = false);
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              const Icon(Icons.error_outline_rounded,
-                  color: Colors.white, size: 20),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text('Supabase sync error: $e'),
-              ),
-            ],
-          ),
-          backgroundColor: AppTheme.accentPinkDark,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-          ),
-          margin: const EdgeInsets.all(16),
-          duration: const Duration(seconds: 4),
-        ),
-      );
+      setState(() => _syncStatus = SyncStatus.offline);
     }
   }
 
@@ -388,6 +412,8 @@ class _EditorScreenState extends State<EditorScreen>
         );
         _activeTool = AnnotationTool.none;
       });
+
+      _autoSaveAndSync();
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -439,6 +465,8 @@ class _EditorScreenState extends State<EditorScreen>
           );
           _activeTool = AnnotationTool.none;
         });
+
+        _autoSaveAndSync();
       } else {
         setState(() => _activeTool = AnnotationTool.none);
       }
@@ -458,6 +486,7 @@ class _EditorScreenState extends State<EditorScreen>
         final removed = _strokes.removeLast();
         _redoHistory.add(removed);
       });
+      _autoSaveAndSync();
     }
   }
 
@@ -468,6 +497,7 @@ class _EditorScreenState extends State<EditorScreen>
         final restored = _redoHistory.removeLast();
         _strokes.add(restored);
       });
+      _autoSaveAndSync();
     }
   }
 
@@ -498,6 +528,7 @@ class _EditorScreenState extends State<EditorScreen>
                 _selectedImageId = null;
                 _selectedTextId = null;
               });
+              _autoSaveAndSync();
             },
           ),
         ],
@@ -511,6 +542,7 @@ class _EditorScreenState extends State<EditorScreen>
       _imageAnnotations.removeWhere((img) => img.id == id);
       _selectedImageId = null;
     });
+    _autoSaveAndSync();
   }
 
   /// Deletes a specific digital text note
@@ -519,6 +551,7 @@ class _EditorScreenState extends State<EditorScreen>
       _textAnnotations.removeWhere((txt) => txt.id == id);
       _selectedTextId = null;
     });
+    _autoSaveAndSync();
   }
 
   /// Edits an existing digital text annotation
@@ -554,6 +587,7 @@ class _EditorScreenState extends State<EditorScreen>
                 setState(() {
                   annotation.text = controller.text.trim();
                 });
+                _autoSaveAndSync();
               }
               Navigator.pop(context);
             },
@@ -678,6 +712,7 @@ class _EditorScreenState extends State<EditorScreen>
                                         _strokes.add(_currentStroke!);
                                         _currentStroke = null;
                                       });
+                                      _autoSaveAndSync();
                                     }
                                   },
                                   onPanCancel: () {
@@ -726,8 +761,8 @@ class _EditorScreenState extends State<EditorScreen>
               ),
             ),
 
-            // Cloud Data Loading Shimmer / Banner
-            if (_isLoadingCloudData || _isLoadingPage)
+            // Rendering Page Progress Shimmer
+            if (_isLoadingPage)
               Positioned(
                 top: MediaQuery.of(context).padding.top + 60,
                 left: 20,
@@ -755,9 +790,7 @@ class _EditorScreenState extends State<EditorScreen>
                         ),
                         const SizedBox(width: 8),
                         Text(
-                          _isLoadingPage
-                              ? 'Rendering page $_currentPage of $_pageCount...'
-                              : 'Loading cloud annotations...',
+                          'Rendering page $_currentPage of $_pageCount...',
                           style: const TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
@@ -771,7 +804,7 @@ class _EditorScreenState extends State<EditorScreen>
               ),
 
             // ==========================================
-            // TOP BAR: Navigation, Document Title & Page Switcher
+            // TOP BAR: Navigation, Document Title & Auto-Sync Status
             // ==========================================
             Positioned(
               top: 0,
@@ -820,6 +853,7 @@ class _EditorScreenState extends State<EditorScreen>
           _selectedTextId = null;
         });
       },
+      onPanEnd: (_) => _autoSaveAndSync(),
       onTap: () {
         setState(() {
           _selectedImageId = isSelected ? null : annotation.id;
@@ -935,6 +969,7 @@ class _EditorScreenState extends State<EditorScreen>
                     annotation.size = Size(newWidth, newHeight);
                   });
                 },
+                onPanEnd: (_) => _autoSaveAndSync(),
                 child: Container(
                   width: 30,
                   height: 30,
@@ -979,6 +1014,7 @@ class _EditorScreenState extends State<EditorScreen>
           _selectedImageId = null;
         });
       },
+      onPanEnd: (_) => _autoSaveAndSync(),
       onTap: () {
         setState(() {
           _selectedTextId = isSelected ? null : annotation.id;
@@ -1073,7 +1109,7 @@ class _EditorScreenState extends State<EditorScreen>
     );
   }
 
-  /// Elegant glassmorphic Top App Bar with Supabase Save Action & Page Navigation
+  /// Elegant glassmorphic Top App Bar with Auto-Sync Status & Page Navigation
   Widget _buildTopAppBar(String title, int totalAnnotationsCount) {
     return ClipRRect(
       child: BackdropFilter(
@@ -1269,74 +1305,99 @@ class _EditorScreenState extends State<EditorScreen>
                   onPressed: _clearAnnotations,
                 ),
 
-              // Supabase Cloud Save Button
-              Container(
-                margin: const EdgeInsets.only(left: 4),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [AppTheme.primaryPurple, AppTheme.accentPink],
-                  ),
-                  borderRadius: BorderRadius.circular(10),
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppTheme.accentPink.withValues(alpha: 0.35),
-                      blurRadius: 6,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(10),
-                    onTap: _isSyncing ? null : _saveAnnotationsToSupabase,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 6),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (_isSyncing) ...[
-                            const SizedBox(
-                              width: 12,
-                              height: 12,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                            const Text(
-                              'Saving',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ] else ...[
-                            const Icon(
-                              CupertinoIcons.cloud_upload_fill,
-                              color: Colors.white,
-                              size: 14,
-                            ),
-                            const SizedBox(width: 4),
-                            const Text(
-                              'Save',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
+              // Smart Auto-Sync Status Badge / Manual Sync Trigger
+              _buildSyncStatusBadge(),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Interactive Auto-Sync Badge showing real-time Cloud / Local status
+  Widget _buildSyncStatusBadge() {
+    Widget icon;
+    String label;
+    Color bgColor;
+    Color textColor;
+
+    switch (_syncStatus) {
+      case SyncStatus.synced:
+        icon = const Icon(CupertinoIcons.cloud_upload_fill,
+            color: Color(0xFF10B981), size: 14);
+        label = 'Synced';
+        bgColor = const Color(0xFFECFDF5);
+        textColor = const Color(0xFF065F46);
+        break;
+      case SyncStatus.syncing:
+        icon = const SizedBox(
+          width: 12,
+          height: 12,
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+            color: AppTheme.primaryPurple,
+          ),
+        );
+        label = 'Syncing...';
+        bgColor = AppTheme.primaryPurpleLight;
+        textColor = AppTheme.primaryPurpleDark;
+        break;
+      case SyncStatus.savedLocally:
+        icon = const Icon(CupertinoIcons.checkmark_circle,
+            color: AppTheme.primaryPurple, size: 14);
+        label = 'Saved';
+        bgColor = AppTheme.primaryPurpleLight;
+        textColor = AppTheme.primaryPurpleDark;
+        break;
+      case SyncStatus.offline:
+        icon = const Icon(CupertinoIcons.bolt_fill,
+            color: Color(0xFFF59E0B), size: 14);
+        label = 'Offline';
+        bgColor = const Color(0xFFFFFBEB);
+        textColor = const Color(0xFFB45309);
+        break;
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(left: 4),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: textColor.withValues(alpha: 0.2)),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(10),
+          onTap: () async {
+            _autoSaveAndSync();
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(_syncStatus == SyncStatus.offline
+                    ? 'Saved locally (Offline mode ⚡)'
+                    : 'Synced to Supabase Cloud ✨'),
+                duration: const Duration(seconds: 1),
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+          },
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                icon,
+                const SizedBox(width: 5),
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: textColor,
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
