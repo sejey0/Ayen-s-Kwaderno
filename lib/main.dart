@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'screens/home_screen.dart';
 import 'theme/app_theme.dart';
@@ -18,15 +19,27 @@ Future<void> main() async {
     ),
   );
 
-  // Initialize Supabase with your project credentials
-  // Replace these placeholders with your actual Supabase URL & Anon Key
+  // Load environment variables from .env file
+  try {
+    await dotenv.load(fileName: ".env");
+  } catch (e) {
+    debugPrint('Dotenv load notice: $e');
+  }
+
+  // Read Supabase credentials from dotenv
+  final supabaseUrl = dotenv.env['SUPABASE_URL'] ??
+      'https://cncvlmpysgueyrwgkupm.supabase.co';
+  final supabaseAnonKey = dotenv.env['SUPABASE_ANON_KEY'] ?? '';
+
+  // Initialize Supabase with credentials
   try {
     await Supabase.initialize(
-      url: 'https://YOUR_SUPABASE_PROJECT_ID.supabase.co',
-      anonKey: 'YOUR_SUPABASE_ANON_KEY', // ignore: deprecated_member_use
+      url: supabaseUrl,
+      // ignore: deprecated_member_use
+      anonKey: supabaseAnonKey,
     );
   } catch (e) {
-    debugPrint('Supabase initialization notice: $e');
+    debugPrint('Supabase initialization error: $e');
   }
 
   runApp(const AyensKwadernoApp());
