@@ -9,6 +9,7 @@ import '../models/handwriting_note_model.dart';
 import '../services/document_storage_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/handwriting_canvas.dart';
+import '../widgets/pdf_thumbnail_widget.dart';
 import '../widgets/upload_document_dialog.dart';
 import 'editor_screen.dart';
 
@@ -1283,11 +1284,18 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  /// Study Notebook Card (PDF Documents)
+  /// Study Notebook Card (PDF & Image Documents)
   Widget _buildNotebookCard(DocumentItem doc) {
     final palette = _coverPalettes[doc.paletteIndex % _coverPalettes.length];
     final color = palette['color']!;
     final accent = palette['accent']!;
+
+    final pathLower = (doc.filePath ?? '').toLowerCase();
+    final isImg = pathLower.endsWith('.png') ||
+        pathLower.endsWith('.jpg') ||
+        pathLower.endsWith('.jpeg') ||
+        pathLower.endsWith('.webp') ||
+        pathLower.endsWith('.bmp');
 
     return GestureDetector(
       onTap: () => _openDocument(doc),
@@ -1305,22 +1313,23 @@ class _HomeScreenState extends State<HomeScreen> {
             Expanded(
               child: Stack(
                 children: [
-                  Container(
-                    decoration: BoxDecoration(
-                      color: color,
+                  // Real Content Preview of PDF page 1 or Image
+                  Positioned.fill(
+                    child: ClipRRect(
                       borderRadius: const BorderRadius.only(
                         topLeft: Radius.circular(19),
                         topRight: Radius.circular(19),
                       ),
-                    ),
-                    child: Center(
-                      child: Icon(
-                        CupertinoIcons.doc_text_fill,
-                        size: 44,
-                        color: accent.withValues(alpha: 0.7),
+                      child: DocumentThumbnailPreview(
+                        filePath: doc.filePath,
+                        fileName: doc.fileName,
+                        backgroundColor: color,
+                        accentColor: accent,
                       ),
                     ),
                   ),
+
+                  // Notebook Spine Binding Effect
                   Positioned(
                     left: 0,
                     top: 0,
@@ -1328,13 +1337,38 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: Container(
                       width: 14,
                       decoration: BoxDecoration(
-                        color: accent.withValues(alpha: 0.25),
+                        color: accent.withValues(alpha: 0.35),
                         borderRadius: const BorderRadius.only(
                           topLeft: Radius.circular(19),
                         ),
                       ),
                     ),
                   ),
+
+                  // Format Badge (PDF or IMAGE)
+                  Positioned(
+                    top: 8,
+                    left: 18,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 5, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.6),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        isImg ? 'IMG' : 'PDF',
+                        style: const TextStyle(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white,
+                          letterSpacing: 0.4,
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  // Cloud Synced Badge
                   if (doc.isCloudSynced)
                     Positioned(
                       top: 8,
@@ -1343,11 +1377,11 @@ class _HomeScreenState extends State<HomeScreen> {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 6, vertical: 3),
                         decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.9),
+                          color: Colors.white.withValues(alpha: 0.95),
                           borderRadius: BorderRadius.circular(12),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.06),
+                              color: Colors.black.withValues(alpha: 0.08),
                               blurRadius: 4,
                             ),
                           ],
