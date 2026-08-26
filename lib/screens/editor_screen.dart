@@ -1,10 +1,13 @@
+import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
 import 'dart:ui';
+import 'dart:ui' as ui;
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
+import 'package:syncfusion_pdfviewer_platform_interface/pdfviewer_platform_interface.dart';
 import '../models/document_item_model.dart';
 import '../models/image_annotation_model.dart';
 import '../models/stroke_model.dart';
@@ -15,7 +18,7 @@ import '../widgets/handwriting_canvas.dart';
 
 /// Supported annotation tool types
 enum AnnotationTool {
-  none, // Pan & Scroll Mode
+  none, // Pan & Zoom Navigation Mode
   highlighter, // Semi-transparent highlighter drawing
   straightLine, // Auto-straightened coordinate lines
   handwritingText, // Google ML Kit digital ink canvas
@@ -38,8 +41,8 @@ class EditorScreen extends StatefulWidget {
 
 class _EditorScreenState extends State<EditorScreen>
     with SingleTickerProviderStateMixin {
-  late PdfViewerController _pdfViewerController;
-  final GlobalKey<SfPdfViewerState> _pdfViewerKey = GlobalKey();
+  final TransformationController _transformationController =
+      TransformationController();
   final ImagePicker _imagePicker = ImagePicker();
 
   // Active annotation tool state
@@ -47,7 +50,7 @@ class _EditorScreenState extends State<EditorScreen>
   Color _selectedColor = AppTheme.highlighterColors[0];
   double _strokeWidth = 14.0;
 
-  // Drawing strokes state (Coordinates stored in PDF document space)
+  // Drawing strokes state
   final List<Stroke> _strokes = [];
   final List<Stroke> _redoHistory = [];
   Stroke? _currentStroke;
@@ -60,10 +63,15 @@ class _EditorScreenState extends State<EditorScreen>
   final List<ImageAnnotation> _imageAnnotations = [];
   String? _selectedImageId;
 
-  // Document page state
+  // PDF Page Engine State
+  late final String _documentId;
   int _currentPage = 1;
   int _pageCount = 1;
+  double _pageWidth = 595.0;
+  double _pageHeight = 842.0;
+  ui.Image? _renderedPageUiImage;
   bool _isDocumentLoaded = false;
+  bool _isLoadingPage = false;
 
   // Supabase Cloud Sync State
   bool _isSyncing = false;
@@ -75,23 +83,107 @@ class _EditorScreenState extends State<EditorScreen>
   @override
   void initState() {
     super.initState();
-    _pdfViewerController = PdfViewerController();
-    _pdfViewerController.addListener(_onViewerStateChanged);
+    _documentId = 'doc_${DateTime.now().millisecondsSinceEpoch}';
+    _loadPdfDocument();
     _loadAnnotationsFromSupabase();
   }
 
   @override
   void dispose() {
-    _pdfViewerController.removeListener(_onViewerStateChanged);
-    _pdfViewerController.dispose();
+    _transformationController.dispose();
+    PdfViewerPlatform.instance.closeDocument(_documentId);
     super.dispose();
   }
 
-  /// Listens to PDF scroll offset and zoom level changes to re-render overlay in real-time
-  void _onViewerStateChanged() {
-    if (mounted) {
-      setState(() {});
+  /// Converts raw RGBA pixel buffer into Flutter's native ui.Image
+  Future<ui.Image> _createUiImage(Uint8List pixels, int width, int height) {
+    final Completer<ui.Image> completer = Completer<ui.Image>();
+    ui.decodeImageFromPixels(
+      pixels,
+      width,
+      height,
+      ui.PixelFormat.rgba8888,
+      (ui.Image image) {
+        completer.complete(image);
+      },
+    );
+    return completer.future;
+  }
+
+  /// Initializes PDF Renderer and loads page dimensions
+  Future<void> _loadPdfDocument() async {
+    try {
+      setState(() => _isLoadingPage = true);
+
+      final platform = PdfViewerPlatform.instance;
+      final pageCountResult =
+          await platform.loadPdfFromFile(widget.pdfPath, _documentId);
+
+      _pageCount = int.tryParse(pageCountResult ?? '1') ?? 1;
+
+      final widths = await platform.getPagesWidth(_documentId);
+      final heights = await platform.getPagesHeight(_documentId);
+
+      if (widths != null && widths.isNotEmpty) {
+        _pageWidth = (widths[0] as num).toDouble();
+      }
+      if (heights != null && heights.isNotEmpty) {
+        _pageHeight = (heights[0] as num).toDouble();
+      }
+
+      await _renderCurrentPage();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isLoadingPage = false);
+      debugPrint('Error loading PDF: $e');
     }
+  }
+
+  /// Renders the active PDF page to high-definition bitmap bytes
+  Future<void> _renderCurrentPage() async {
+    try {
+      setState(() => _isLoadingPage = true);
+
+      final platform = PdfViewerPlatform.instance;
+      const int targetWidth = 1400;
+      final int targetHeight = (_pageHeight > 0 && _pageWidth > 0)
+          ? (1400 * _pageHeight / _pageWidth).toInt()
+          : 1980;
+
+      final bytes = await platform.getPage(
+        _currentPage,
+        targetWidth,
+        targetHeight,
+        _documentId,
+      );
+
+      if (!mounted) return;
+
+      if (bytes != null) {
+        final uiImage = await _createUiImage(bytes, targetWidth, targetHeight);
+        if (!mounted) return;
+        setState(() {
+          _renderedPageUiImage = uiImage;
+          _isDocumentLoaded = true;
+          _isLoadingPage = false;
+        });
+      } else {
+        setState(() => _isLoadingPage = false);
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isLoadingPage = false);
+      debugPrint('Error rendering page: $e');
+    }
+  }
+
+  /// Changes the visible page
+  Future<void> _goToPage(int page) async {
+    if (page < 1 || page > _pageCount || page == _currentPage) return;
+    setState(() {
+      _currentPage = page;
+    });
+    await _renderCurrentPage();
   }
 
   /// Automatically loads existing document annotations from Supabase
@@ -169,7 +261,7 @@ class _EditorScreenState extends State<EditorScreen>
     } catch (e) {
       if (!mounted) return;
       setState(() => _isLoadingCloudData = false);
-      debugPrint('Cloud load note (offline or new doc): $e');
+      debugPrint('Cloud load note: $e');
     }
   }
 
@@ -260,16 +352,6 @@ class _EditorScreenState extends State<EditorScreen>
     }
   }
 
-  /// Converts screen touch position to document-space coordinates
-  Offset _screenToDocument(Offset screenPoint) {
-    final double zoom = _pdfViewerController.zoomLevel.clamp(0.5, 5.0);
-    final Offset scroll = _pdfViewerController.scrollOffset;
-    return Offset(
-      (screenPoint.dx + scroll.dx) / zoom,
-      (screenPoint.dy + scroll.dy) / zoom,
-    );
-  }
-
   /// Changes the active annotation tool mode
   void _onToolSelected(AnnotationTool tool) {
     setState(() {
@@ -287,31 +369,17 @@ class _EditorScreenState extends State<EditorScreen>
 
   /// Launches Google ML Kit Handwriting Canvas Bottom Sheet
   Future<void> _launchHandwritingRecognitionDialog() async {
-    final screenSize = MediaQuery.of(context).size;
     final recognizedText = await HandwritingCanvasDialog.show(context);
 
     if (!mounted) return;
 
     if (recognizedText != null && recognizedText.trim().isNotEmpty) {
-      // Position the converted text in document space at center of current view
-      final double zoom = _pdfViewerController.zoomLevel.clamp(0.5, 5.0);
-      final Offset scroll = _pdfViewerController.scrollOffset;
-
-      final Offset screenCenter = Offset(
-        screenSize.width * 0.15,
-        screenSize.height * 0.35,
-      );
-
-      final Offset docPos = Offset(
-        (screenCenter.dx + scroll.dx) / zoom,
-        (screenCenter.dy + scroll.dy) / zoom,
-      );
-
+      final screenSize = MediaQuery.of(context).size;
       setState(() {
         _textAnnotations.add(
           TextAnnotation(
             text: recognizedText.trim(),
-            position: docPos,
+            position: Offset(screenSize.width * 0.15, screenSize.height * 0.35),
             fontSize: 16.0,
             color: _selectedColor == AppTheme.highlighterColors[0]
                 ? AppTheme.textPrimary
@@ -353,32 +421,20 @@ class _EditorScreenState extends State<EditorScreen>
   /// Opens gallery to insert a sticker / photo onto the PDF
   Future<void> _pickAndInsertImage() async {
     try {
-      final screenSize = MediaQuery.of(context).size;
       final XFile? image =
           await _imagePicker.pickImage(source: ImageSource.gallery);
 
       if (!mounted) return;
 
       if (image != null) {
-        final double zoom = _pdfViewerController.zoomLevel.clamp(0.5, 5.0);
-        final Offset scroll = _pdfViewerController.scrollOffset;
-
-        final Offset screenCenter = Offset(
-          screenSize.width / 2 - 90,
-          screenSize.height / 2 - 90,
-        );
-
-        final Offset docPos = Offset(
-          (screenCenter.dx + scroll.dx) / zoom,
-          (screenCenter.dy + scroll.dy) / zoom,
-        );
-
+        final screenSize = MediaQuery.of(context).size;
         setState(() {
           _imageAnnotations.add(
             ImageAnnotation(
               imagePath: image.path,
-              position: docPos,
-              size: const Size(180, 180),
+              position:
+                  Offset(screenSize.width / 2 - 80, screenSize.height / 2 - 80),
+              size: const Size(160, 160),
             ),
           );
           _activeTool = AnnotationTool.none;
@@ -514,152 +570,164 @@ class _EditorScreenState extends State<EditorScreen>
     final totalAnnotationsCount =
         _strokes.length + _textAnnotations.length + _imageAnnotations.length;
 
-    final double zoom = _pdfViewerController.zoomLevel.clamp(0.5, 5.0);
-    final Offset scroll = _pdfViewerController.scrollOffset;
-
     return Scaffold(
-      backgroundColor: AppTheme.background,
+      backgroundColor: const Color(0xFFF3F4F6),
       body: SafeArea(
         top: false,
         child: Stack(
           children: [
             // ==========================================
-            // BASE LAYER: Syncfusion PDF Viewer
+            // INTEGRATED HD PDF CANVAS & INTERACTIVE VIEWER
+            // (PDF and Annotations share the EXACT same GPU container)
             // ==========================================
             Positioned.fill(
-              child: SfPdfViewer.file(
-                File(widget.pdfPath),
-                key: _pdfViewerKey,
-                controller: _pdfViewerController,
-                canShowScrollHead: false,
-                canShowScrollStatus: false,
-                canShowPaginationDialog: false,
-                enableDoubleTapZooming: _activeTool == AnnotationTool.none,
-                onDocumentLoaded: (PdfDocumentLoadedDetails details) {
-                  setState(() {
-                    _pageCount = details.document.pages.count;
-                    _isDocumentLoaded = true;
-                  });
-                },
-                onPageChanged: (PdfPageChangedDetails details) {
-                  setState(() {
-                    _currentPage = details.newPageNumber;
-                  });
-                },
-                onZoomLevelChanged: (PdfZoomDetails details) {
-                  if (mounted) {
-                    setState(() {});
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final screenW = constraints.maxWidth;
+                  final screenH = constraints.maxHeight;
+
+                  final double pageAspect =
+                      (_pageWidth > 0 && _pageHeight > 0)
+                          ? _pageWidth / _pageHeight
+                          : (595.0 / 842.0);
+
+                  double displayW = screenW;
+                  double displayH = screenW / pageAspect;
+
+                  // If height is smaller than available viewport, fit nicely
+                  if (displayH > screenH * 0.95 && screenH > 200) {
+                    displayH = screenH * 0.95;
+                    displayW = displayH * pageAspect;
                   }
+
+                  return InteractiveViewer(
+                    transformationController: _transformationController,
+                    minScale: 1.0,
+                    maxScale: 6.0,
+                    panEnabled: _activeTool == AnnotationTool.none,
+                    scaleEnabled: _activeTool == AnnotationTool.none,
+                    clipBehavior: Clip.hardEdge,
+                    child: Center(
+                      child: Container(
+                        width: displayW,
+                        height: displayH,
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(4),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFF1E1B4B)
+                                  .withValues(alpha: 0.14),
+                              blurRadius: 18,
+                              offset: const Offset(0, 6),
+                            ),
+                          ],
+                        ),
+                        child: Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            // 1. HD Rendered PDF Page Image
+                            if (_renderedPageUiImage != null)
+                              RawImage(
+                                image: _renderedPageUiImage!,
+                                width: displayW,
+                                height: displayH,
+                                fit: BoxFit.fill,
+                              )
+                            else
+                              const Center(
+                                child: CircularProgressIndicator(
+                                  color: AppTheme.primaryPurple,
+                                ),
+                              ),
+
+                            // 2. Annotation & Drawing Canvas
+                            Positioned.fill(
+                              child: IgnorePointer(
+                                ignoring: _activeTool == AnnotationTool.none,
+                                child: GestureDetector(
+                                  behavior: HitTestBehavior.translucent,
+                                  onPanStart: (DragStartDetails details) {
+                                    if (_activeTool ==
+                                            AnnotationTool.highlighter ||
+                                        _activeTool ==
+                                            AnnotationTool.straightLine) {
+                                      setState(() {
+                                        _redoHistory.clear();
+                                        _currentStroke = Stroke(
+                                          points: [details.localPosition],
+                                          color: _selectedColor,
+                                          strokeWidth: _strokeWidth,
+                                          isStraightLine: _activeTool ==
+                                              AnnotationTool.straightLine,
+                                        );
+                                      });
+                                    }
+                                  },
+                                  onPanUpdate: (DragUpdateDetails details) {
+                                    if (_currentStroke != null) {
+                                      setState(() {
+                                        _currentStroke!.points
+                                            .add(details.localPosition);
+                                      });
+                                    }
+                                  },
+                                  onPanEnd: (DragEndDetails details) {
+                                    if (_currentStroke != null) {
+                                      setState(() {
+                                        _strokes.add(_currentStroke!);
+                                        _currentStroke = null;
+                                      });
+                                    }
+                                  },
+                                  onPanCancel: () {
+                                    if (_currentStroke != null) {
+                                      setState(() {
+                                        _currentStroke = null;
+                                      });
+                                    }
+                                  },
+                                  child: CustomPaint(
+                                    painter: BaseAnnotationPainter(
+                                      strokes: _strokes,
+                                      currentStroke: _currentStroke,
+                                      activeTool: _activeTool,
+                                    ),
+                                    size: Size.infinite,
+                                  ),
+                                ),
+                              ),
+                            ),
+
+                            // 3. Image Stickers (Photos)
+                            ..._imageAnnotations.map((annotation) {
+                              return Positioned(
+                                left: annotation.position.dx,
+                                top: annotation.position.dy,
+                                child: _buildDraggableResizableImageWidget(
+                                    annotation),
+                              );
+                            }),
+
+                            // 4. Digital Text Notes (Handwriting)
+                            ..._textAnnotations.map((annotation) {
+                              return Positioned(
+                                left: annotation.position.dx,
+                                top: annotation.position.dy,
+                                child: _buildDraggableTextWidget(annotation),
+                              );
+                            }),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
                 },
               ),
             ),
-
-            // ==========================================
-            // ANNOTATION LAYER: GestureDetector & CustomPaint
-            // (Document-space coordinate bound overlay)
-            // ==========================================
-            Positioned.fill(
-              child: IgnorePointer(
-                // In 'none' mode, let gestures pass through to PDF Viewer for pan & pinch-zoom
-                ignoring: _activeTool == AnnotationTool.none,
-                child: GestureDetector(
-                  behavior: HitTestBehavior.translucent,
-                  onPanStart: (DragStartDetails details) {
-                    if (_activeTool == AnnotationTool.highlighter ||
-                        _activeTool == AnnotationTool.straightLine) {
-                      final docPoint = _screenToDocument(details.localPosition);
-                      final currentZoom =
-                          _pdfViewerController.zoomLevel.clamp(0.5, 5.0);
-
-                      setState(() {
-                        _redoHistory.clear();
-                        _currentStroke = Stroke(
-                          points: [docPoint],
-                          color: _selectedColor,
-                          strokeWidth: _strokeWidth / currentZoom,
-                          isStraightLine:
-                              _activeTool == AnnotationTool.straightLine,
-                        );
-                      });
-                    }
-                  },
-                  onPanUpdate: (DragUpdateDetails details) {
-                    if (_currentStroke != null) {
-                      final docPoint = _screenToDocument(details.localPosition);
-                      setState(() {
-                        _currentStroke!.points.add(docPoint);
-                      });
-                    }
-                  },
-                  onPanEnd: (DragEndDetails details) {
-                    if (_currentStroke != null) {
-                      setState(() {
-                        _strokes.add(_currentStroke!);
-                        _currentStroke = null;
-                      });
-                    }
-                  },
-                  onPanCancel: () {
-                    if (_currentStroke != null) {
-                      setState(() {
-                        _currentStroke = null;
-                      });
-                    }
-                  },
-                  child: CustomPaint(
-                    painter: BaseAnnotationPainter(
-                      strokes: _strokes,
-                      currentStroke: _currentStroke,
-                      activeTool: _activeTool,
-                      zoomLevel: zoom,
-                      scrollOffset: scroll,
-                    ),
-                    size: Size.infinite,
-                  ),
-                ),
-              ),
-            ),
-
-            // ==========================================
-            // IMAGE ANNOTATION LAYER: Scaled & Positioned Photos
-            // ==========================================
-            ..._imageAnnotations.map((annotation) {
-              final screenX = annotation.position.dx * zoom - scroll.dx;
-              final screenY = annotation.position.dy * zoom - scroll.dy;
-              final screenWidth = annotation.size.width * zoom;
-              final screenHeight = annotation.size.height * zoom;
-
-              return Positioned(
-                left: screenX,
-                top: screenY,
-                child: _buildDraggableResizableImageWidget(
-                  annotation,
-                  zoom: zoom,
-                  displayWidth: screenWidth,
-                  displayHeight: screenHeight,
-                ),
-              );
-            }),
-
-            // ==========================================
-            // TEXT ANNOTATION LAYER: Scaled Digital Text Notes
-            // ==========================================
-            ..._textAnnotations.map((annotation) {
-              final screenX = annotation.position.dx * zoom - scroll.dx;
-              final screenY = annotation.position.dy * zoom - scroll.dy;
-
-              return Positioned(
-                left: screenX,
-                top: screenY,
-                child: _buildDraggableTextWidget(
-                  annotation,
-                  zoom: zoom,
-                ),
-              );
-            }),
 
             // Cloud Data Loading Shimmer / Banner
-            if (_isLoadingCloudData)
+            if (_isLoadingCloudData || _isLoadingPage)
               Positioned(
                 top: MediaQuery.of(context).padding.top + 60,
                 left: 20,
@@ -674,10 +742,10 @@ class _EditorScreenState extends State<EditorScreen>
                       boxShadow: AppTheme.softShadow,
                       border: Border.all(color: AppTheme.dividerColor),
                     ),
-                    child: const Row(
+                    child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        SizedBox(
+                        const SizedBox(
                           width: 14,
                           height: 14,
                           child: CircularProgressIndicator(
@@ -685,10 +753,12 @@ class _EditorScreenState extends State<EditorScreen>
                             color: AppTheme.primaryPurple,
                           ),
                         ),
-                        SizedBox(width: 8),
+                        const SizedBox(width: 8),
                         Text(
-                          'Loading cloud annotations...',
-                          style: TextStyle(
+                          _isLoadingPage
+                              ? 'Rendering page $_currentPage of $_pageCount...'
+                              : 'Loading cloud annotations...',
+                          style: const TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
                             color: AppTheme.primaryPurpleDark,
@@ -701,7 +771,7 @@ class _EditorScreenState extends State<EditorScreen>
               ),
 
             // ==========================================
-            // TOP BAR: Navigation, Document Title & Page Status
+            // TOP BAR: Navigation, Document Title & Page Switcher
             // ==========================================
             Positioned(
               top: 0,
@@ -738,19 +808,14 @@ class _EditorScreenState extends State<EditorScreen>
     );
   }
 
-  /// Draggable & Resizable Image Sticker Widget with Zoom Scaling
-  Widget _buildDraggableResizableImageWidget(
-    ImageAnnotation annotation, {
-    required double zoom,
-    required double displayWidth,
-    required double displayHeight,
-  }) {
+  /// Draggable & Resizable Image Sticker Widget locked to PDF
+  Widget _buildDraggableResizableImageWidget(ImageAnnotation annotation) {
     final isSelected = _selectedImageId == annotation.id;
 
     return GestureDetector(
       onPanUpdate: (DragUpdateDetails details) {
         setState(() {
-          annotation.position += details.delta / zoom;
+          annotation.position += details.delta;
           _selectedImageId = annotation.id;
           _selectedTextId = null;
         });
@@ -766,11 +831,11 @@ class _EditorScreenState extends State<EditorScreen>
         children: [
           // Base Image Container
           AnimatedContainer(
-            duration: const Duration(milliseconds: 100),
-            width: displayWidth.clamp(30.0, 1200.0),
-            height: displayHeight.clamp(30.0, 1200.0),
+            duration: const Duration(milliseconds: 80),
+            width: annotation.size.width.clamp(30.0, 1200.0),
+            height: annotation.size.height.clamp(30.0, 1200.0),
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(16 * zoom.clamp(0.8, 1.5)),
+              borderRadius: BorderRadius.circular(16),
               border: Border.all(
                 color: isSelected
                     ? AppTheme.primaryPurple
@@ -788,7 +853,7 @@ class _EditorScreenState extends State<EditorScreen>
               ],
             ),
             child: ClipRRect(
-              borderRadius: BorderRadius.circular(14 * zoom.clamp(0.8, 1.5)),
+              borderRadius: BorderRadius.circular(14),
               child: Image.file(
                 File(annotation.imagePath),
                 fit: BoxFit.cover,
@@ -863,9 +928,9 @@ class _EditorScreenState extends State<EditorScreen>
                 behavior: HitTestBehavior.opaque,
                 onPanUpdate: (DragUpdateDetails details) {
                   setState(() {
-                    final newWidth = (annotation.size.width + details.delta.dx / zoom)
+                    final newWidth = (annotation.size.width + details.delta.dx)
                         .clamp(40.0, 800.0);
-                    final newHeight = (annotation.size.height + details.delta.dy / zoom)
+                    final newHeight = (annotation.size.height + details.delta.dy)
                         .clamp(40.0, 800.0);
                     annotation.size = Size(newWidth, newHeight);
                   });
@@ -902,17 +967,14 @@ class _EditorScreenState extends State<EditorScreen>
     );
   }
 
-  /// Draggable Digital Text Note Widget with Zoom Scaling
-  Widget _buildDraggableTextWidget(
-    TextAnnotation annotation, {
-    required double zoom,
-  }) {
+  /// Draggable Digital Text Note Widget locked to PDF
+  Widget _buildDraggableTextWidget(TextAnnotation annotation) {
     final isSelected = _selectedTextId == annotation.id;
 
     return GestureDetector(
       onPanUpdate: (DragUpdateDetails details) {
         setState(() {
-          annotation.position += details.delta / zoom;
+          annotation.position += details.delta;
           _selectedTextId = annotation.id;
           _selectedImageId = null;
         });
@@ -924,15 +986,15 @@ class _EditorScreenState extends State<EditorScreen>
         });
       },
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 100),
-        padding: EdgeInsets.symmetric(
-          horizontal: 12 * zoom.clamp(0.8, 1.6),
-          vertical: 8 * zoom.clamp(0.8, 1.6),
+        duration: const Duration(milliseconds: 80),
+        padding: const EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: 8,
         ),
-        constraints: BoxConstraints(maxWidth: 280 * zoom),
+        constraints: const BoxConstraints(maxWidth: 280),
         decoration: BoxDecoration(
           color: Colors.white.withValues(alpha: 0.94),
-          borderRadius: BorderRadius.circular(14 * zoom.clamp(0.8, 1.5)),
+          borderRadius: BorderRadius.circular(14),
           border: Border.all(
             color: isSelected ? AppTheme.primaryPurple : AppTheme.dividerColor,
             width: isSelected ? 2.0 : 1.0,
@@ -998,7 +1060,7 @@ class _EditorScreenState extends State<EditorScreen>
             Text(
               annotation.text,
               style: TextStyle(
-                fontSize: (annotation.fontSize * zoom).clamp(8.0, 60.0),
+                fontSize: annotation.fontSize.clamp(8.0, 60.0),
                 fontWeight: FontWeight.w600,
                 color: annotation.color,
                 height: 1.3,
@@ -1011,7 +1073,7 @@ class _EditorScreenState extends State<EditorScreen>
     );
   }
 
-  /// Elegant glassmorphic Top App Bar with Supabase Save Action
+  /// Elegant glassmorphic Top App Bar with Supabase Save Action & Page Navigation
   Widget _buildTopAppBar(String title, int totalAnnotationsCount) {
     return ClipRRect(
       child: BackdropFilter(
@@ -1085,6 +1147,21 @@ class _EditorScreenState extends State<EditorScreen>
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
+                          // Page Switcher Controls
+                          if (_pageCount > 1)
+                            GestureDetector(
+                              onTap: _currentPage > 1
+                                  ? () => _goToPage(_currentPage - 1)
+                                  : null,
+                              child: Icon(
+                                CupertinoIcons.chevron_left_square,
+                                size: 16,
+                                color: _currentPage > 1
+                                    ? AppTheme.primaryPurple
+                                    : AppTheme.textMuted.withValues(alpha: 0.3),
+                              ),
+                            ),
+                          if (_pageCount > 1) const SizedBox(width: 4),
                           Container(
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 6, vertical: 1.5),
@@ -1103,6 +1180,20 @@ class _EditorScreenState extends State<EditorScreen>
                               ),
                             ),
                           ),
+                          if (_pageCount > 1) const SizedBox(width: 4),
+                          if (_pageCount > 1)
+                            GestureDetector(
+                              onTap: _currentPage < _pageCount
+                                  ? () => _goToPage(_currentPage + 1)
+                                  : null,
+                              child: Icon(
+                                CupertinoIcons.chevron_right_square,
+                                size: 16,
+                                color: _currentPage < _pageCount
+                                    ? AppTheme.primaryPurple
+                                    : AppTheme.textMuted.withValues(alpha: 0.3),
+                              ),
+                            ),
                           if (_activeTool != AnnotationTool.none) ...[
                             const SizedBox(width: 6),
                             Text(
@@ -1453,15 +1544,15 @@ class _EditorScreenState extends State<EditorScreen>
               // Stroke Width Presets (Thin, Medium, Thick)
               _buildStrokeSizePreset(
                 label: 'S',
-                width: _activeTool == AnnotationTool.straightLine ? 2.5 : 10.0,
+                width: _activeTool == AnnotationTool.straightLine ? 3.0 : 10.0,
               ),
               _buildStrokeSizePreset(
                 label: 'M',
-                width: _activeTool == AnnotationTool.straightLine ? 4.5 : 16.0,
+                width: _activeTool == AnnotationTool.straightLine ? 5.0 : 16.0,
               ),
               _buildStrokeSizePreset(
                 label: 'L',
-                width: _activeTool == AnnotationTool.straightLine ? 7.0 : 24.0,
+                width: _activeTool == AnnotationTool.straightLine ? 8.0 : 24.0,
               ),
             ],
           ),
@@ -1522,32 +1613,19 @@ class _EditorScreenState extends State<EditorScreen>
 }
 
 /// Annotation Painter rendering freehand highlighter curves and auto-straightened lines
-/// with transformation matrix support matching the PDF Viewer's pan and zoom
 class BaseAnnotationPainter extends CustomPainter {
   final List<Stroke> strokes;
   final Stroke? currentStroke;
   final AnnotationTool activeTool;
-  final double zoomLevel;
-  final Offset scrollOffset;
 
   BaseAnnotationPainter({
     required this.strokes,
     required this.currentStroke,
     required this.activeTool,
-    required this.zoomLevel,
-    required this.scrollOffset,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
-    canvas.save();
-    // Clip to canvas size to prevent bleeding outside viewport
-    canvas.clipRect(Offset.zero & size);
-
-    // Transform canvas coordinate space to match PDF Viewer scroll & zoom
-    canvas.translate(-scrollOffset.dx, -scrollOffset.dy);
-    canvas.scale(zoomLevel, zoomLevel);
-
     // 1. Draw all committed historical strokes
     for (final stroke in strokes) {
       _renderStroke(canvas, stroke);
@@ -1557,8 +1635,6 @@ class BaseAnnotationPainter extends CustomPainter {
     if (currentStroke != null) {
       _renderStroke(canvas, currentStroke!);
     }
-
-    canvas.restore();
   }
 
   void _renderStroke(Canvas canvas, Stroke stroke) {
@@ -1580,7 +1656,11 @@ class BaseAnnotationPainter extends CustomPainter {
           paint..style = PaintingStyle.fill,
         );
       } else {
-        canvas.drawLine(stroke.points.first, stroke.points.last, paint);
+        canvas.drawLine(
+          stroke.points.first,
+          stroke.points.last,
+          paint,
+        );
       }
     } else {
       // Freehand Highlighter: Smooth Bezier curve path
@@ -1592,7 +1672,8 @@ class BaseAnnotationPainter extends CustomPainter {
         );
       } else {
         final path = Path();
-        path.moveTo(stroke.points[0].dx, stroke.points[0].dy);
+        final start = stroke.points[0];
+        path.moveTo(start.dx, start.dy);
 
         for (int i = 1; i < stroke.points.length - 1; i++) {
           final p0 = stroke.points[i];
@@ -1603,7 +1684,8 @@ class BaseAnnotationPainter extends CustomPainter {
         }
 
         if (stroke.points.length > 1) {
-          path.lineTo(stroke.points.last.dx, stroke.points.last.dy);
+          final last = stroke.points.last;
+          path.lineTo(last.dx, last.dy);
         }
 
         canvas.drawPath(path, paint);
@@ -1613,6 +1695,6 @@ class BaseAnnotationPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant BaseAnnotationPainter oldDelegate) {
-    return true; // Continuously repaint on gesture & zoom updates for 60/120fps precision
+    return true;
   }
 }

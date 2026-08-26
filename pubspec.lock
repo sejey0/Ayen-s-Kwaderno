@@ -790,7 +790,7 @@ packages:
     source: hosted
     version: "34.2.5"
   syncfusion_pdfviewer_platform_interface:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: syncfusion_pdfviewer_platform_interface
       sha256: "8576556f7eb7463ada45f74fa6507dd3b8d7cada043f194dd82f2a881e8b42b5"
