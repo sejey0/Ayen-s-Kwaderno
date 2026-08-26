@@ -35,34 +35,6 @@ class _HomeScreenState extends State<HomeScreen> {
   List<DocumentItem> _documents = [];
   List<HandwritingNote> _handwritingNotes = [];
 
-  // Palette generator for dynamic notebook cover aesthetics
-  static const List<Map<String, Color>> _coverPalettes = [
-    {
-      'color': Color(0xFFE9E4FC),
-      'accent': AppTheme.primaryPurple,
-    },
-    {
-      'color': Color(0xFFFFEEF3),
-      'accent': AppTheme.accentPink,
-    },
-    {
-      'color': Color(0xFFE6F4FE),
-      'accent': Color(0xFF5B9BF6),
-    },
-    {
-      'color': Color(0xFFE8F8F0),
-      'accent': Color(0xFF34D399),
-    },
-    {
-      'color': Color(0xFFFEF3C7),
-      'accent': Color(0xFFF59E0B),
-    },
-    {
-      'color': Color(0xFFF3E8FF),
-      'accent': Color(0xFF8B5CF6),
-    },
-  ];
-
   // Palette generator for handwriting sticky notes
   static const List<Map<String, Color>> _notePalettes = [
     {
@@ -166,7 +138,7 @@ class _HomeScreenState extends State<HomeScreen> {
             lastOpenedAt: cloudUpdatedAt,
             annotationsCount: totalAnnotations,
             isCloudSynced: true,
-            paletteIndex: i % _coverPalettes.length,
+            paletteIndex: 0,
           );
         }
 
@@ -1286,10 +1258,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
   /// Study Notebook Card (PDF & Image Documents)
   Widget _buildNotebookCard(DocumentItem doc) {
-    final palette = _coverPalettes[doc.paletteIndex % _coverPalettes.length];
-    final color = palette['color']!;
-    final accent = palette['accent']!;
-
     final pathLower = (doc.filePath ?? '').toLowerCase();
     final isImg = pathLower.endsWith('.png') ||
         pathLower.endsWith('.jpg') ||
@@ -1323,24 +1291,8 @@ class _HomeScreenState extends State<HomeScreen> {
                       child: DocumentThumbnailPreview(
                         filePath: doc.filePath,
                         fileName: doc.fileName,
-                        backgroundColor: color,
-                        accentColor: accent,
-                      ),
-                    ),
-                  ),
-
-                  // Notebook Spine Binding Effect
-                  Positioned(
-                    left: 0,
-                    top: 0,
-                    bottom: 0,
-                    child: Container(
-                      width: 14,
-                      decoration: BoxDecoration(
-                        color: accent.withValues(alpha: 0.35),
-                        borderRadius: const BorderRadius.only(
-                          topLeft: Radius.circular(19),
-                        ),
+                        backgroundColor: const Color(0xFFF1F5F9),
+                        accentColor: AppTheme.primaryPurple,
                       ),
                     ),
                   ),
@@ -1348,12 +1300,12 @@ class _HomeScreenState extends State<HomeScreen> {
                   // Format Badge (PDF or IMAGE)
                   Positioned(
                     top: 8,
-                    left: 18,
+                    left: 8,
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 5, vertical: 2),
+                          horizontal: 6, vertical: 2),
                       decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.6),
+                        color: Colors.black.withValues(alpha: 0.65),
                         borderRadius: BorderRadius.circular(6),
                       ),
                       child: Text(

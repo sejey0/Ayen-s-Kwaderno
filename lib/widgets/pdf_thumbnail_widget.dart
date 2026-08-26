@@ -140,7 +140,7 @@ class _DocumentThumbnailPreviewState extends State<DocumentThumbnailPreview> {
 
   Widget _buildFallbackCover() {
     return Container(
-      color: widget.backgroundColor,
+      color: const Color(0xFFF8FAFC),
       padding: const EdgeInsets.all(12),
       child: Center(
         child: Column(
@@ -148,8 +148,8 @@ class _DocumentThumbnailPreviewState extends State<DocumentThumbnailPreview> {
           children: [
             Container(
               padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: widget.accentColor.withValues(alpha: 0.15),
+              decoration: const BoxDecoration(
+                color: AppTheme.primaryPurpleLight,
                 shape: BoxShape.circle,
               ),
               child: Icon(
@@ -157,7 +157,7 @@ class _DocumentThumbnailPreviewState extends State<DocumentThumbnailPreview> {
                     ? CupertinoIcons.photo_fill
                     : CupertinoIcons.doc_text_fill,
                 size: 32,
-                color: widget.accentColor.withValues(alpha: 0.8),
+                color: AppTheme.primaryPurple,
               ),
             ),
             const SizedBox(height: 8),
@@ -166,10 +166,10 @@ class _DocumentThumbnailPreviewState extends State<DocumentThumbnailPreview> {
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
               textAlign: TextAlign.center,
-              style: TextStyle(
+              style: const TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w700,
-                color: AppTheme.textPrimary.withValues(alpha: 0.8),
+                color: AppTheme.textPrimary,
               ),
             ),
           ],
