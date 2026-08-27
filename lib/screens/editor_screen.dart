@@ -2202,8 +2202,44 @@ class _EditorScreenState extends State<EditorScreen>
                   tooltip: 'Pan & Pinch Zoom Document',
                 ),
 
-                // Multi-page Slide Direction Switcher (Icon-only matching toolbar style)
+                const SizedBox(width: 4),
+                _buildVerticalDivider(),
+                const SizedBox(width: 4),
+
+                // 1. Highlighter
+                _buildToolButton(
+                  tool: AnnotationTool.highlighter,
+                  icon: CupertinoIcons.pencil_outline,
+                  label: 'Highlighter',
+                  tooltip: 'Freehand Highlighter',
+                ),
+
+                const SizedBox(width: 4),
+
+                // 2. Straight Line
+                _buildToolButton(
+                  tool: AnnotationTool.straightLine,
+                  icon: CupertinoIcons.line_horizontal_3_decrease,
+                  label: 'Straight Line',
+                  tooltip: 'Auto-Straightened Line',
+                ),
+
+                const SizedBox(width: 4),
+                _buildVerticalDivider(),
+                const SizedBox(width: 4),
+
+                // 3. Add Image (Gallery Picker + Resize)
+                _buildToolButton(
+                  tool: AnnotationTool.addImage,
+                  icon: CupertinoIcons.photo,
+                  label: 'Add Image',
+                  tooltip: 'Insert Image / Screenshot',
+                ),
+
+                // Multi-page Slide Direction Switcher (Positioned on the outer edge)
                 if (_pageCount > 1) ...[
+                  const SizedBox(width: 4),
+                  _buildVerticalDivider(),
                   const SizedBox(width: 2),
                   Tooltip(
                     message: _slideOrientation == PageSlideOrientation.vertical
@@ -2231,38 +2267,6 @@ class _EditorScreenState extends State<EditorScreen>
                     ),
                   ),
                 ],
-
-                const SizedBox(width: 4),
-                _buildVerticalDivider(),
-                const SizedBox(width: 4),
-
-                // 1. Highlighter
-                _buildToolButton(
-                  tool: AnnotationTool.highlighter,
-                  icon: CupertinoIcons.pencil_outline,
-                  label: 'Highlighter',
-                  tooltip: 'Freehand Highlighter',
-                ),
-
-                const SizedBox(width: 4),
-
-                // 2. Straight Line
-                _buildToolButton(
-                  tool: AnnotationTool.straightLine,
-                  icon: CupertinoIcons.line_horizontal_3_decrease,
-                  label: 'Straight Line',
-                  tooltip: 'Auto-Straightened Line',
-                ),
-
-                const SizedBox(width: 4),
-
-                // 3. Add Image (Gallery Picker + Resize)
-                _buildToolButton(
-                  tool: AnnotationTool.addImage,
-                  icon: CupertinoIcons.photo,
-                  label: 'Add Image',
-                  tooltip: 'Insert Image / Screenshot',
-                ),
               ],
             ),
           ),
