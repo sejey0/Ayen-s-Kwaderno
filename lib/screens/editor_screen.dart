@@ -414,36 +414,48 @@ class _EditorScreenState extends State<EditorScreen>
         final List<dynamic>? imagesJson =
             response['images_data'] is List ? response['images_data'] : null;
 
-        setState(() {
-          _strokes.clear();
-          if (_perPageStrokes.containsKey(_currentPage)) {
-            _strokes.addAll(_perPageStrokes[_currentPage]!);
-          } else if (strokesJson != null && _currentPage == 1) {
-            _strokes.addAll(strokesJson.map(
-                (e) => Stroke.fromJson(Map<String, dynamic>.from(e))));
-            _perPageStrokes[1] = List.from(_strokes);
-          }
+        final loadedStrokes = <Stroke>[];
+        final loadedTexts = <TextAnnotation>[];
+        final loadedImages = <ImageAnnotation>[];
 
-          _textAnnotations.clear();
-          if (_perPageTextAnnotations.containsKey(_currentPage)) {
-            _textAnnotations.addAll(_perPageTextAnnotations[_currentPage]!);
-          } else if (textsJson != null && _currentPage == 1) {
-            _textAnnotations.addAll(textsJson.map((e) =>
-                TextAnnotation.fromJson(Map<String, dynamic>.from(e))));
-            _perPageTextAnnotations[1] = List.from(_textAnnotations);
-          }
+        if (_perPageStrokes.containsKey(_currentPage)) {
+          loadedStrokes.addAll(_perPageStrokes[_currentPage]!);
+        } else if (strokesJson != null && _currentPage == 1) {
+          loadedStrokes.addAll(strokesJson
+              .map((e) => Stroke.fromJson(Map<String, dynamic>.from(e))));
+          _perPageStrokes[1] = List.from(loadedStrokes);
+        }
 
-          _imageAnnotations.clear();
-          if (_perPageImageAnnotations.containsKey(_currentPage)) {
-            _imageAnnotations.addAll(_perPageImageAnnotations[_currentPage]!);
-          } else if (imagesJson != null && _currentPage == 1) {
-            _imageAnnotations.addAll(imagesJson.map((e) =>
-                ImageAnnotation.fromJson(Map<String, dynamic>.from(e))));
-            _perPageImageAnnotations[1] = List.from(_imageAnnotations);
-          }
+        if (_perPageTextAnnotations.containsKey(_currentPage)) {
+          loadedTexts.addAll(_perPageTextAnnotations[_currentPage]!);
+        } else if (textsJson != null && _currentPage == 1) {
+          loadedTexts.addAll(textsJson.map(
+              (e) => TextAnnotation.fromJson(Map<String, dynamic>.from(e))));
+          _perPageTextAnnotations[1] = List.from(loadedTexts);
+        }
 
-          _syncStatus = SyncStatus.synced;
-        });
+        if (_perPageImageAnnotations.containsKey(_currentPage)) {
+          loadedImages.addAll(_perPageImageAnnotations[_currentPage]!);
+        } else if (imagesJson != null && _currentPage == 1) {
+          loadedImages.addAll(imagesJson.map(
+              (e) => ImageAnnotation.fromJson(Map<String, dynamic>.from(e))));
+          _perPageImageAnnotations[1] = List.from(loadedImages);
+        }
+
+        if (loadedStrokes.isNotEmpty ||
+            loadedTexts.isNotEmpty ||
+            loadedImages.isNotEmpty ||
+            (_strokes.isEmpty && _textAnnotations.isEmpty && _imageAnnotations.isEmpty)) {
+          setState(() {
+            _strokes.clear();
+            _strokes.addAll(loadedStrokes);
+            _textAnnotations.clear();
+            _textAnnotations.addAll(loadedTexts);
+            _imageAnnotations.clear();
+            _imageAnnotations.addAll(loadedImages);
+            _syncStatus = SyncStatus.synced;
+          });
+        }
 
         // Keep local cache fresh
         await DocumentStorageService.saveLocalAnnotations(
@@ -616,16 +628,16 @@ class _EditorScreenState extends State<EditorScreen>
       if (!mounted) return;
 
       if (image != null) {
-        final screenSize = MediaQuery.of(context).size;
+        final newAnnotation = ImageAnnotation(
+          imagePath: image.path,
+          position: const Offset(40, 80),
+          size: const Size(180, 180),
+        );
         setState(() {
-          _imageAnnotations.add(
-            ImageAnnotation(
-              imagePath: image.path,
-              position:
-                  Offset(screenSize.width / 2 - 80, screenSize.height / 2 - 80),
-              size: const Size(160, 160),
-            ),
-          );
+          _imageAnnotations.add(newAnnotation);
+          _perPageImageAnnotations[_currentPage] = List.from(_imageAnnotations);
+          _selectedImageId = newAnnotation.id;
+          _selectedTextId = null;
           _activeTool = AnnotationTool.none;
         });
 
@@ -808,133 +820,99 @@ class _EditorScreenState extends State<EditorScreen>
                     scaleEnabled: _activeTool == AnnotationTool.none,
                     clipBehavior: Clip.hardEdge,
                     child: Center(
-                      child: GestureDetector(
-                        behavior: HitTestBehavior.translucent,
-                        onHorizontalDragEnd: (details) {
-                          if (_activeTool == AnnotationTool.none &&
-                              _pageCount > 1) {
-                            if (_slideOrientation ==
-                                PageSlideOrientation.horizontal) {
-                              if (details.primaryVelocity != null) {
-                                if (details.primaryVelocity! < -180) {
-                                  // Swipe Left -> Next Page
-                                  _goToPage(_currentPage + 1);
-                                } else if (details.primaryVelocity! > 180) {
-                                  // Swipe Right -> Prev Page
-                                  _goToPage(_currentPage - 1);
-                                }
-                              }
-                            }
-                          }
-                        },
-                        onVerticalDragEnd: (details) {
-                          if (_activeTool == AnnotationTool.none &&
-                              _pageCount > 1) {
-                            if (_slideOrientation ==
-                                PageSlideOrientation.vertical) {
-                              if (details.primaryVelocity != null) {
-                                if (details.primaryVelocity! < -180) {
-                                  // Swipe Up -> Next Page
-                                  _goToPage(_currentPage + 1);
-                                } else if (details.primaryVelocity! > 180) {
-                                  // Swipe Down -> Prev Page
-                                  _goToPage(_currentPage - 1);
-                                }
-                              }
-                            }
-                          }
-                        },
-                        child: Container(
-                          width: displayW,
-                          height: displayH,
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(4),
-                            boxShadow: [
-                              BoxShadow(
-                                color: const Color(0xFF1E1B4B)
-                                    .withValues(alpha: 0.14),
-                                blurRadius: 18,
-                                offset: const Offset(0, 6),
-                              ),
-                            ],
-                          ),
-                          child: Stack(
-                            fit: StackFit.expand,
-                            children: [
-                              // 1. HD Rendered PDF Page Image
-                              if (_renderedPageUiImage != null)
-                                RawImage(
-                                  image: _renderedPageUiImage!,
-                                  width: displayW,
-                                  height: displayH,
-                                  fit: BoxFit.fill,
-                                )
-                              else
-                                const Center(
-                                  child: CircularProgressIndicator(
-                                    color: AppTheme.primaryPurple,
-                                  ),
+                      child: Container(
+                        width: displayW,
+                        height: displayH,
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(4),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFF1E1B4B)
+                                  .withValues(alpha: 0.14),
+                              blurRadius: 18,
+                              offset: const Offset(0, 6),
+                            ),
+                          ],
+                        ),
+                        child: Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            // 1. HD Rendered PDF Page Image
+                            if (_renderedPageUiImage != null)
+                              RawImage(
+                                image: _renderedPageUiImage!,
+                                width: displayW,
+                                height: displayH,
+                                fit: BoxFit.fill,
+                              )
+                            else
+                              const Center(
+                                child: CircularProgressIndicator(
+                                  color: AppTheme.primaryPurple,
                                 ),
+                              ),
 
-                              // 2. Annotation & Drawing Canvas
-                              Positioned.fill(
-                                child: IgnorePointer(
-                                  ignoring: _activeTool == AnnotationTool.none,
-                                  child: GestureDetector(
-                                    behavior: HitTestBehavior.translucent,
-                                    onPanStart: (DragStartDetails details) {
-                                      if (_activeTool ==
-                                              AnnotationTool.highlighter ||
-                                          _activeTool ==
-                                              AnnotationTool.straightLine) {
-                                        setState(() {
-                                          _redoHistory.clear();
-                                          _currentStroke = Stroke(
-                                            points: [details.localPosition],
-                                            color: _selectedColor,
-                                            strokeWidth: _strokeWidth,
-                                            isStraightLine: _activeTool ==
-                                                AnnotationTool.straightLine,
-                                          );
-                                        });
-                                      }
-                                    },
-                                    onPanUpdate: (DragUpdateDetails details) {
-                                      if (_currentStroke != null) {
-                                        setState(() {
-                                          _currentStroke!.points
-                                              .add(details.localPosition);
-                                        });
-                                      }
-                                    },
-                                    onPanEnd: (DragEndDetails details) {
-                                      if (_currentStroke != null) {
-                                        setState(() {
-                                          _strokes.add(_currentStroke!);
-                                          _currentStroke = null;
-                                        });
-                                        _autoSaveAndSync();
-                                      }
-                                    },
-                                    onPanCancel: () {
-                                      if (_currentStroke != null) {
-                                        setState(() {
-                                          _currentStroke = null;
-                                        });
-                                      }
-                                    },
-                                    child: CustomPaint(
-                                      painter: BaseAnnotationPainter(
-                                        strokes: _strokes,
-                                        currentStroke: _currentStroke,
-                                        activeTool: _activeTool,
-                                      ),
-                                      size: Size.infinite,
+                            // 2. Annotation & Drawing Canvas
+                            Positioned.fill(
+                              child: IgnorePointer(
+                                ignoring: _activeTool == AnnotationTool.none,
+                                child: GestureDetector(
+                                  behavior: HitTestBehavior.opaque,
+                                  onPanStart: (DragStartDetails details) {
+                                    if (_activeTool ==
+                                            AnnotationTool.highlighter ||
+                                        _activeTool ==
+                                            AnnotationTool.straightLine) {
+                                      setState(() {
+                                        _redoHistory.clear();
+                                        _currentStroke = Stroke(
+                                          points: [details.localPosition],
+                                          color: _selectedColor,
+                                          strokeWidth: _strokeWidth,
+                                          isStraightLine: _activeTool ==
+                                              AnnotationTool.straightLine,
+                                        );
+                                      });
+                                    }
+                                  },
+                                  onPanUpdate: (DragUpdateDetails details) {
+                                    if (_currentStroke != null) {
+                                      setState(() {
+                                        _currentStroke!.points
+                                            .add(details.localPosition);
+                                      });
+                                    }
+                                  },
+                                  onPanEnd: (DragEndDetails details) {
+                                    if (_currentStroke != null) {
+                                      setState(() {
+                                        _strokes.add(_currentStroke!);
+                                        _perPageStrokes[_currentPage] =
+                                            List.from(_strokes);
+                                        _currentStroke = null;
+                                      });
+                                      _autoSaveAndSync();
+                                    }
+                                  },
+                                  onPanCancel: () {
+                                    if (_currentStroke != null) {
+                                      setState(() {
+                                        _currentStroke = null;
+                                      });
+                                    }
+                                  },
+                                  child: CustomPaint(
+                                    painter: BaseAnnotationPainter(
+                                      strokes: _strokes,
+                                      currentStroke: _currentStroke,
+                                      activeTool: _activeTool,
                                     ),
+                                    size: Size.infinite,
                                   ),
                                 ),
                               ),
+                            ),
 
                               // 3. Image Stickers (Photos)
                               ..._imageAnnotations.map((annotation) {
@@ -958,9 +936,8 @@ class _EditorScreenState extends State<EditorScreen>
                           ),
                         ),
                       ),
-                    ),
-                  );
-                },
+                    );
+                  },
               ),
             ),
 
