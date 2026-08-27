@@ -95,20 +95,17 @@ class _AccountProfileDialogState extends State<AccountProfileDialog> {
       );
 
       if (!mounted) return;
-      setState(() {
-        _isLoading = false;
-        _isLinkingCloud = false;
-      });
+      Navigator.pop(context);
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: const Row(
             children: [
-              Icon(CupertinoIcons.cloud_upload_fill,
+              Icon(CupertinoIcons.checkmark_seal_fill,
                   color: Color(0xFF10B981), size: 18),
               SizedBox(width: 8),
               Text(
-                'Cloud account linked! Syncing notes... ☁️✨',
+                'Signed in! All documents & notes synced ☁️✨',
                 style: TextStyle(fontWeight: FontWeight.w600),
               ),
             ],

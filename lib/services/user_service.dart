@@ -297,9 +297,9 @@ class UserService {
     await prefs.setString(_activeProfileIdKey, target.id);
     currentUserNotifier.value = target;
 
-    // Trigger sync for the newly active profile if cloud-linked
+    // Trigger immediate cloud auto-sync for the newly active profile
     if (target.isCloudLinked) {
-      AutoSyncService.instance.triggerSync(immediate: true);
+      await AutoSyncService.instance.syncAllToCloud();
     }
   }
 
