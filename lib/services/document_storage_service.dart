@@ -142,8 +142,29 @@ class DocumentStorageService {
 
       await _persistDocumentsList(docs, userId);
 
+      // Immediately push document annotations if available
+      try {
+        final client = Supabase.instance.client;
+        final annotationsData = await loadLocalAnnotations(doc.fileName, userId);
+        if (annotationsData != null) {
+          final payload = {
+            'document_name': doc.fileName,
+            'strokes_data': annotationsData['strokes'] ?? [],
+            'texts_data': annotationsData['texts'] ?? [],
+            'images_data': annotationsData['images'] ?? [],
+            'updated_at': annotationsData['updated_at'] ??
+                DateTime.now().toUtc().toIso8601String(),
+          };
+          client
+              .from('document_annotations')
+              .upsert(payload, onConflict: 'document_name')
+              .then((_) {})
+              .catchError((_) {});
+        }
+      } catch (_) {}
+
       if (triggerCloudSync) {
-        AutoSyncService.instance.triggerSync();
+        AutoSyncService.instance.triggerSync(immediate: true);
       }
     } catch (_) {}
   }
@@ -156,7 +177,7 @@ class DocumentStorageService {
       await _persistDocumentsList(docs, userId);
       await clearLocalAnnotations(fileName, userId);
 
-      // Async background deletion from Supabase if cloud linked
+      // Async background deletion from Supabase
       try {
         final client = Supabase.instance.client;
         await client
@@ -165,7 +186,7 @@ class DocumentStorageService {
             .eq('document_name', fileName);
       } catch (_) {}
 
-      AutoSyncService.instance.triggerSync();
+      AutoSyncService.instance.triggerSync(immediate: true);
     } catch (_) {}
   }
 
@@ -189,8 +210,25 @@ class DocumentStorageService {
       await prefs.setString(
           _getScopedAnnotationsKey(documentName, userId), jsonEncode(data));
 
+      // Immediate auto-upload of annotations to Supabase database
+      try {
+        final client = Supabase.instance.client;
+        final payload = {
+          'document_name': documentName,
+          'strokes_data': strokes.map((s) => s.toJson()).toList(),
+          'texts_data': texts.map((t) => t.toJson()).toList(),
+          'images_data': images.map((i) => i.toJson()).toList(),
+          'updated_at': DateTime.now().toUtc().toIso8601String(),
+        };
+        client
+            .from('document_annotations')
+            .upsert(payload, onConflict: 'document_name')
+            .then((_) {})
+            .catchError((_) {});
+      } catch (_) {}
+
       if (triggerCloudSync) {
-        AutoSyncService.instance.triggerSync();
+        AutoSyncService.instance.triggerSync(immediate: true);
       }
     } catch (_) {}
   }
@@ -295,8 +333,26 @@ class DocumentStorageService {
 
       await _persistHandwritingNotesList(notes, userId);
 
+      // Immediate auto-upload of note to Supabase database in background
+      try {
+        final client = Supabase.instance.client;
+        final payload = {
+          'id': note.id,
+          'title': note.title,
+          'content': note.content,
+          'palette_index': note.paletteIndex,
+          'updated_at': note.updatedAt.toUtc().toIso8601String(),
+          'created_at': note.createdAt.toUtc().toIso8601String(),
+        };
+        client
+            .from('handwriting_notes')
+            .upsert(payload, onConflict: 'id')
+            .then((_) {})
+            .catchError((_) {});
+      } catch (_) {}
+
       if (triggerCloudSync) {
-        AutoSyncService.instance.triggerSync();
+        AutoSyncService.instance.triggerSync(immediate: true);
       }
     } catch (_) {}
   }
@@ -314,7 +370,7 @@ class DocumentStorageService {
         await client.from('handwriting_notes').delete().eq('id', id);
       } catch (_) {}
 
-      AutoSyncService.instance.triggerSync();
+      AutoSyncService.instance.triggerSync(immediate: true);
     } catch (_) {}
   }
 

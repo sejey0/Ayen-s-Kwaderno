@@ -93,11 +93,8 @@ class AutoSyncService {
     if (_isSyncing) return;
 
     final user = UserService.instance.currentUser;
-    // If the user profile is purely offline (not linked to cloud), skip remote sync
-    if (user != null && !user.isCloudLinked) {
-      statusNotifier.value = AutoSyncStatus.synced;
-      return;
-    }
+    final isAuthUser = Supabase.instance.client.auth.currentUser != null;
+    final isCloudActive = (user?.isCloudLinked == true) || isAuthUser;
 
     // Check connectivity first
     try {
@@ -114,6 +111,12 @@ class AutoSyncService {
       }
     } catch (_) {
       // If connectivity check fails, continue and let Supabase network call verify
+    }
+
+    // If not online or not cloud enabled, mark synced locally
+    if (!isCloudActive) {
+      statusNotifier.value = AutoSyncStatus.synced;
+      return;
     }
 
     _isSyncing = true;
