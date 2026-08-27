@@ -1,28 +1,35 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../services/auto_sync_service.dart';
 import '../services/user_service.dart';
 import '../theme/app_theme.dart';
 import 'home_screen.dart';
 
 enum AuthMode {
-  offline,
   cloudSignIn,
   cloudSignUp,
+  offline,
 }
 
 class WelcomeAuthScreen extends StatefulWidget {
-  const WelcomeAuthScreen({super.key});
+  final bool canCancel;
+
+  const WelcomeAuthScreen({
+    super.key,
+    this.canCancel = false,
+  });
 
   @override
   State<WelcomeAuthScreen> createState() => _WelcomeAuthScreenState();
 }
 
 class _WelcomeAuthScreenState extends State<WelcomeAuthScreen> {
-  AuthMode _mode = AuthMode.offline;
+  AuthMode _mode = AuthMode.cloudSignIn;
 
   // Offline form controllers
-  final TextEditingController _nameController = TextEditingController(text: 'Ayen');
+  final TextEditingController _nameController =
+      TextEditingController(text: '');
   String _selectedEmoji = '📓';
   int _selectedColorIndex = 0;
 
@@ -45,6 +52,8 @@ class _WelcomeAuthScreenState extends State<WelcomeAuthScreen> {
     '🌟',
     '💡',
     '🐾',
+    '📚',
+    '🧸',
   ];
 
   static const List<Color> _avatarColors = [
@@ -65,7 +74,38 @@ class _WelcomeAuthScreenState extends State<WelcomeAuthScreen> {
     super.dispose();
   }
 
-  /// Creates instant offline account & navigates to Home
+  void _onSuccessNavigate(String successMessage) {
+    if (!mounted) return;
+
+    if (widget.canCancel && Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    } else {
+      Navigator.of(context).pushReplacement(
+        CupertinoPageRoute(builder: (_) => const HomeScreen()),
+      );
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(CupertinoIcons.checkmark_seal_fill,
+                color: Color(0xFF10B981), size: 18),
+            const SizedBox(width: 8),
+            Text(
+              successMessage,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ],
+        ),
+        backgroundColor: AppTheme.primaryPurpleDark,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+    );
+  }
+
+  /// Creates instant offline account & completes flow
   Future<void> _handleStartOffline() async {
     final name = _nameController.text.trim();
     if (name.isEmpty) {
@@ -85,10 +125,7 @@ class _WelcomeAuthScreenState extends State<WelcomeAuthScreen> {
         avatarColorIndex: _selectedColorIndex,
       );
 
-      if (!mounted) return;
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const HomeScreen()),
-      );
+      _onSuccessNavigate('Offline profile "$name" created! 📓');
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -127,10 +164,7 @@ class _WelcomeAuthScreenState extends State<WelcomeAuthScreen> {
         optionalName: name.isNotEmpty ? name : null,
       );
 
-      if (!mounted) return;
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const HomeScreen()),
-      );
+      _onSuccessNavigate('Signed in! Notes synced with cloud ☁️✨');
     } on AuthException catch (e) {
       if (!mounted) return;
       setState(() {
@@ -146,24 +180,78 @@ class _WelcomeAuthScreenState extends State<WelcomeAuthScreen> {
     }
   }
 
+  /// Handles Google OAuth login
+  Future<void> _handleGoogleSignIn() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      await Supabase.instance.client.auth.signInWithOAuth(
+        OAuthProvider.google,
+        redirectTo: 'io.supabase.ayenskwaderno://login-callback/',
+      );
+      await AutoSyncService.instance.syncAllToCloud();
+      _onSuccessNavigate('Google account connected! ☁️');
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _errorMessage = 'Google sign-in error: $e';
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final isOffline = _mode == AuthMode.offline;
+    final isSignUp = _mode == AuthMode.cloudSignUp;
+    final bottomPadding = MediaQuery.of(context).padding.bottom;
 
     return Scaffold(
       backgroundColor: AppTheme.background,
+      appBar: AppBar(
+        backgroundColor: AppTheme.surfaceWhite,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        scrolledUnderElevation: 1,
+        automaticallyImplyLeading: false,
+        leading: widget.canCancel
+            ? IconButton(
+                icon: const Icon(CupertinoIcons.xmark,
+                    color: AppTheme.textPrimary, size: 20),
+                onPressed: () {
+                  if (Navigator.of(context).canPop()) {
+                    Navigator.of(context).pop();
+                  }
+                },
+                tooltip: 'Cancel',
+              )
+            : null,
+        title: Text(
+          widget.canCancel ? 'Add New Profile' : "Ayen's Kwaderno",
+          style: const TextStyle(
+            fontSize: 17,
+            fontWeight: FontWeight.w800,
+            color: AppTheme.textPrimary,
+            letterSpacing: -0.3,
+          ),
+        ),
+        centerTitle: true,
+      ),
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+            padding: EdgeInsets.fromLTRB(20, 16, 20, bottomPadding + 24),
             physics: const BouncingScrollPhysics(),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 // App Logo / Avatar Badge
                 Container(
-                  width: 80,
-                  height: 80,
+                  width: 72,
+                  height: 72,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     gradient: const LinearGradient(
@@ -173,67 +261,68 @@ class _WelcomeAuthScreenState extends State<WelcomeAuthScreen> {
                     ),
                     boxShadow: [
                       BoxShadow(
-                        color: AppTheme.primaryPurple.withValues(alpha: 0.35),
-                        blurRadius: 20,
-                        offset: const Offset(0, 8),
+                        color: AppTheme.primaryPurple.withValues(alpha: 0.3),
+                        blurRadius: 18,
+                        offset: const Offset(0, 6),
                       ),
                     ],
                   ),
                   child: Center(
                     child: Text(
                       isOffline ? _selectedEmoji : '☁️',
-                      style: const TextStyle(fontSize: 38),
+                      style: const TextStyle(fontSize: 34),
                     ),
                   ),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 14),
 
-                // App Title & Tagline
-                const Text(
-                  "Ayen's Kwaderno",
-                  style: TextStyle(
-                    fontSize: 26,
+                // Header Title & Tagline
+                Text(
+                  widget.canCancel
+                      ? (isOffline
+                          ? "Create Local Profile"
+                          : (isSignUp
+                              ? "Register Cloud Account"
+                              : "Sign In to Cloud"))
+                      : "Welcome to Kwaderno",
+                  style: const TextStyle(
+                    fontSize: 22,
                     fontWeight: FontWeight.w900,
                     color: AppTheme.textPrimary,
-                    letterSpacing: -0.5,
+                    letterSpacing: -0.4,
                   ),
                 ),
-                const SizedBox(height: 6),
-                const Text(
-                  "Smart offline notebook with AI handwriting & cloud sync",
+                const SizedBox(height: 4),
+                Text(
+                  isOffline
+                      ? "Keep notes privately stored on this device"
+                      : "Access & sync your notes across all your devices",
                   textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 13.5,
+                  style: const TextStyle(
+                    fontSize: 13,
                     color: AppTheme.textSecondary,
                     height: 1.3,
                   ),
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 20),
 
-                // Mode Switcher Tabs (Offline vs Cloud)
+                // Mode Switcher Tabs (Cloud Account vs Offline Profile)
                 Container(
                   padding: const EdgeInsets.all(4),
                   decoration: BoxDecoration(
                     color: AppTheme.surfaceWhite,
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(color: AppTheme.dividerColor),
-                    boxShadow: AppTheme.softShadow,
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppTheme.primaryPurple.withValues(alpha: 0.04),
+                        blurRadius: 10,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
                   ),
                   child: Row(
                     children: [
-                      Expanded(
-                        child: _buildSegmentButton(
-                          title: 'Offline Notebook',
-                          icon: CupertinoIcons.device_phone_portrait,
-                          isSelected: isOffline,
-                          onTap: () {
-                            setState(() {
-                              _mode = AuthMode.offline;
-                              _errorMessage = null;
-                            });
-                          },
-                        ),
-                      ),
                       Expanded(
                         child: _buildSegmentButton(
                           title: 'Cloud Account',
@@ -247,26 +336,45 @@ class _WelcomeAuthScreenState extends State<WelcomeAuthScreen> {
                           },
                         ),
                       ),
+                      Expanded(
+                        child: _buildSegmentButton(
+                          title: 'Offline Profile',
+                          icon: CupertinoIcons.device_phone_portrait,
+                          isSelected: isOffline,
+                          onTap: () {
+                            setState(() {
+                              _mode = AuthMode.offline;
+                              _errorMessage = null;
+                            });
+                          },
+                        ),
+                      ),
                     ],
                   ),
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 18),
 
                 // Form Container
                 Container(
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
                     color: AppTheme.surfaceWhite,
-                    borderRadius: BorderRadius.circular(24),
+                    borderRadius: BorderRadius.circular(20),
                     border: Border.all(color: AppTheme.dividerColor),
-                    boxShadow: AppTheme.softShadow,
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppTheme.primaryPurple.withValues(alpha: 0.04),
+                        blurRadius: 16,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
                   ),
                   child: isOffline
                       ? _buildOfflineForm()
-                      : _buildCloudAuthForm(),
+                      : _buildCloudAuthForm(isSignUp),
                 ),
 
-                const SizedBox(height: 20),
+                const SizedBox(height: 16),
 
                 // Error Message Display
                 if (_errorMessage != null)
@@ -284,13 +392,13 @@ class _WelcomeAuthScreenState extends State<WelcomeAuthScreen> {
                     child: Row(
                       children: [
                         const Icon(CupertinoIcons.exclamationmark_circle_fill,
-                            color: Color(0xFFEF4444), size: 18),
+                            color: Color(0xFFEF4444), size: 16),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
                             _errorMessage!,
                             style: const TextStyle(
-                              fontSize: 12.5,
+                              fontSize: 12,
                               color: Color(0xFFDC2626),
                               fontWeight: FontWeight.w600,
                             ),
@@ -300,7 +408,7 @@ class _WelcomeAuthScreenState extends State<WelcomeAuthScreen> {
                     ),
                   ),
 
-                // Quick Note / Footer
+                // Security Badge / Footer
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
@@ -310,7 +418,7 @@ class _WelcomeAuthScreenState extends State<WelcomeAuthScreen> {
                     Text(
                       isOffline
                           ? "100% offline & private on this device"
-                          : "Encrypted & synced with Supabase",
+                          : "Encrypted & safely synced via Supabase",
                       style: const TextStyle(
                         fontSize: 11.5,
                         color: AppTheme.textMuted,
@@ -337,7 +445,7 @@ class _WelcomeAuthScreenState extends State<WelcomeAuthScreen> {
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
+        duration: const Duration(milliseconds: 180),
         padding: const EdgeInsets.symmetric(vertical: 10),
         decoration: BoxDecoration(
           color: isSelected ? AppTheme.primaryPurple : Colors.transparent,
@@ -348,7 +456,7 @@ class _WelcomeAuthScreenState extends State<WelcomeAuthScreen> {
           children: [
             Icon(
               icon,
-              size: 16,
+              size: 15,
               color: isSelected ? Colors.white : AppTheme.textSecondary,
             ),
             const SizedBox(width: 6),
@@ -374,25 +482,25 @@ class _WelcomeAuthScreenState extends State<WelcomeAuthScreen> {
         const Text(
           "Student Profile",
           style: TextStyle(
-            fontSize: 16,
+            fontSize: 15,
             fontWeight: FontWeight.w800,
             color: AppTheme.textPrimary,
           ),
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: 3),
         const Text(
-          "Set up your local notebook space. You can link to cloud anytime later.",
+          "Create a dedicated offline notebook profile. No cloud connection required.",
           style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
         ),
         const SizedBox(height: 16),
 
         // Name input
         const Text(
-          "Your Name / Nickname",
+          "Student Name / Nickname",
           style: TextStyle(
-            fontSize: 12.5,
+            fontSize: 12,
             fontWeight: FontWeight.w700,
-            color: AppTheme.textPrimary,
+            color: AppTheme.textSecondary,
           ),
         ),
         const SizedBox(height: 6),
@@ -400,23 +508,24 @@ class _WelcomeAuthScreenState extends State<WelcomeAuthScreen> {
           controller: _nameController,
           textCapitalization: TextCapitalization.words,
           decoration: InputDecoration(
-            hintText: "e.g. Ayen, Juan, Maria...",
+            hintText: "e.g. Maria, Juan...",
+            hintStyle: const TextStyle(color: AppTheme.textMuted),
             prefixIcon: const Icon(CupertinoIcons.person_fill,
                 color: AppTheme.primaryPurple, size: 18),
             filled: true,
             fillColor: AppTheme.background,
             border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(12),
               borderSide: const BorderSide(color: AppTheme.dividerColor),
             ),
             enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(12),
               borderSide: const BorderSide(color: AppTheme.dividerColor),
             ),
             focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(12),
               borderSide: const BorderSide(
-                  color: AppTheme.primaryPurple, width: 1.8),
+                  color: AppTheme.primaryPurple, width: 1.5),
             ),
             contentPadding:
                 const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -426,11 +535,11 @@ class _WelcomeAuthScreenState extends State<WelcomeAuthScreen> {
 
         // Emoji avatar selection
         const Text(
-          "Choose Notebook Avatar",
+          "Choose Avatar Emoji",
           style: TextStyle(
-            fontSize: 12.5,
+            fontSize: 12,
             fontWeight: FontWeight.w700,
-            color: AppTheme.textPrimary,
+            color: AppTheme.textSecondary,
           ),
         ),
         const SizedBox(height: 8),
@@ -440,7 +549,7 @@ class _WelcomeAuthScreenState extends State<WelcomeAuthScreen> {
             scrollDirection: Axis.horizontal,
             physics: const BouncingScrollPhysics(),
             itemCount: _avatarEmojis.length,
-            separatorBuilder: (_, _) => const SizedBox(width: 8),
+            separatorBuilder: (_, index) => const SizedBox(width: 8),
             itemBuilder: (context, idx) {
               final emoji = _avatarEmojis[idx];
               final isSelected = emoji == _selectedEmoji;
@@ -448,8 +557,8 @@ class _WelcomeAuthScreenState extends State<WelcomeAuthScreen> {
                 onTap: () => setState(() => _selectedEmoji = emoji),
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 150),
-                  width: 46,
-                  height: 46,
+                  width: 44,
+                  height: 44,
                   decoration: BoxDecoration(
                     color: isSelected
                         ? AppTheme.primaryPurpleLight
@@ -465,7 +574,7 @@ class _WelcomeAuthScreenState extends State<WelcomeAuthScreen> {
                   child: Center(
                     child: Text(
                       emoji,
-                      style: const TextStyle(fontSize: 22),
+                      style: const TextStyle(fontSize: 21),
                     ),
                   ),
                 ),
@@ -477,11 +586,11 @@ class _WelcomeAuthScreenState extends State<WelcomeAuthScreen> {
 
         // Color theme selection
         const Text(
-          "Choose Theme Color",
+          "Choose Theme Accent",
           style: TextStyle(
-            fontSize: 12.5,
+            fontSize: 12,
             fontWeight: FontWeight.w700,
-            color: AppTheme.textPrimary,
+            color: AppTheme.textSecondary,
           ),
         ),
         const SizedBox(height: 8),
@@ -519,26 +628,26 @@ class _WelcomeAuthScreenState extends State<WelcomeAuthScreen> {
             );
           }),
         ),
-        const SizedBox(height: 24),
+        const SizedBox(height: 22),
 
         // Start Button
         SizedBox(
           width: double.infinity,
-          height: 50,
+          height: 48,
           child: ElevatedButton(
             onPressed: _isLoading ? null : _handleStartOffline,
             style: ElevatedButton.styleFrom(
               backgroundColor: AppTheme.primaryPurple,
               foregroundColor: Colors.white,
-              elevation: 4,
+              elevation: 0,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(14),
               ),
             ),
             child: _isLoading
                 ? const SizedBox(
-                    width: 22,
-                    height: 22,
+                    width: 20,
+                    height: 20,
                     child: CircularProgressIndicator(
                       strokeWidth: 2.5,
                       color: Colors.white,
@@ -548,15 +657,15 @@ class _WelcomeAuthScreenState extends State<WelcomeAuthScreen> {
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Text(
-                        "Start Notebook Offline",
+                        "Create Offline Profile",
                         style: TextStyle(
-                          fontSize: 15.5,
+                          fontSize: 14.5,
                           fontWeight: FontWeight.w800,
                           letterSpacing: 0.2,
                         ),
                       ),
                       SizedBox(width: 8),
-                      Icon(CupertinoIcons.arrow_right_circle_fill, size: 20),
+                      Icon(CupertinoIcons.arrow_right_circle_fill, size: 18),
                     ],
                   ),
           ),
@@ -566,9 +675,7 @@ class _WelcomeAuthScreenState extends State<WelcomeAuthScreen> {
   }
 
   /// Supabase Cloud Account Sign In / Sign Up Form
-  Widget _buildCloudAuthForm() {
-    final isSignUp = _mode == AuthMode.cloudSignUp;
-
+  Widget _buildCloudAuthForm(bool isSignUp) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -578,7 +685,7 @@ class _WelcomeAuthScreenState extends State<WelcomeAuthScreen> {
             Text(
               isSignUp ? "Create Cloud Account" : "Sign In to Cloud",
               style: const TextStyle(
-                fontSize: 16,
+                fontSize: 15,
                 fontWeight: FontWeight.w800,
                 color: AppTheme.textPrimary,
               ),
@@ -586,12 +693,13 @@ class _WelcomeAuthScreenState extends State<WelcomeAuthScreen> {
             GestureDetector(
               onTap: () {
                 setState(() {
-                  _mode = isSignUp ? AuthMode.cloudSignIn : AuthMode.cloudSignUp;
+                  _mode =
+                      isSignUp ? AuthMode.cloudSignIn : AuthMode.cloudSignUp;
                   _errorMessage = null;
                 });
               },
               child: Text(
-                isSignUp ? "Have an account? Sign In" : "Need account? Sign Up",
+                isSignUp ? "Sign In instead" : "Create Account",
                 style: const TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
@@ -601,10 +709,10 @@ class _WelcomeAuthScreenState extends State<WelcomeAuthScreen> {
             ),
           ],
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: 3),
         Text(
           isSignUp
-              ? "Register with Supabase to backup notes across devices."
+              ? "Register with email to backup notes across devices."
               : "Sign in with your email to restore your cloud notebook.",
           style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
         ),
@@ -613,11 +721,11 @@ class _WelcomeAuthScreenState extends State<WelcomeAuthScreen> {
         // Optional Name if Sign Up
         if (isSignUp) ...[
           const Text(
-            "Full Name",
+            "Display Name",
             style: TextStyle(
-              fontSize: 12.5,
+              fontSize: 12,
               fontWeight: FontWeight.w700,
-              color: AppTheme.textPrimary,
+              color: AppTheme.textSecondary,
             ),
           ),
           const SizedBox(height: 6),
@@ -625,23 +733,24 @@ class _WelcomeAuthScreenState extends State<WelcomeAuthScreen> {
             controller: _cloudNameController,
             textCapitalization: TextCapitalization.words,
             decoration: InputDecoration(
-              hintText: "e.g. Ayen",
+              hintText: "e.g. Ayen, CJay...",
+              hintStyle: const TextStyle(color: AppTheme.textMuted),
               prefixIcon: const Icon(CupertinoIcons.person_fill,
                   color: AppTheme.primaryPurple, size: 18),
               filled: true,
               fillColor: AppTheme.background,
               border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
+                borderRadius: BorderRadius.circular(12),
                 borderSide: const BorderSide(color: AppTheme.dividerColor),
               ),
               enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
+                borderRadius: BorderRadius.circular(12),
                 borderSide: const BorderSide(color: AppTheme.dividerColor),
               ),
               focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
+                borderRadius: BorderRadius.circular(12),
                 borderSide: const BorderSide(
-                    color: AppTheme.primaryPurple, width: 1.8),
+                    color: AppTheme.primaryPurple, width: 1.5),
               ),
               contentPadding:
                   const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -654,9 +763,9 @@ class _WelcomeAuthScreenState extends State<WelcomeAuthScreen> {
         const Text(
           "Email Address",
           style: TextStyle(
-            fontSize: 12.5,
+            fontSize: 12,
             fontWeight: FontWeight.w700,
-            color: AppTheme.textPrimary,
+            color: AppTheme.textSecondary,
           ),
         ),
         const SizedBox(height: 6),
@@ -665,22 +774,23 @@ class _WelcomeAuthScreenState extends State<WelcomeAuthScreen> {
           keyboardType: TextInputType.emailAddress,
           decoration: InputDecoration(
             hintText: "name@example.com",
+            hintStyle: const TextStyle(color: AppTheme.textMuted),
             prefixIcon: const Icon(CupertinoIcons.mail_solid,
                 color: AppTheme.primaryPurple, size: 18),
             filled: true,
             fillColor: AppTheme.background,
             border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(12),
               borderSide: const BorderSide(color: AppTheme.dividerColor),
             ),
             enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(12),
               borderSide: const BorderSide(color: AppTheme.dividerColor),
             ),
             focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(12),
               borderSide: const BorderSide(
-                  color: AppTheme.primaryPurple, width: 1.8),
+                  color: AppTheme.primaryPurple, width: 1.5),
             ),
             contentPadding:
                 const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -692,9 +802,9 @@ class _WelcomeAuthScreenState extends State<WelcomeAuthScreen> {
         const Text(
           "Password",
           style: TextStyle(
-            fontSize: 12.5,
+            fontSize: 12,
             fontWeight: FontWeight.w700,
-            color: AppTheme.textPrimary,
+            color: AppTheme.textSecondary,
           ),
         ),
         const SizedBox(height: 6),
@@ -703,6 +813,7 @@ class _WelcomeAuthScreenState extends State<WelcomeAuthScreen> {
           obscureText: _obscurePassword,
           decoration: InputDecoration(
             hintText: "••••••••",
+            hintStyle: const TextStyle(color: AppTheme.textMuted),
             prefixIcon: const Icon(CupertinoIcons.lock_fill,
                 color: AppTheme.primaryPurple, size: 18),
             suffixIcon: IconButton(
@@ -710,7 +821,7 @@ class _WelcomeAuthScreenState extends State<WelcomeAuthScreen> {
                 _obscurePassword
                     ? CupertinoIcons.eye_slash_fill
                     : CupertinoIcons.eye_fill,
-                color: AppTheme.textSecondary,
+                color: AppTheme.textMuted,
                 size: 18,
               ),
               onPressed: () =>
@@ -719,42 +830,42 @@ class _WelcomeAuthScreenState extends State<WelcomeAuthScreen> {
             filled: true,
             fillColor: AppTheme.background,
             border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(12),
               borderSide: const BorderSide(color: AppTheme.dividerColor),
             ),
             enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(12),
               borderSide: const BorderSide(color: AppTheme.dividerColor),
             ),
             focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(12),
               borderSide: const BorderSide(
-                  color: AppTheme.primaryPurple, width: 1.8),
+                  color: AppTheme.primaryPurple, width: 1.5),
             ),
             contentPadding:
                 const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           ),
         ),
-        const SizedBox(height: 24),
+        const SizedBox(height: 20),
 
         // Cloud Action Button
         SizedBox(
           width: double.infinity,
-          height: 50,
+          height: 48,
           child: ElevatedButton(
             onPressed: _isLoading ? null : _handleCloudAuth,
             style: ElevatedButton.styleFrom(
               backgroundColor: AppTheme.primaryPurple,
               foregroundColor: Colors.white,
-              elevation: 4,
+              elevation: 0,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(14),
               ),
             ),
             child: _isLoading
                 ? const SizedBox(
-                    width: 22,
-                    height: 22,
+                    width: 20,
+                    height: 20,
                     child: CircularProgressIndicator(
                       strokeWidth: 2.5,
                       color: Colors.white,
@@ -767,7 +878,7 @@ class _WelcomeAuthScreenState extends State<WelcomeAuthScreen> {
                         isSignUp
                             ? CupertinoIcons.sparkles
                             : CupertinoIcons.cloud_upload_fill,
-                        size: 18,
+                        size: 17,
                       ),
                       const SizedBox(width: 8),
                       Text(
@@ -775,13 +886,69 @@ class _WelcomeAuthScreenState extends State<WelcomeAuthScreen> {
                             ? "Create Cloud Account"
                             : "Sign In & Sync Notebook",
                         style: const TextStyle(
-                          fontSize: 15,
+                          fontSize: 14.5,
                           fontWeight: FontWeight.w800,
                           letterSpacing: 0.2,
                         ),
                       ),
                     ],
                   ),
+          ),
+        ),
+
+        const SizedBox(height: 14),
+
+        // Divider with text
+        Row(
+          children: [
+            Expanded(
+                child: Container(height: 1, color: AppTheme.dividerColor)),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 10),
+              child: Text('OR',
+                  style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: AppTheme.textMuted)),
+            ),
+            Expanded(
+                child: Container(height: 1, color: AppTheme.dividerColor)),
+          ],
+        ),
+
+        const SizedBox(height: 14),
+
+        // Google Sign In Button
+        SizedBox(
+          width: double.infinity,
+          height: 46,
+          child: OutlinedButton.icon(
+            onPressed: _isLoading ? null : _handleGoogleSignIn,
+            icon: Container(
+              width: 20,
+              height: 20,
+              alignment: Alignment.center,
+              child: const Text('G',
+                  style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w900,
+                      color: Color(0xFF4285F4))),
+            ),
+            label: const Text(
+              'Continue with Google',
+              style: TextStyle(
+                fontSize: 13.5,
+                fontWeight: FontWeight.w700,
+                color: AppTheme.textPrimary,
+              ),
+            ),
+            style: OutlinedButton.styleFrom(
+              side: const BorderSide(color: AppTheme.dividerColor),
+              backgroundColor: AppTheme.background,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
           ),
         ),
       ],

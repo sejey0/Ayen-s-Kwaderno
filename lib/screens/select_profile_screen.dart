@@ -154,7 +154,8 @@ class SelectProfileScreen extends StatelessWidget {
                       onPressed: () {
                         Navigator.of(context).push(
                           CupertinoPageRoute(
-                            builder: (context) => const WelcomeAuthScreen(),
+                            builder: (context) =>
+                                const WelcomeAuthScreen(canCancel: true),
                           ),
                         );
                       },

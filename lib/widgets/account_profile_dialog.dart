@@ -1,7 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/user_profile_model.dart';
+import '../screens/welcome_auth_screen.dart';
 import '../services/auto_sync_service.dart';
 import '../services/document_storage_service.dart';
 import '../services/user_service.dart';
@@ -188,7 +188,7 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
       if (Navigator.of(context).canPop()) {
         Navigator.of(context).pop();
       }
-      // Ends active session for this profile and dynamically evaluates remaining active profiles
+      // Ends active session for this profile and dynamically routes
       await UserService.instance.logoutCurrentProfile();
     }
   }
@@ -283,11 +283,11 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
     }
   }
 
-  /// Immediately navigates to full-screen Login/Sign-In page
+  /// Navigates directly to the Main Login / Sign-Up Page with Cancel capability
   void _navigateToAddProfile() {
     Navigator.of(context).push(
       CupertinoPageRoute(
-        builder: (context) => const CloudAuthPage(),
+        builder: (context) => const WelcomeAuthScreen(canCancel: true),
       ),
     );
   }
@@ -628,7 +628,7 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
   }
 
   // ===========================================================================
-  // 3. CLOUD STATUS CARD (Clean green card, side-by-side buttons, no duplicate email)
+  // 3. CLOUD STATUS CARD
   // ===========================================================================
 
   Widget _buildCloudStatusCard(UserProfile user, bool isCloud) {
@@ -672,7 +672,7 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
             const SizedBox(height: 14),
             Row(
               children: [
-                // Side-by-side "Sync Now" Button
+                // Balanced "Sync Now" Button
                 Expanded(
                   child: SizedBox(
                     height: 38,
@@ -702,7 +702,7 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
                   ),
                 ),
                 const SizedBox(width: 10),
-                // Side-by-side "Unlink Cloud" Button
+                // Balanced "Unlink Cloud" Button
                 Expanded(
                   child: SizedBox(
                     height: 38,
@@ -727,7 +727,7 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
         ),
       );
     } else {
-      // Offline: Connect Cloud Card
+      // Connect Cloud Card
       return Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
@@ -772,13 +772,7 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
               ),
             ),
             ElevatedButton(
-              onPressed: () {
-                Navigator.of(context).push(
-                  CupertinoPageRoute(
-                    builder: (context) => const CloudAuthPage(),
-                  ),
-                );
-              },
+              onPressed: _navigateToAddProfile,
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppTheme.primaryPurple,
                 foregroundColor: Colors.white,
@@ -854,7 +848,7 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
             ),
             const SizedBox(height: 12),
 
-            // Profile List Cards (Tappable cards to switch, active with checkmark)
+            // Profile List Cards
             ...profiles.map((p) {
               final isActive = p.id == activeUser.id;
               return _buildProfileItemCard(p, isActive);
@@ -1031,385 +1025,6 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
           ),
         ),
       ],
-    );
-  }
-}
-
-// =============================================================================
-// FULL-SCREEN CLOUD AUTHENTICATION PAGE
-// =============================================================================
-
-class CloudAuthPage extends StatefulWidget {
-  const CloudAuthPage({super.key});
-
-  @override
-  State<CloudAuthPage> createState() => _CloudAuthPageState();
-}
-
-class _CloudAuthPageState extends State<CloudAuthPage> {
-  bool _isSignUpMode = false;
-  bool _isLoading = false;
-  bool _obscurePassword = true;
-  String? _errorMessage;
-
-  final TextEditingController _emailController = TextEditingController();
-  final TextEditingController _passwordController = TextEditingController();
-
-  @override
-  void dispose() {
-    _emailController.dispose();
-    _passwordController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _handleAuth() async {
-    final email = _emailController.text.trim();
-    final password = _passwordController.text.trim();
-
-    if (email.isEmpty || !email.contains('@')) {
-      setState(() => _errorMessage = 'Please enter a valid email address');
-      return;
-    }
-    if (password.length < 6) {
-      setState(
-          () => _errorMessage = 'Password must be at least 6 characters long');
-      return;
-    }
-
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
-
-    try {
-      await UserService.instance.linkSupabaseAccount(
-        email: email,
-        password: password,
-        isSignUp: _isSignUpMode,
-      );
-
-      if (!mounted) return;
-      if (Navigator.of(context).canPop()) {
-        Navigator.pop(context); // Pop CloudAuthPage
-      }
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Row(
-            children: [
-              Icon(CupertinoIcons.checkmark_seal_fill,
-                  color: Color(0xFF10B981), size: 18),
-              SizedBox(width: 8),
-              Text(
-                'Signed in! All documents & notes synced ☁️✨',
-                style: TextStyle(fontWeight: FontWeight.w600),
-              ),
-            ],
-          ),
-          backgroundColor: AppTheme.primaryPurpleDark,
-          behavior: SnackBarBehavior.floating,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        ),
-      );
-    } on AuthException catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _isLoading = false;
-        _errorMessage = e.message;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _isLoading = false;
-        _errorMessage = 'Authentication error: $e';
-      });
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final bottomPadding = MediaQuery.of(context).padding.bottom;
-
-    return Scaffold(
-      backgroundColor: AppTheme.background,
-      appBar: AppBar(
-        backgroundColor: AppTheme.surfaceWhite,
-        surfaceTintColor: Colors.transparent,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(CupertinoIcons.back,
-              color: AppTheme.textPrimary, size: 22),
-          onPressed: () {
-            if (Navigator.of(context).canPop()) {
-              Navigator.pop(context);
-            }
-          },
-        ),
-        title: Text(
-          _isSignUpMode ? 'Create Account' : 'Sign In',
-          style: const TextStyle(
-            fontSize: 17,
-            fontWeight: FontWeight.w800,
-            color: AppTheme.textPrimary,
-            letterSpacing: -0.3,
-          ),
-        ),
-        centerTitle: true,
-      ),
-      body: SingleChildScrollView(
-        padding: EdgeInsets.fromLTRB(24, 32, 24, bottomPadding + 24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Cloud Icon Gradient Container
-            Center(
-              child: Container(
-                width: 76,
-                height: 76,
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [AppTheme.primaryPurple, AppTheme.accentPink],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: BorderRadius.circular(22),
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppTheme.primaryPurple.withValues(alpha: 0.25),
-                      blurRadius: 20,
-                      offset: const Offset(0, 8),
-                    ),
-                  ],
-                ),
-                child: const Icon(
-                  CupertinoIcons.cloud_fill,
-                  size: 34,
-                  color: Colors.white,
-                ),
-              ),
-            ),
-            const SizedBox(height: 20),
-            Center(
-              child: Text(
-                _isSignUpMode
-                    ? 'Create your cloud account'
-                    : 'Sign in to your cloud account',
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  color: AppTheme.textPrimary,
-                ),
-              ),
-            ),
-            const SizedBox(height: 6),
-            const Center(
-              child: Text(
-                'Sync your documents, drawings, and notes across all your devices.',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 13,
-                  color: AppTheme.textSecondary,
-                  height: 1.4,
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 32),
-
-            // Email Field
-            const Text(
-              'Email',
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                color: AppTheme.textPrimary,
-              ),
-            ),
-            const SizedBox(height: 6),
-            TextField(
-              controller: _emailController,
-              keyboardType: TextInputType.emailAddress,
-              decoration: InputDecoration(
-                hintText: 'you@example.com',
-                hintStyle: const TextStyle(color: AppTheme.textMuted),
-                prefixIcon: const Icon(CupertinoIcons.mail,
-                    size: 18, color: AppTheme.primaryPurple),
-                filled: true,
-                fillColor: AppTheme.surfaceWhite,
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(14),
-                  borderSide: const BorderSide(color: AppTheme.dividerColor),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(14),
-                  borderSide: const BorderSide(color: AppTheme.dividerColor),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(14),
-                  borderSide: const BorderSide(
-                      color: AppTheme.primaryPurple, width: 1.5),
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 16),
-
-            // Password Field
-            const Text(
-              'Password',
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                color: AppTheme.textPrimary,
-              ),
-            ),
-            const SizedBox(height: 6),
-            TextField(
-              controller: _passwordController,
-              obscureText: _obscurePassword,
-              decoration: InputDecoration(
-                hintText: '••••••••',
-                hintStyle: const TextStyle(color: AppTheme.textMuted),
-                prefixIcon: const Icon(CupertinoIcons.lock,
-                    size: 18, color: AppTheme.primaryPurple),
-                suffixIcon: IconButton(
-                  icon: Icon(
-                    _obscurePassword
-                        ? CupertinoIcons.eye_slash
-                        : CupertinoIcons.eye,
-                    size: 18,
-                    color: AppTheme.textMuted,
-                  ),
-                  onPressed: () =>
-                      setState(() => _obscurePassword = !_obscurePassword),
-                ),
-                filled: true,
-                fillColor: AppTheme.surfaceWhite,
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(14),
-                  borderSide: const BorderSide(color: AppTheme.dividerColor),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(14),
-                  borderSide: const BorderSide(color: AppTheme.dividerColor),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(14),
-                  borderSide: const BorderSide(
-                      color: AppTheme.primaryPurple, width: 1.5),
-                ),
-              ),
-            ),
-
-            // Error Message
-            if (_errorMessage != null) ...[
-              const SizedBox(height: 12),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFEF2F2),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                      color: const Color(0xFFFCA5A5).withValues(alpha: 0.5)),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(CupertinoIcons.exclamationmark_triangle,
-                        size: 14, color: Color(0xFFEF4444)),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        _errorMessage!,
-                        style: const TextStyle(
-                          color: Color(0xFFDC2626),
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-
-            const SizedBox(height: 24),
-
-            // Submit Button
-            SizedBox(
-              width: double.infinity,
-              height: 50,
-              child: ElevatedButton(
-                onPressed: _isLoading ? null : _handleAuth,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.primaryPurple,
-                  foregroundColor: Colors.white,
-                  disabledBackgroundColor:
-                      AppTheme.primaryPurple.withValues(alpha: 0.6),
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                ),
-                child: _isLoading
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2.5,
-                          color: Colors.white,
-                        ),
-                      )
-                    : Text(
-                        _isSignUpMode ? 'Create Account' : 'Sign In',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w800,
-                          fontSize: 15,
-                          letterSpacing: -0.2,
-                        ),
-                      ),
-              ),
-            ),
-
-            const SizedBox(height: 16),
-
-            // Toggle Sign Up / Sign In
-            Center(
-              child: GestureDetector(
-                onTap: () => setState(() {
-                  _isSignUpMode = !_isSignUpMode;
-                  _errorMessage = null;
-                }),
-                child: RichText(
-                  text: TextSpan(
-                    style: const TextStyle(
-                        fontSize: 13, color: AppTheme.textSecondary),
-                    children: [
-                      TextSpan(
-                        text: _isSignUpMode
-                            ? 'Already have an account? '
-                            : 'Don\'t have an account? ',
-                      ),
-                      TextSpan(
-                        text: _isSignUpMode ? 'Sign In' : 'Sign Up',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w700,
-                          color: AppTheme.primaryPurple,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }
