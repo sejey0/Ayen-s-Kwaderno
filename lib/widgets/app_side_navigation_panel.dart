@@ -105,7 +105,7 @@ class _AppSideNavigationPanelState extends State<AppSideNavigationPanel> {
       width: widget.isDrawerMode ? 290.0 : panelWidth,
       decoration: BoxDecoration(
         color: AppTheme.surfaceWhite,
-        border: Border(
+        border: const Border(
           right: BorderSide(
             color: AppTheme.dividerColor,
             width: 1.0,
@@ -122,8 +122,8 @@ class _AppSideNavigationPanelState extends State<AppSideNavigationPanel> {
       child: SafeArea(
         child: Column(
           children: [
-            // ── 1. HEADER & TOGGLE BUTTON ──
-            _buildHeader(),
+            // ── 1. TOP HEADER (Promoted Profile + Close X / Toggle) ──
+            _buildTopProfileHeader(),
 
             const Divider(height: 1, color: AppTheme.dividerColor),
 
@@ -131,14 +131,9 @@ class _AppSideNavigationPanelState extends State<AppSideNavigationPanel> {
             Expanded(
               child: ListView(
                 physics: const BouncingScrollPhysics(),
-                padding: const EdgeInsets.symmetric(vertical: 12),
+                padding: const EdgeInsets.symmetric(vertical: 10),
                 children: [
-                  // Featured Profile & Settings Quick Card
-                  _buildProfileQuickCard(),
-
-                  const SizedBox(height: 12),
-
-                  // Section 1: Main Workspace
+                  // Section 1: Workspace
                   if (_isExpanded) _buildSectionHeader('WORKSPACE'),
                   _buildNavItem(
                     item: SidebarNavItem.dashboard,
@@ -161,7 +156,7 @@ class _AppSideNavigationPanelState extends State<AppSideNavigationPanel> {
 
                   const SizedBox(height: 14),
 
-                  // Section 2: Tools & AI
+                  // Section 2: Tools & Creation
                   if (_isExpanded) _buildSectionHeader('TOOLS & CREATION'),
                   _buildNavItem(
                     item: SidebarNavItem.aiOcr,
@@ -173,7 +168,7 @@ class _AppSideNavigationPanelState extends State<AppSideNavigationPanel> {
 
                   const SizedBox(height: 14),
 
-                  // Section 3: Management & Settings (Primary Focus)
+                  // Section 3: Account & System (Sole Settings Entry Point)
                   if (_isExpanded) _buildSectionHeader('ACCOUNT & SYSTEM'),
                   _buildNavItem(
                     item: SidebarNavItem.settings,
@@ -199,7 +194,7 @@ class _AppSideNavigationPanelState extends State<AppSideNavigationPanel> {
               ),
             ),
 
-            // ── 3. FOOTER AREA (Quick Sync & Info) ──
+            // ── 3. FOOTER AREA (Single Sync Button & Simple Version) ──
             const Divider(height: 1, color: AppTheme.dividerColor),
             _buildFooter(),
           ],
@@ -209,122 +204,34 @@ class _AppSideNavigationPanelState extends State<AppSideNavigationPanel> {
   }
 
   // ===========================================================================
-  // HEADER
+  // 1. TOP HEADER (User Profile + Close X Button)
   // ===========================================================================
 
-  Widget _buildHeader() {
-    return Container(
-      height: 64,
-      padding: const EdgeInsets.symmetric(horizontal: 14),
-      child: Row(
-        mainAxisAlignment:
-            _isExpanded ? MainAxisAlignment.spaceBetween : MainAxisAlignment.center,
-        children: [
-          if (_isExpanded || widget.isDrawerMode) ...[
-            // App Brand Logo
-            Row(
-              children: [
-                Container(
-                  width: 36,
-                  height: 36,
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [AppTheme.primaryPurple, AppTheme.accentPink],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    borderRadius: BorderRadius.circular(10),
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppTheme.primaryPurple.withValues(alpha: 0.25),
-                        blurRadius: 8,
-                        offset: const Offset(0, 3),
-                      ),
-                    ],
-                  ),
-                  child: const Center(
-                    child: Text('📓', style: TextStyle(fontSize: 18)),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                const Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      "Ayen's Kwaderno",
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w900,
-                        color: AppTheme.textPrimary,
-                        letterSpacing: -0.3,
-                      ),
-                    ),
-                    Text(
-                      'Smart Digital Notebook',
-                      style: TextStyle(
-                        fontSize: 10.5,
-                        color: AppTheme.textSecondary,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ],
-
-          // Toggle Button (Collapse / Expand or Close)
-          if (!widget.isDrawerMode)
-            IconButton(
-              icon: Icon(
-                _isExpanded
-                    ? CupertinoIcons.sidebar_left
-                    : CupertinoIcons.sidebar_right,
-                size: 20,
-                color: AppTheme.textSecondary,
-              ),
-              tooltip: _isExpanded ? 'Collapse sidebar' : 'Expand sidebar',
-              onPressed: _toggleExpansion,
-            )
-          else
-            IconButton(
-              icon: const Icon(CupertinoIcons.xmark,
-                  size: 18, color: AppTheme.textSecondary),
-              tooltip: 'Close drawer',
-              onPressed: widget.onCloseDrawer,
-            ),
-        ],
-      ),
-    );
-  }
-
-  // ===========================================================================
-  // FEATURED PROFILE & SETTINGS QUICK CARD
-  // ===========================================================================
-
-  Widget _buildProfileQuickCard() {
+  Widget _buildTopProfileHeader() {
     return ValueListenableBuilder<UserProfile?>(
       valueListenable: UserService.instance.currentUserNotifier,
       builder: (context, user, _) {
-        if (user == null) return const SizedBox.shrink();
-
-        final isCloud = user.isCloudLinked;
+        final displayName = user?.name ?? 'Ayen';
+        final isCloud = user?.isCloudLinked ?? false;
+        final emailText = isCloud
+            ? (user?.email ?? 'Cloud Synced')
+            : 'Offline Local Storage';
+        final emoji = user?.avatarEmoji ?? '📓';
 
         if (!_isExpanded && !widget.isDrawerMode) {
-          // Collapsed Icon-Only View
-          return Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            child: Tooltip(
-              message: '${user.name} (${isCloud ? "Cloud Synced" : "Offline"})',
-              child: GestureDetector(
-                onTap: _openSettings,
+          // Collapsed Top View
+          return Container(
+            height: 72,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Center(
+              child: Tooltip(
+                message: '$displayName\n$emailText',
                 child: Stack(
                   alignment: Alignment.bottomRight,
                   children: [
                     Container(
-                      width: 48,
-                      height: 48,
+                      width: 44,
+                      height: 44,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         gradient: const LinearGradient(
@@ -338,15 +245,12 @@ class _AppSideNavigationPanelState extends State<AppSideNavigationPanel> {
                         ),
                       ),
                       child: Center(
-                        child: Text(
-                          user.avatarEmoji,
-                          style: const TextStyle(fontSize: 22),
-                        ),
+                        child: Text(emoji, style: const TextStyle(fontSize: 22)),
                       ),
                     ),
                     Container(
-                      width: 13,
-                      height: 13,
+                      width: 12,
+                      height: 12,
                       decoration: BoxDecoration(
                         color: isCloud
                             ? const Color(0xFF10B981)
@@ -362,118 +266,93 @@ class _AppSideNavigationPanelState extends State<AppSideNavigationPanel> {
           );
         }
 
-        // Expanded Rich Card View
+        // Expanded Top Header (Profile info on left, Close X button on right)
         return Container(
-          margin: const EdgeInsets.symmetric(horizontal: 12),
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: AppTheme.primaryPurpleLight.withValues(alpha: 0.4),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: AppTheme.primaryPurple.withValues(alpha: 0.2),
-            ),
-          ),
-          child: InkWell(
-            onTap: _openSettings,
-            borderRadius: BorderRadius.circular(12),
-            child: Row(
-              children: [
-                // Avatar
-                Container(
-                  width: 42,
-                  height: 42,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: const LinearGradient(
-                      colors: [AppTheme.primaryPurple, AppTheme.accentPink],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
+          padding: const EdgeInsets.fromLTRB(16, 14, 10, 14),
+          child: Row(
+            children: [
+              // Large Circular Avatar
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: const LinearGradient(
+                    colors: [AppTheme.primaryPurple, AppTheme.accentPink],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppTheme.primaryPurple.withValues(alpha: 0.25),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
                     ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppTheme.primaryPurple.withValues(alpha: 0.25),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
+                  ],
+                ),
+                child: Center(
+                  child: Text(
+                    emoji,
+                    style: const TextStyle(fontSize: 22),
                   ),
-                  child: Center(
-                    child: Text(
-                      user.avatarEmoji,
-                      style: const TextStyle(fontSize: 20),
+                ),
+              ),
+              const SizedBox(width: 12),
+
+              // Name and Email
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      displayName,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                        color: AppTheme.textPrimary,
+                        letterSpacing: -0.2,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                  ),
-                ),
-                const SizedBox(width: 10),
-
-                // Name & Cloud Status
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        user.name,
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w800,
-                          color: AppTheme.textPrimary,
-                          letterSpacing: -0.2,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                    const SizedBox(height: 2),
+                    Text(
+                      emailText,
+                      style: const TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w500,
+                        color: AppTheme.textSecondary,
                       ),
-                      const SizedBox(height: 2),
-                      Row(
-                        children: [
-                          Container(
-                            width: 6,
-                            height: 6,
-                            decoration: BoxDecoration(
-                              color: isCloud
-                                  ? const Color(0xFF10B981)
-                                  : const Color(0xFF94A3B8),
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                          const SizedBox(width: 5),
-                          Expanded(
-                            child: Text(
-                              isCloud
-                                  ? (user.email ?? 'Cloud Synced')
-                                  : 'Offline Storage',
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
-                                color: isCloud
-                                    ? const Color(0xFF065F46)
-                                    : AppTheme.textSecondary,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
                 ),
+              ),
 
-                // Settings icon button
-                Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(
-                    color: AppTheme.surfaceWhite,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: AppTheme.dividerColor),
-                  ),
-                  child: const Icon(
-                    CupertinoIcons.gear_alt,
-                    size: 14,
-                    color: AppTheme.primaryPurple,
-                  ),
+              // Close (X) Icon Button (aligned in top-right)
+              if (widget.isDrawerMode)
+                IconButton(
+                  icon: const Icon(CupertinoIcons.xmark,
+                      size: 18, color: AppTheme.textSecondary),
+                  tooltip: 'Close drawer',
+                  padding: const EdgeInsets.all(8),
+                  constraints: const BoxConstraints(),
+                  splashRadius: 20,
+                  onPressed: widget.onCloseDrawer,
+                )
+              else
+                IconButton(
+                  icon: const Icon(CupertinoIcons.sidebar_left,
+                      size: 20, color: AppTheme.textSecondary),
+                  tooltip: 'Collapse sidebar',
+                  padding: const EdgeInsets.all(8),
+                  constraints: const BoxConstraints(),
+                  splashRadius: 20,
+                  onPressed: _toggleExpansion,
                 ),
-              ],
-            ),
+            ],
           ),
         );
       },
@@ -490,7 +369,7 @@ class _AppSideNavigationPanelState extends State<AppSideNavigationPanel> {
       child: Text(
         title,
         style: const TextStyle(
-          fontSize: 10,
+          fontSize: 10.5,
           fontWeight: FontWeight.w800,
           color: AppTheme.textMuted,
           letterSpacing: 0.8,
@@ -514,7 +393,7 @@ class _AppSideNavigationPanelState extends State<AppSideNavigationPanel> {
     final isSelected = widget.selectedItem == item;
 
     if (!_isExpanded && !widget.isDrawerMode) {
-      // Collapsed View (Icon-only with Tooltip & Active Indicator)
+      // Collapsed Icon-Only View
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 12),
         child: Tooltip(
@@ -555,7 +434,7 @@ class _AppSideNavigationPanelState extends State<AppSideNavigationPanel> {
       );
     }
 
-    // Expanded View (Full Label, Active Highlight Line, Badges)
+    // Expanded Full Menu Item
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
       child: Material(
@@ -579,7 +458,6 @@ class _AppSideNavigationPanelState extends State<AppSideNavigationPanel> {
             ),
             child: Row(
               children: [
-                // Icon with subtle active background
                 Icon(
                   icon,
                   size: 19,
@@ -611,10 +489,10 @@ class _AppSideNavigationPanelState extends State<AppSideNavigationPanel> {
                 if (badge != null)
                   Container(
                     padding:
-                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
                     decoration: BoxDecoration(
                       color: (badgeColor ?? AppTheme.primaryPurple)
-                          .withValues(alpha: 0.15),
+                          .withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Text(
@@ -635,7 +513,7 @@ class _AppSideNavigationPanelState extends State<AppSideNavigationPanel> {
   }
 
   // ===========================================================================
-  // FOOTER (Sync & Info)
+  // 3. FOOTER (Single Sync Button & Simple Version Text)
   // ===========================================================================
 
   Widget _buildFooter() {
@@ -644,7 +522,7 @@ class _AppSideNavigationPanelState extends State<AppSideNavigationPanel> {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 12),
         child: Tooltip(
-          message: 'Sync with Cloud',
+          message: 'Sync Cloud Backup',
           child: IconButton(
             icon: _isSyncing
                 ? const SizedBox(
@@ -663,12 +541,12 @@ class _AppSideNavigationPanelState extends State<AppSideNavigationPanel> {
       );
     }
 
-    // Expanded Footer
+    // Expanded Footer (Single sync button and clean version text)
     return Container(
-      padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
       child: Column(
         children: [
-          // Quick Sync Button
+          // Single "Sync Cloud Backup" Button
           SizedBox(
             width: double.infinity,
             height: 38,
@@ -688,7 +566,7 @@ class _AppSideNavigationPanelState extends State<AppSideNavigationPanel> {
               label: Text(
                 _isSyncing ? 'Syncing...' : 'Sync Cloud Backup',
                 style: const TextStyle(
-                  fontSize: 12,
+                  fontSize: 12.5,
                   fontWeight: FontWeight.w700,
                   color: AppTheme.primaryPurple,
                 ),
@@ -703,12 +581,14 @@ class _AppSideNavigationPanelState extends State<AppSideNavigationPanel> {
             ),
           ),
           const SizedBox(height: 8),
+
+          // Simple clean version text
           const Text(
-            'Ayen\'s Kwaderno · v1.2.0',
+            'v1.2.0',
             style: TextStyle(
-              fontSize: 10,
+              fontSize: 11,
               color: AppTheme.textMuted,
-              fontWeight: FontWeight.w500,
+              fontWeight: FontWeight.w600,
             ),
           ),
         ],
