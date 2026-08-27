@@ -21,6 +21,7 @@ enum AnnotationTool {
   none, // Pan & Zoom Navigation Mode
   highlighter, // Semi-transparent highlighter drawing
   straightLine, // Auto-straightened coordinate lines
+  eraser, // Interactive stroke eraser
   addImage, // Draggable/resizable image overlay
 }
 
@@ -866,6 +867,25 @@ class _EditorScreenState extends State<EditorScreen>
     );
   }
 
+  /// Erases any strokes within radius of the given touch point
+  void _eraseStrokesNear(Offset point, double radius) {
+    bool removedAny = false;
+    setState(() {
+      _strokes.removeWhere((stroke) {
+        final hit = stroke.points.any((p) => (p - point).distance <= radius);
+        if (hit) removedAny = true;
+        return hit;
+      });
+      if (removedAny) {
+        _perPageStrokes[_currentPage] = List.from(_strokes);
+      }
+    });
+    if (removedAny) {
+      HapticFeedback.lightImpact();
+      _autoSaveAndSync();
+    }
+  }
+
   /// Deletes a specific image sticker
   void _deleteImageAnnotation(String id) {
     setState(() {
@@ -938,7 +958,8 @@ class _EditorScreenState extends State<EditorScreen>
     final totalAnnotationsCount =
         _strokes.length + _textAnnotations.length + _imageAnnotations.length;
     final bool isPaletteOpen = _activeTool == AnnotationTool.highlighter ||
-        _activeTool == AnnotationTool.straightLine;
+        _activeTool == AnnotationTool.straightLine ||
+        _activeTool == AnnotationTool.eraser;
     final double bottomVerticalArrowOffset = isPaletteOpen ? 180.0 : 96.0;
 
     return Scaffold(
@@ -1273,13 +1294,17 @@ class _EditorScreenState extends State<EditorScreen>
                       child: GestureDetector(
                         behavior: HitTestBehavior.opaque,
                         onPanStart: (DragStartDetails details) {
-                          if (_activeTool == AnnotationTool.highlighter ||
+                          if (_activeTool == AnnotationTool.eraser) {
+                            _eraseStrokesNear(details.localPosition, 24.0);
+                          } else if (_activeTool == AnnotationTool.highlighter ||
                               _activeTool == AnnotationTool.straightLine) {
                             setState(() {
                               _redoHistory.clear();
                               _currentStroke = Stroke(
                                 points: [details.localPosition],
-                                color: _selectedColor,
+                                color: _strokeWidth <= 6.0
+                                    ? _selectedColor.withValues(alpha: 1.0)
+                                    : _selectedColor,
                                 strokeWidth: _strokeWidth,
                                 isStraightLine:
                                     _activeTool == AnnotationTool.straightLine,
@@ -1288,7 +1313,9 @@ class _EditorScreenState extends State<EditorScreen>
                           }
                         },
                         onPanUpdate: (DragUpdateDetails details) {
-                          if (_currentStroke != null) {
+                          if (_activeTool == AnnotationTool.eraser) {
+                            _eraseStrokesNear(details.localPosition, 24.0);
+                          } else if (_currentStroke != null) {
                             setState(() {
                               _currentStroke!.points
                                   .add(details.localPosition);
@@ -2156,18 +2183,55 @@ class _EditorScreenState extends State<EditorScreen>
               _buildVerticalDivider(),
               const SizedBox(width: 6),
 
-              // Stroke Width Presets (Thin, Medium, Thick)
-              _buildStrokeSizePreset(
-                label: 'S',
-                width: _activeTool == AnnotationTool.straightLine ? 3.0 : 10.0,
+              // 1. Ballpen Icon (replaces 'S')
+              _buildSubBarPresetIcon(
+                icon: CupertinoIcons.pen,
+                tooltip: 'Ballpen (Fine Pen Stroke)',
+                isSelected: _activeTool != AnnotationTool.eraser &&
+                    _strokeWidth <= 6.0,
+                onTap: () {
+                  setState(() {
+                    _strokeWidth =
+                        _activeTool == AnnotationTool.straightLine ? 3.0 : 4.0;
+                    if (_activeTool == AnnotationTool.eraser) {
+                      _activeTool = AnnotationTool.highlighter;
+                    }
+                  });
+                },
               ),
-              _buildStrokeSizePreset(
-                label: 'M',
-                width: _activeTool == AnnotationTool.straightLine ? 5.0 : 16.0,
+
+              // 2. Highlighter Icon (replaces 'M')
+              _buildSubBarPresetIcon(
+                icon: CupertinoIcons.pencil_outline,
+                tooltip: 'Highlighter (Marker Stroke)',
+                isSelected: _activeTool != AnnotationTool.eraser &&
+                    _strokeWidth > 6.0,
+                onTap: () {
+                  setState(() {
+                    _strokeWidth =
+                        _activeTool == AnnotationTool.straightLine ? 6.0 : 16.0;
+                    if (_activeTool == AnnotationTool.eraser) {
+                      _activeTool = AnnotationTool.highlighter;
+                    }
+                  });
+                },
               ),
-              _buildStrokeSizePreset(
-                label: 'L',
-                width: _activeTool == AnnotationTool.straightLine ? 8.0 : 24.0,
+
+              // 3. Eraser Icon (replaces 'L')
+              _buildSubBarPresetIcon(
+                icon: CupertinoIcons.bandage,
+                tooltip: 'Eraser (Drag to Erase)',
+                isSelected: _activeTool == AnnotationTool.eraser,
+                selectedColor: const Color(0xFFEF4444),
+                onTap: () {
+                  setState(() {
+                    if (_activeTool == AnnotationTool.eraser) {
+                      _activeTool = AnnotationTool.highlighter;
+                    } else {
+                      _activeTool = AnnotationTool.eraser;
+                    }
+                  });
+                },
               ),
             ],
           ),
@@ -2176,26 +2240,42 @@ class _EditorScreenState extends State<EditorScreen>
     );
   }
 
-  Widget _buildStrokeSizePreset({
-    required String label,
-    required double width,
+  Widget _buildSubBarPresetIcon({
+    required IconData icon,
+    required String tooltip,
+    required bool isSelected,
+    required VoidCallback onTap,
+    Color? selectedColor,
   }) {
-    final isSelected = (_strokeWidth - width).abs() < 0.5;
+    final activeBg = selectedColor ?? AppTheme.primaryPurple;
 
-    return GestureDetector(
-      onTap: () => setState(() => _strokeWidth = width),
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 3),
-        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
-        decoration: BoxDecoration(
-          color: isSelected ? AppTheme.primaryPurple : Colors.transparent,
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
+    return Tooltip(
+      message: tooltip,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () {
+          HapticFeedback.selectionClick();
+          onTap();
+        },
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 3),
+          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+          decoration: BoxDecoration(
+            color: isSelected ? activeBg : Colors.transparent,
+            borderRadius: BorderRadius.circular(10),
+            boxShadow: isSelected
+                ? [
+                    BoxShadow(
+                      color: activeBg.withValues(alpha: 0.35),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
+                    ),
+                  ]
+                : null,
+          ),
+          child: Icon(
+            icon,
+            size: 16,
             color: isSelected ? Colors.white : AppTheme.textSecondary,
           ),
         ),
