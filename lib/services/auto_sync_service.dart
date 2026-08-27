@@ -156,7 +156,88 @@ class AutoSyncService {
       final userPrefix = 'u_${activeUserId}___';
 
       // -------------------------------------------------------------
-      // 1. FETCH REMOTE HANDWRITTEN NOTES FROM SUPABASE
+      // 1. FETCH REMOTE DOCUMENT ANNOTATIONS & NOTE STROKES FROM SUPABASE
+      // -------------------------------------------------------------
+      final Map<String, List<dynamic>> noteStrokesMap = {};
+      final List<DocumentItem> cloudDocs = [];
+      final localDocs =
+          await DocumentStorageService.loadSavedDocuments(activeUserId);
+
+      try {
+        final annotationsResponse =
+            await client.from('document_annotations').select();
+
+        for (final row in annotationsResponse) {
+          final rawDocName = row['document_name'] as String?;
+          if (rawDocName == null || !rawDocName.startsWith(userPrefix)) continue;
+
+          final docName = rawDocName.substring(userPrefix.length);
+          if (docName.isEmpty) continue;
+
+          // If this is a note's drawing strokes:
+          if (docName.startsWith('note_')) {
+            final noteId = docName.substring('note_'.length);
+            if (row['strokes_data'] is List) {
+              noteStrokesMap[noteId] = row['strokes_data'] as List<dynamic>;
+            }
+            continue;
+          }
+
+          // Otherwise, it's a document:
+          final strokes = (row['strokes_data'] is List)
+              ? (row['strokes_data'] as List<dynamic>)
+              : (row['strokes_data'] is Map
+                  ? (row['strokes_data'] as Map)
+                      .values
+                      .expand((e) => e is List ? e : [])
+                      .toList()
+                  : []);
+          final texts = (row['texts_data'] is List)
+              ? (row['texts_data'] as List<dynamic>)
+              : (row['texts_data'] is Map
+                  ? (row['texts_data'] as Map)
+                      .values
+                      .expand((e) => e is List ? e : [])
+                      .toList()
+                  : []);
+          final images = (row['images_data'] is List)
+              ? (row['images_data'] as List<dynamic>)
+              : (row['images_data'] is Map
+                  ? (row['images_data'] as Map)
+                      .values
+                      .expand((e) => e is List ? e : [])
+                      .toList()
+                  : []);
+          final totalAnnotations =
+              strokes.length + texts.length + images.length;
+          final cloudUpdatedAt = row['updated_at'] != null
+              ? DateTime.tryParse(row['updated_at'] as String)?.toLocal() ??
+                  DateTime.now()
+              : DateTime.now();
+
+          // Check if local file exists
+          String? localFilePath;
+          final localDocIndex =
+              localDocs.indexWhere((d) => d.fileName == docName);
+          if (localDocIndex >= 0 && localDocs[localDocIndex].filePath != null) {
+            localFilePath = localDocs[localDocIndex].filePath;
+          }
+
+          cloudDocs.add(DocumentItem(
+            fileName: docName,
+            filePath: localFilePath,
+            lastOpenedAt: cloudUpdatedAt,
+            annotationsCount: totalAnnotations,
+            isCloudSynced: true,
+            paletteIndex: 0,
+          ));
+        }
+      } catch (e) {
+        debugPrint('Notice fetching remote annotations: $e');
+      }
+
+      // -------------------------------------------------------------
+      // 2. FETCH REMOTE HANDWRITTEN NOTES FROM SUPABASE & ATTACH STROKES
       // -------------------------------------------------------------
       final List<HandwritingNote> cloudNotes = [];
       try {
@@ -171,8 +252,23 @@ class AutoSyncService {
           final cleanId = rawId.substring(userPrefix.length);
           final map = Map<String, dynamic>.from(row);
           map['id'] = cleanId;
+
+          final strokes = noteStrokesMap[cleanId];
+          List<Map<String, dynamic>>? castedStrokes;
+          if (strokes != null && strokes.isNotEmpty) {
+            castedStrokes = strokes
+                .map((e) => Map<String, dynamic>.from(e as Map))
+                .toList();
+            map['strokes_json'] = castedStrokes;
+            map['is_handwritten'] = true;
+          }
+
           cloudNotes.add(
-            HandwritingNote.fromJson(map).copyWith(isCloudSynced: true),
+            HandwritingNote.fromJson(map).copyWith(
+              isCloudSynced: true,
+              strokesJson: castedStrokes,
+              isHandwritten: castedStrokes != null && castedStrokes.isNotEmpty,
+            ),
           );
         }
       } catch (e) {
@@ -180,7 +276,7 @@ class AutoSyncService {
       }
 
       // -------------------------------------------------------------
-      // 2. RESOLVE NOTES & UPLOAD ONLY NEW OFFLINE ITEMS
+      // 3. RESOLVE NOTES & UPLOAD ONLY NEW OFFLINE ITEMS
       // -------------------------------------------------------------
       final localNotes =
           await DocumentStorageService.loadHandwritingNotes(activeUserId);
@@ -227,74 +323,6 @@ class AutoSyncService {
         'ayens_kwaderno_notes_u_$activeUserId',
         jsonEncode(finalNotes.map((n) => n.toJson()).toList()),
       );
-
-      // -------------------------------------------------------------
-      // 3. FETCH REMOTE DOCUMENT ANNOTATIONS FROM SUPABASE
-      // -------------------------------------------------------------
-      final List<DocumentItem> cloudDocs = [];
-      final localDocs =
-          await DocumentStorageService.loadSavedDocuments(activeUserId);
-      try {
-        final annotationsResponse =
-            await client.from('document_annotations').select();
-
-        for (final row in annotationsResponse) {
-          final rawDocName = row['document_name'] as String?;
-          if (rawDocName == null || !rawDocName.startsWith(userPrefix)) continue;
-
-          final docName = rawDocName.substring(userPrefix.length);
-          if (docName.isEmpty || docName.startsWith('note_')) continue;
-
-          final strokes = (row['strokes_data'] is List)
-              ? (row['strokes_data'] as List<dynamic>)
-              : (row['strokes_data'] is Map
-                  ? (row['strokes_data'] as Map)
-                      .values
-                      .expand((e) => e is List ? e : [])
-                      .toList()
-                  : []);
-          final texts = (row['texts_data'] is List)
-              ? (row['texts_data'] as List<dynamic>)
-              : (row['texts_data'] is Map
-                  ? (row['texts_data'] as Map)
-                      .values
-                      .expand((e) => e is List ? e : [])
-                      .toList()
-                  : []);
-          final images = (row['images_data'] is List)
-              ? (row['images_data'] as List<dynamic>)
-              : (row['images_data'] is Map
-                  ? (row['images_data'] as Map)
-                      .values
-                      .expand((e) => e is List ? e : [])
-                      .toList()
-                  : []);
-          final totalAnnotations =
-              strokes.length + texts.length + images.length;
-          final cloudUpdatedAt = row['updated_at'] != null
-              ? DateTime.tryParse(row['updated_at'] as String)?.toLocal() ??
-                  DateTime.now()
-              : DateTime.now();
-
-          // Check if localDoc had a local file path
-          final localDocIndex =
-              localDocs.indexWhere((d) => d.fileName == docName);
-          final localFilePath = localDocIndex >= 0
-              ? localDocs[localDocIndex].filePath
-              : null;
-
-          cloudDocs.add(DocumentItem(
-            fileName: docName,
-            filePath: localFilePath,
-            lastOpenedAt: cloudUpdatedAt,
-            annotationsCount: totalAnnotations,
-            isCloudSynced: true,
-            paletteIndex: 0,
-          ));
-        }
-      } catch (e) {
-        debugPrint('Notice fetching remote annotations: $e');
-      }
 
       // -------------------------------------------------------------
       // 4. RESOLVE DOCUMENTS & UPLOAD ONLY NEW OFFLINE ITEMS

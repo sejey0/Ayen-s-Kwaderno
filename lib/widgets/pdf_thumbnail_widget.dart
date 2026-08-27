@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:syncfusion_pdfviewer_platform_interface/pdfviewer_platform_interface.dart';
 import '../theme/app_theme.dart';
 
@@ -31,9 +32,10 @@ class DocumentThumbnailPreview extends StatefulWidget {
 
 class _DocumentThumbnailPreviewState extends State<DocumentThumbnailPreview> {
   Uint8List? _pdfPageBytes;
+  String? _resolvedFilePath;
 
   bool get _isImage {
-    final path = widget.filePath?.toLowerCase() ?? '';
+    final path = (_resolvedFilePath ?? widget.filePath ?? widget.fileName).toLowerCase();
     return path.endsWith('.png') ||
         path.endsWith('.jpg') ||
         path.endsWith('.jpeg') ||
@@ -50,14 +52,49 @@ class _DocumentThumbnailPreviewState extends State<DocumentThumbnailPreview> {
   @override
   void didUpdateWidget(covariant DocumentThumbnailPreview oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.filePath != widget.filePath) {
+    if (oldWidget.filePath != widget.filePath ||
+        oldWidget.fileName != widget.fileName) {
       _loadPdfThumbnail();
     }
   }
 
   Future<void> _loadPdfThumbnail() async {
-    final path = widget.filePath;
-    if (path == null || !File(path).existsSync() || _isImage) return;
+    String? path = widget.filePath;
+
+    // 1. If path is null or doesn't exist, auto-search saved_documents
+    if (path == null || !File(path).existsSync()) {
+      try {
+        final appDir = await getApplicationDocumentsDirectory();
+        final savedDocsDir = Directory('${appDir.path}/saved_documents');
+        if (savedDocsDir.existsSync()) {
+          final candidates = [
+            File('${savedDocsDir.path}/${widget.fileName}'),
+            File('${savedDocsDir.path}/${widget.fileName}.pdf'),
+            File('${savedDocsDir.path}/${widget.fileName}.png'),
+            File('${savedDocsDir.path}/${widget.fileName}.jpg'),
+          ];
+          for (final f in candidates) {
+            if (f.existsSync()) {
+              path = f.path;
+              break;
+            }
+          }
+        }
+      } catch (_) {}
+    }
+
+    if (path == null || !File(path).existsSync()) {
+      if (mounted && _resolvedFilePath != null) {
+        setState(() => _resolvedFilePath = null);
+      }
+      return;
+    }
+
+    if (mounted) {
+      setState(() => _resolvedFilePath = path);
+    }
+
+    if (_isImage) return;
 
     if (_pdfThumbnailCache.containsKey(path)) {
       if (mounted) {
@@ -89,7 +126,7 @@ class _DocumentThumbnailPreviewState extends State<DocumentThumbnailPreview> {
 
   @override
   Widget build(BuildContext context) {
-    final path = widget.filePath;
+    final path = _resolvedFilePath ?? widget.filePath;
     final fileExists = path != null && File(path).existsSync();
 
     // 1. Real Image Content Preview
@@ -102,14 +139,13 @@ class _DocumentThumbnailPreviewState extends State<DocumentThumbnailPreview> {
             fit: BoxFit.cover,
             errorBuilder: (context, error, stackTrace) => _buildFallbackCover(),
           ),
-          // Subtle gradient overlay at bottom for readability
           Positioned.fill(
             child: DecoratedBox(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   colors: [
                     Colors.black.withValues(alpha: 0.0),
-                    Colors.black.withValues(alpha: 0.25),
+                    Colors.black.withValues(alpha: 0.22),
                   ],
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
@@ -126,54 +162,142 @@ class _DocumentThumbnailPreviewState extends State<DocumentThumbnailPreview> {
       return Stack(
         fit: StackFit.expand,
         children: [
-          RawImage(
-            image: null, // Will render via CustomPainter below
-          ),
+          RawImage(image: null),
           _PdfRawBytesPainter(rawRgbaBytes: _pdfPageBytes!),
         ],
       );
     }
 
-    // 3. Fallback Aesthetic Cover Card
+    // 3. Fallback Aesthetic Cover Card with Realistic Document Layout
     return _buildFallbackCover();
   }
 
   Widget _buildFallbackCover() {
+    final cleanName = widget.fileName
+        .replaceAll('.pdf', '')
+        .replaceAll('.png', '')
+        .replaceAll('.jpg', '');
+
     return Container(
-      color: const Color(0xFFF8FAFC),
-      padding: const EdgeInsets.all(12),
-      child: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: const BoxDecoration(
-                color: AppTheme.primaryPurpleLight,
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                _isImage
-                    ? CupertinoIcons.photo_fill
-                    : CupertinoIcons.doc_text_fill,
-                size: 32,
-                color: AppTheme.primaryPurple,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              widget.fileName,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-                color: AppTheme.textPrimary,
+      color: const Color(0xFFFBFBFE),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          // Document Paper Header Pattern
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            height: 36,
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    widget.accentColor.withValues(alpha: 0.14),
+                    widget.backgroundColor.withValues(alpha: 0.08),
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
               ),
             ),
-          ],
-        ),
+          ),
+
+          // Lined document sheet design
+          Positioned.fill(
+            top: 40,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 48,
+                    height: 5,
+                    decoration: BoxDecoration(
+                      color: widget.accentColor.withValues(alpha: 0.4),
+                      borderRadius: BorderRadius.circular(3),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    width: double.infinity,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.07),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Container(
+                    width: 80,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.05),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Container(
+                    width: 110,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.04),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // Center Document Type Emblem
+          Center(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: widget.accentColor.withValues(alpha: 0.25),
+                  width: 1.2,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: widget.accentColor.withValues(alpha: 0.10),
+                    blurRadius: 8,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    _isImage
+                        ? CupertinoIcons.photo
+                        : CupertinoIcons.doc_richtext,
+                    size: 16,
+                    color: widget.accentColor,
+                  ),
+                  const SizedBox(width: 5),
+                  Flexible(
+                    child: Text(
+                      cleanName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w700,
+                        color: widget.accentColor,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
