@@ -304,25 +304,23 @@ class AutoSyncService {
 
       for (final local in localDocs) {
         if (!cloudDocNames.contains(local.fileName) && !local.isCloudSynced) {
-          // Newly created offline doc: upload annotations to Supabase
+          // Newly created offline doc: upload document metadata to Supabase
           try {
             final annotationsData =
                 await DocumentStorageService.loadLocalAnnotations(
                     local.fileName, activeUserId);
-            if (annotationsData != null) {
-              final remoteDocName = '$userPrefix${local.fileName}';
-              final payload = {
-                'document_name': remoteDocName,
-                'strokes_data': annotationsData['strokes'] ?? [],
-                'texts_data': annotationsData['texts'] ?? [],
-                'images_data': annotationsData['images'] ?? [],
-                'updated_at': annotationsData['updated_at'] ??
-                    DateTime.now().toUtc().toIso8601String(),
-              };
-              await client
-                  .from('document_annotations')
-                  .upsert(payload, onConflict: 'document_name');
-            }
+            final remoteDocName = '$userPrefix${local.fileName}';
+            final payload = {
+              'document_name': remoteDocName,
+              'strokes_data': annotationsData?['strokes'] ?? [],
+              'texts_data': annotationsData?['texts'] ?? [],
+              'images_data': annotationsData?['images'] ?? [],
+              'updated_at': annotationsData?['updated_at'] ??
+                  DateTime.now().toUtc().toIso8601String(),
+            };
+            await client
+                .from('document_annotations')
+                .upsert(payload, onConflict: 'document_name');
             finalDocs.add(local.copyWith(isCloudSynced: true));
           } catch (e) {
             debugPrint('Notice uploading offline doc ${local.fileName}: $e');

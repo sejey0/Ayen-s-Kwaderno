@@ -137,26 +137,24 @@ class DocumentStorageService {
 
       await _persistDocumentsList(docs, targetUserId);
 
-      // Immediately push document annotations if available
+      // Immediately push document to Supabase database so it appears in the cloud immediately
       try {
         final client = Supabase.instance.client;
         final annotationsData =
             await loadLocalAnnotations(doc.fileName, targetUserId);
-        if (annotationsData != null) {
-          final payload = {
-            'document_name': 'u_${targetUserId}___${doc.fileName}',
-            'strokes_data': annotationsData['strokes'] ?? [],
-            'texts_data': annotationsData['texts'] ?? [],
-            'images_data': annotationsData['images'] ?? [],
-            'updated_at': annotationsData['updated_at'] ??
-                DateTime.now().toUtc().toIso8601String(),
-          };
-          client
-              .from('document_annotations')
-              .upsert(payload, onConflict: 'document_name')
-              .then((_) {})
-              .catchError((_) {});
-        }
+        final payload = {
+          'document_name': 'u_${targetUserId}___${doc.fileName}',
+          'strokes_data': annotationsData?['strokes'] ?? [],
+          'texts_data': annotationsData?['texts'] ?? [],
+          'images_data': annotationsData?['images'] ?? [],
+          'updated_at': annotationsData?['updated_at'] ??
+              DateTime.now().toUtc().toIso8601String(),
+        };
+        client
+            .from('document_annotations')
+            .upsert(payload, onConflict: 'document_name')
+            .then((_) {})
+            .catchError((_) {});
       } catch (_) {}
 
       if (triggerCloudSync) {
