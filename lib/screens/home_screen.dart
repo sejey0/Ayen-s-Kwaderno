@@ -1333,84 +1333,50 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
 
-            // Profile Avatar & Greeting
+            // App Branding Title & Icon (Tapping directly opens Profile Settings)
             GestureDetector(
               onTap: _openProfileSettings,
+              behavior: HitTestBehavior.opaque,
               child: Row(
                 children: [
-              ValueListenableBuilder<UserProfile?>(
-                valueListenable: UserService.instance.currentUserNotifier,
-                builder: (context, user, _) {
-                  final emoji = user?.avatarEmoji ?? '📓';
-                  return Container(
-                    width: 46,
-                    height: 46,
+                  Container(
+                    width: 40,
+                    height: 40,
                     decoration: BoxDecoration(
-                      shape: BoxShape.circle,
                       gradient: const LinearGradient(
-                        colors: [AppTheme.primaryPurple, AppTheme.accentPink],
+                        colors: [
+                          AppTheme.primaryPurple,
+                          AppTheme.accentPink
+                        ],
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
                       ),
+                      borderRadius: BorderRadius.circular(12),
                       boxShadow: [
                         BoxShadow(
-                          color: AppTheme.primaryPurple.withValues(alpha: 0.3),
-                          blurRadius: 10,
-                          offset: const Offset(0, 4),
+                          color: AppTheme.primaryPurple.withValues(alpha: 0.25),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
                         ),
                       ],
                     ),
-                    child: Center(
-                      child: Text(
-                        emoji,
-                        style: const TextStyle(fontSize: 22),
-                      ),
+                    child: const Center(
+                      child: Text('📓', style: TextStyle(fontSize: 20)),
                     ),
-                  );
-                },
+                  ),
+                  const SizedBox(width: 10),
+                  const Text(
+                    "Ayen's Kwaderno",
+                    style: TextStyle(
+                      fontSize: 19,
+                      fontWeight: FontWeight.w900,
+                      color: AppTheme.textPrimary,
+                      letterSpacing: -0.4,
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(width: 10),
-              ValueListenableBuilder<UserProfile?>(
-                valueListenable: UserService.instance.currentUserNotifier,
-                builder: (context, user, _) {
-                  final name = user?.name ?? "Ayen's Kwaderno";
-                  final isCloud = user?.isCloudLinked == true;
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Text(
-                            name,
-                            style: const TextStyle(
-                              fontSize: 17.5,
-                              fontWeight: FontWeight.w800,
-                              color: AppTheme.textPrimary,
-                              letterSpacing: -0.3,
-                            ),
-                          ),
-                          const SizedBox(width: 4),
-                          const Icon(CupertinoIcons.chevron_down,
-                              size: 12, color: AppTheme.textSecondary),
-                        ],
-                      ),
-                      Text(
-                        isCloud ? "☁️ Cloud Synced" : "📱 Offline Notebook",
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: isCloud
-                              ? const Color(0xFF065F46)
-                              : AppTheme.textSecondary,
-                        ),
-                      ),
-                    ],
-                  );
-                },
-              ),
-            ],
-          ),
-        ),
+            ),
       ],
     ),
     Row(
