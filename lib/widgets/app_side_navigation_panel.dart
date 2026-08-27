@@ -138,13 +138,13 @@ class _AppSideNavigationPanelState extends State<AppSideNavigationPanel> {
                   _buildNavItem(
                     item: SidebarNavItem.dashboard,
                     icon: CupertinoIcons.square_grid_2x2_fill,
-                    label: 'All Library',
+                    label: 'Dashboard',
                     badge: null,
                   ),
                   _buildNavItem(
                     item: SidebarNavItem.documents,
                     icon: CupertinoIcons.doc_text_fill,
-                    label: 'Documents & PDFs',
+                    label: 'Documents & Images',
                     badge: null,
                   ),
                   _buildNavItem(

@@ -21,7 +21,7 @@ import '../widgets/write_note_choice_dialog.dart';
 import 'editor_screen.dart';
 
 enum LibrarySection {
-  all,
+  dashboard,
   documents,
   notes,
 }
@@ -36,7 +36,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   bool _isLoadingCloudDocuments = false;
 
-  LibrarySection _currentSection = LibrarySection.all;
+  LibrarySection _currentSection = LibrarySection.dashboard;
 
   // Sidebar navigation panel state
   SidebarNavItem _selectedSidebarNav = SidebarNavItem.dashboard;
@@ -326,10 +326,13 @@ class _HomeScreenState extends State<HomeScreen> {
 
   /// Handles selection of items from the dynamic Side Navigation Panel
   void _handleSidebarNavSelected(SidebarNavItem item) {
+    if (_scaffoldKey.currentState?.isDrawerOpen == true) {
+      _scaffoldKey.currentState?.closeDrawer();
+    }
     setState(() => _selectedSidebarNav = item);
     switch (item) {
       case SidebarNavItem.dashboard:
-        setState(() => _currentSection = LibrarySection.all);
+        setState(() => _currentSection = LibrarySection.dashboard);
         break;
       case SidebarNavItem.documents:
         setState(() => _currentSection = LibrarySection.documents);
@@ -603,10 +606,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _selectAllVisible() {
     setState(() {
-      final showDocs = _currentSection == LibrarySection.all ||
-          _currentSection == LibrarySection.documents;
-      final showNotes = _currentSection == LibrarySection.all ||
-          _currentSection == LibrarySection.notes;
+      final showDocs = _currentSection == LibrarySection.documents ||
+          _currentSection == LibrarySection.dashboard;
+      final showNotes = _currentSection == LibrarySection.notes ||
+          _currentSection == LibrarySection.dashboard;
 
       if (showDocs) {
         for (final doc in _documents) {
@@ -632,23 +635,17 @@ class _HomeScreenState extends State<HomeScreen> {
       _selectedDocFileNames.length + _selectedNoteIds.length;
 
   int get _visibleItemsCount {
-    final showDocs = _currentSection == LibrarySection.all ||
-        _currentSection == LibrarySection.documents;
-    final showNotes = _currentSection == LibrarySection.all ||
-        _currentSection == LibrarySection.notes;
-
-    int count = 0;
-    if (showDocs) count += _documents.length;
-    if (showNotes) count += _handwritingNotes.length;
-    return count;
+    if (_currentSection == LibrarySection.documents) return _documents.length;
+    if (_currentSection == LibrarySection.notes) return _handwritingNotes.length;
+    return _documents.length + _handwritingNotes.length;
   }
 
   bool get _isAllVisibleSelected {
     if (_visibleItemsCount == 0) return false;
-    final showDocs = _currentSection == LibrarySection.all ||
-        _currentSection == LibrarySection.documents;
-    final showNotes = _currentSection == LibrarySection.all ||
-        _currentSection == LibrarySection.notes;
+    final showDocs = _currentSection == LibrarySection.documents ||
+        _currentSection == LibrarySection.dashboard;
+    final showNotes = _currentSection == LibrarySection.notes ||
+        _currentSection == LibrarySection.dashboard;
 
     if (showDocs) {
       for (final d in _documents) {
@@ -742,6 +739,8 @@ class _HomeScreenState extends State<HomeScreen> {
   /// Floating Action Bar shown during multi-select mode
   Widget _buildSelectionBottomBar() {
     final count = _totalSelectedCount;
+    final allSelected = _isAllVisibleSelected;
+
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -775,6 +774,24 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
           ),
+          TextButton.icon(
+            onPressed: allSelected ? _deselectAll : _selectAllVisible,
+            icon: Icon(
+              allSelected
+                  ? CupertinoIcons.clear_circled
+                  : CupertinoIcons.checkmark_circle_fill,
+              size: 15,
+              color: AppTheme.primaryPurple,
+            ),
+            label: Text(
+              allSelected ? 'Deselect All' : 'Select All',
+              style: const TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 13,
+                color: AppTheme.primaryPurple,
+              ),
+            ),
+          ),
           ElevatedButton.icon(
             onPressed: count > 0 ? _confirmBulkDelete : null,
             icon: const Icon(CupertinoIcons.trash_fill, size: 16),
@@ -792,7 +809,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   const Color(0xFFEF4444).withValues(alpha: 0.35),
               disabledForegroundColor: Colors.white.withValues(alpha: 0.7),
               padding:
-                  const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               elevation: count > 0 ? 3 : 0,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(14),
@@ -806,11 +823,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final showDocs = _currentSection == LibrarySection.all ||
-        _currentSection == LibrarySection.documents;
-    final showNotes = _currentSection == LibrarySection.all ||
-        _currentSection == LibrarySection.notes;
-
     final totalDocsCount = _documents.length;
     final totalNotesCount = _handwritingNotes.length;
 
@@ -836,31 +848,20 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
 
-              // Hero Quick Action Banner (Open PDF & Handwriting to Text)
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20.0),
-                  child: _buildUploadHeroCard(),
+              const SliverToBoxAdapter(child: SizedBox(height: 8)),
+
+              // ── 1. DASHBOARD VIEW (Quick Study Actions Only Once) ──
+              if (_currentSection == LibrarySection.dashboard) ...[
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20.0),
+                    child: _buildDashboardView(),
+                  ),
                 ),
-              ),
+              ],
 
-              const SliverToBoxAdapter(child: SizedBox(height: 24)),
-
-              // Main Section Switcher Tabs (All Items, PDF Documents, Handwritten Notes)
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20.0),
-                  child: _buildSectionSwitcher(
-                      totalDocsCount, totalNotesCount),
-                ),
-              ),
-
-              const SliverToBoxAdapter(child: SizedBox(height: 18)),
-
-              // ==========================================
-              // 1. UPLOADED DOCUMENTS & IMAGES SECTION
-              // ==========================================
-              if (showDocs) ...[
+              // ── 2. UPLOADED DOCUMENTS & IMAGES SECTION (Files Only) ──
+              if (_currentSection == LibrarySection.documents) ...[
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 20.0),
@@ -897,38 +898,90 @@ class _HomeScreenState extends State<HomeScreen> {
                             ],
                           ],
                         ),
-                        GestureDetector(
-                          onTap: _pickAndOpenDocument,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 5),
-                            decoration: BoxDecoration(
-                              color: AppTheme.primaryPurpleLight,
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: const Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(CupertinoIcons.cloud_upload_fill,
-                                    size: 13, color: AppTheme.primaryPurple),
-                                SizedBox(width: 4),
-                                Text(
-                                  'Upload',
-                                  style: TextStyle(
-                                    fontSize: 11.5,
-                                    fontWeight: FontWeight.w700,
-                                    color: AppTheme.primaryPurpleDark,
+                        Row(
+                          children: [
+                            if (_documents.isNotEmpty) ...[
+                              GestureDetector(
+                                onTap: _isSelectionMode
+                                    ? _exitSelectionMode
+                                    : _enterSelectionMode,
+                                child: Container(
+                                  margin: const EdgeInsets.only(right: 8),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 10, vertical: 5),
+                                  decoration: BoxDecoration(
+                                    color: _isSelectionMode
+                                        ? AppTheme.primaryPurple
+                                        : AppTheme.surfaceWhite,
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(
+                                      color: _isSelectionMode
+                                          ? AppTheme.primaryPurple
+                                          : AppTheme.dividerColor,
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        _isSelectionMode
+                                            ? CupertinoIcons.xmark
+                                            : CupertinoIcons.checkmark_circle,
+                                        size: 13,
+                                        color: _isSelectionMode
+                                            ? Colors.white
+                                            : AppTheme.primaryPurple,
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        _isSelectionMode ? 'Cancel' : 'Select',
+                                        style: TextStyle(
+                                          fontSize: 11.5,
+                                          fontWeight: FontWeight.w700,
+                                          color: _isSelectionMode
+                                              ? Colors.white
+                                              : AppTheme.primaryPurple,
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
-                              ],
+                              ),
+                            ],
+                            GestureDetector(
+                              onTap: _pickAndOpenDocument,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 10, vertical: 5),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.primaryPurpleLight,
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(CupertinoIcons.cloud_upload_fill,
+                                        size: 13, color: AppTheme.primaryPurple),
+                                    SizedBox(width: 4),
+                                    Text(
+                                      'Upload',
+                                      style: TextStyle(
+                                        fontSize: 11.5,
+                                        fontWeight: FontWeight.w700,
+                                        color: AppTheme.primaryPurpleDark,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
                             ),
-                          ),
+                          ],
                         ),
                       ],
                     ),
                   ),
                 ),
-                const SliverToBoxAdapter(child: SizedBox(height: 10)),
+                const SliverToBoxAdapter(child: SizedBox(height: 12)),
                 if (_documents.isEmpty)
                   SliverToBoxAdapter(
                     child: Padding(
@@ -958,13 +1011,10 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
                   ),
-                const SliverToBoxAdapter(child: SizedBox(height: 24)),
               ],
 
-              // ==========================================
-              // 2. WRITE A NOTE / WRITTEN NOTES SECTION
-              // ==========================================
-              if (showNotes) ...[
+              // ── 3. HANDWRITTEN NOTES SECTION (Notes Only) ──
+              if (_currentSection == LibrarySection.notes) ...[
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 20.0),
@@ -990,38 +1040,90 @@ class _HomeScreenState extends State<HomeScreen> {
                             ),
                           ],
                         ),
-                        GestureDetector(
-                          onTap: _launchHandwritingToText,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 5),
-                            decoration: BoxDecoration(
-                              color: AppTheme.accentPinkLight,
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: const Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(CupertinoIcons.pencil,
-                                    size: 13, color: AppTheme.accentPinkDark),
-                                SizedBox(width: 3),
-                                Text(
-                                  'Write a Note',
-                                  style: TextStyle(
-                                    fontSize: 11.5,
-                                    fontWeight: FontWeight.w700,
-                                    color: AppTheme.accentPinkDark,
+                        Row(
+                          children: [
+                            if (_handwritingNotes.isNotEmpty) ...[
+                              GestureDetector(
+                                onTap: _isSelectionMode
+                                    ? _exitSelectionMode
+                                    : _enterSelectionMode,
+                                child: Container(
+                                  margin: const EdgeInsets.only(right: 8),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 10, vertical: 5),
+                                  decoration: BoxDecoration(
+                                    color: _isSelectionMode
+                                        ? AppTheme.accentPink
+                                        : AppTheme.surfaceWhite,
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(
+                                      color: _isSelectionMode
+                                          ? AppTheme.accentPink
+                                          : AppTheme.dividerColor,
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        _isSelectionMode
+                                            ? CupertinoIcons.xmark
+                                            : CupertinoIcons.checkmark_circle,
+                                        size: 13,
+                                        color: _isSelectionMode
+                                            ? Colors.white
+                                            : AppTheme.accentPinkDark,
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        _isSelectionMode ? 'Cancel' : 'Select',
+                                        style: TextStyle(
+                                          fontSize: 11.5,
+                                          fontWeight: FontWeight.w700,
+                                          color: _isSelectionMode
+                                              ? Colors.white
+                                              : AppTheme.accentPinkDark,
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
-                              ],
+                              ),
+                            ],
+                            GestureDetector(
+                              onTap: _launchHandwritingToText,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 10, vertical: 5),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.accentPinkLight,
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(CupertinoIcons.pencil,
+                                        size: 13, color: AppTheme.accentPinkDark),
+                                    SizedBox(width: 3),
+                                    Text(
+                                      'Write Note',
+                                      style: TextStyle(
+                                        fontSize: 11.5,
+                                        fontWeight: FontWeight.w700,
+                                        color: AppTheme.accentPinkDark,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
                             ),
-                          ),
+                          ],
                         ),
                       ],
                     ),
                   ),
                 ),
-                const SliverToBoxAdapter(child: SizedBox(height: 10)),
+                const SliverToBoxAdapter(child: SizedBox(height: 12)),
                 if (_handwritingNotes.isEmpty)
                   SliverToBoxAdapter(
                     child: Padding(
@@ -1096,204 +1198,55 @@ class _HomeScreenState extends State<HomeScreen> {
               : FloatingActionButtonLocation.endFloat,
           floatingActionButton: _isSelectionMode
               ? _buildSelectionBottomBar()
-              : FloatingActionButton.extended(
-                  onPressed: _currentSection == LibrarySection.notes
-                      ? _launchHandwritingToText
-                      : _pickAndOpenDocument,
-                  backgroundColor: _currentSection == LibrarySection.notes
-                      ? AppTheme.primaryPurple
-                      : AppTheme.accentPink,
-                  foregroundColor: Colors.white,
-                  elevation: 4,
-                  icon: Icon(
-                    _currentSection == LibrarySection.notes
-                        ? CupertinoIcons.pencil_outline
-                        : CupertinoIcons.cloud_upload_fill,
-                    size: 20,
-                  ),
-                  label: Text(
-                    _currentSection == LibrarySection.notes
-                        ? 'Write a Note'
-                        : 'Upload Document',
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 14,
-                      letterSpacing: 0.2,
-                    ),
-                  ),
-                ),
+              : (_currentSection == LibrarySection.dashboard
+                  ? null
+                  : (_currentSection == LibrarySection.notes
+                      ? FloatingActionButton.extended(
+                          onPressed: _launchHandwritingToText,
+                          backgroundColor: AppTheme.accentPink,
+                          foregroundColor: Colors.white,
+                          elevation: 4,
+                          icon: const Icon(CupertinoIcons.pencil_outline,
+                              size: 20),
+                          label: const Text(
+                            'Write a Note',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 14,
+                              letterSpacing: 0.2,
+                            ),
+                          ),
+                        )
+                      : FloatingActionButton.extended(
+                          onPressed: _pickAndOpenDocument,
+                          backgroundColor: AppTheme.primaryPurple,
+                          foregroundColor: Colors.white,
+                          elevation: 4,
+                          icon: const Icon(CupertinoIcons.cloud_upload_fill,
+                              size: 20),
+                          label: const Text(
+                            'Upload Document',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 14,
+                              letterSpacing: 0.2,
+                            ),
+                          ),
+                        ))),
         );
       },
     );
   }
 
-  /// Segmented Section Switcher (All, Documents, Notes)
-  Widget _buildSectionSwitcher(int docsCount, int notesCount) {
-    return Container(
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: AppTheme.surfaceWhite,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppTheme.dividerColor),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
-            blurRadius: 6,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          _buildSwitcherTab(
-            label: 'All',
-            badge: '${docsCount + notesCount}',
-            section: LibrarySection.all,
-          ),
-          _buildSwitcherTab(
-            label: 'Documents',
-            badge: '$docsCount',
-            section: LibrarySection.documents,
-          ),
-          _buildSwitcherTab(
-            label: 'Notes',
-            badge: '$notesCount',
-            section: LibrarySection.notes,
-          ),
-        ],
-      ),
-    );
+  /// Dashboard View: Contains only Quick Study Actions once
+  Widget _buildDashboardView() {
+    return _buildUploadHeroCard();
   }
 
-  Widget _buildSwitcherTab({
-    required String label,
-    required String badge,
-    required LibrarySection section,
-  }) {
-    final isSelected = _currentSection == section;
 
-    return Expanded(
-      child: GestureDetector(
-        onTap: () => setState(() => _currentSection = section),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-          decoration: BoxDecoration(
-            color: isSelected ? AppTheme.primaryPurple : Colors.transparent,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Flexible(
-                child: Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
-                    color: isSelected ? Colors.white : AppTheme.textSecondary,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 4),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                decoration: BoxDecoration(
-                  color: isSelected
-                      ? Colors.white.withValues(alpha: 0.25)
-                      : AppTheme.primaryPurpleLight,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Text(
-                  badge,
-                  style: TextStyle(
-                    fontSize: 9.5,
-                    fontWeight: FontWeight.w700,
-                    color:
-                        isSelected ? Colors.white : AppTheme.primaryPurpleDark,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 
-  /// Top Profile & Greeting Row or Multi-Select Header
+  /// Top Profile & Greeting Row (Clean & Permanent Header)
   Widget _buildHeader() {
-    if (_isSelectionMode) {
-      final allSelected = _isAllVisibleSelected;
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-        decoration: BoxDecoration(
-          color: AppTheme.surfaceWhite,
-          borderRadius: BorderRadius.circular(18),
-          boxShadow: AppTheme.softShadow,
-          border: Border.all(
-            color: AppTheme.primaryPurple.withValues(alpha: 0.35),
-            width: 1.5,
-          ),
-        ),
-        child: Row(
-          children: [
-            IconButton(
-              icon: const Icon(CupertinoIcons.xmark_circle_fill,
-                  color: AppTheme.textSecondary, size: 24),
-              tooltip: 'Cancel selection',
-              onPressed: _exitSelectionMode,
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                '$_totalSelectedCount Selected',
-                style: const TextStyle(
-                  fontSize: 17,
-                  fontWeight: FontWeight.w800,
-                  color: AppTheme.textPrimary,
-                  letterSpacing: -0.3,
-                ),
-              ),
-            ),
-            TextButton.icon(
-              onPressed: allSelected ? _deselectAll : _selectAllVisible,
-              icon: Icon(
-                allSelected
-                    ? CupertinoIcons.clear_circled
-                    : CupertinoIcons.checkmark_circle_fill,
-                size: 16,
-                color: AppTheme.primaryPurple,
-              ),
-              label: Text(
-                allSelected ? 'Deselect All' : 'Select All',
-                style: const TextStyle(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 12.5,
-                  color: AppTheme.primaryPurple,
-                ),
-              ),
-              style: TextButton.styleFrom(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                backgroundColor: AppTheme.primaryPurpleLight,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    final hasItems = _documents.isNotEmpty || _handwritingNotes.isNotEmpty;
-
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -1377,27 +1330,10 @@ class _HomeScreenState extends State<HomeScreen> {
                 ],
               ),
             ),
-      ],
-    ),
-    Row(
-      children: [
-            if (hasItems) ...[
-              Container(
-                margin: const EdgeInsets.only(right: 8),
-                decoration: BoxDecoration(
-                  color: AppTheme.surfaceWhite,
-                  shape: BoxShape.circle,
-                  boxShadow: AppTheme.softShadow,
-                  border: Border.all(color: AppTheme.dividerColor),
-                ),
-                child: IconButton(
-                  icon: const Icon(CupertinoIcons.checkmark_circle,
-                      color: AppTheme.primaryPurple, size: 20),
-                  tooltip: 'Select items to delete',
-                  onPressed: _enterSelectionMode,
-                ),
-              ),
-            ],
+          ],
+        ),
+        Row(
+          children: [
             ValueListenableBuilder<AutoSyncStatus>(
               valueListenable: AutoSyncService.instance.statusNotifier,
               builder: (context, status, _) {
