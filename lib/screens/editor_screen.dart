@@ -2206,12 +2206,18 @@ class _EditorScreenState extends State<EditorScreen>
                 _buildVerticalDivider(),
                 const SizedBox(width: 4),
 
-                // 1. Highlighter
+                // 1. Freehand Pen / Highlighter
                 _buildToolButton(
                   tool: AnnotationTool.highlighter,
-                  icon: CupertinoIcons.pencil_outline,
-                  label: 'Highlighter',
-                  tooltip: 'Freehand Highlighter',
+                  icon: _penSubTool == PenSubTool.ballpen
+                      ? CupertinoIcons.pen
+                      : CupertinoIcons.pencil_outline,
+                  label: _penSubTool == PenSubTool.ballpen
+                      ? 'Ballpen'
+                      : 'Highlighter',
+                  tooltip: _penSubTool == PenSubTool.ballpen
+                      ? 'Freehand Ballpen Drawing'
+                      : 'Freehand Highlighter',
                 ),
 
                 const SizedBox(width: 4),
@@ -2221,7 +2227,9 @@ class _EditorScreenState extends State<EditorScreen>
                   tool: AnnotationTool.straightLine,
                   icon: CupertinoIcons.line_horizontal_3_decrease,
                   label: 'Straight Line',
-                  tooltip: 'Auto-Straightened Line',
+                  tooltip: _penSubTool == PenSubTool.ballpen
+                      ? 'Auto-Straightened Ballpen Line'
+                      : 'Auto-Straightened Highlighter Line',
                 ),
 
                 const SizedBox(width: 4),
@@ -2372,7 +2380,7 @@ class _EditorScreenState extends State<EditorScreen>
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
           decoration: BoxDecoration(
             color: AppTheme.surfaceWhite.withValues(alpha: 0.96),
             borderRadius: BorderRadius.circular(20),
@@ -2398,7 +2406,7 @@ class _EditorScreenState extends State<EditorScreen>
             children: [
               // Tool Name & Current Thickness Live Badge
               Padding(
-                padding: const EdgeInsets.only(left: 4, right: 6),
+                padding: const EdgeInsets.only(left: 3, right: 4),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -2409,9 +2417,9 @@ class _EditorScreenState extends State<EditorScreen>
                       size: 13,
                       color: AppTheme.primaryPurple,
                     ),
-                    const SizedBox(width: 4),
+                    const SizedBox(width: 3.5),
                     Text(
-                      '${isPen ? 'Pen' : 'Marker'} ${activeWidth % 1 == 0 ? activeWidth.toInt() : activeWidth}px',
+                      '${activeWidth % 1 == 0 ? activeWidth.toInt() : activeWidth}px',
                       style: const TextStyle(
                         fontSize: 11.5,
                         fontWeight: FontWeight.w800,
@@ -2423,7 +2431,7 @@ class _EditorScreenState extends State<EditorScreen>
               ),
 
               _buildVerticalDivider(),
-              const SizedBox(width: 4),
+              const SizedBox(width: 3),
 
               // Thickness Preset Pills
               ...thicknessPresets.map((preset) {
@@ -2432,7 +2440,7 @@ class _EditorScreenState extends State<EditorScreen>
                 final isSelected = (activeWidth - width).abs() < 1.0;
 
                 return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 2.5),
+                  padding: const EdgeInsets.symmetric(horizontal: 1.5),
                   child: Tooltip(
                     message:
                         '$label (${width % 1 == 0 ? width.toInt() : width}px)',
@@ -2452,12 +2460,12 @@ class _EditorScreenState extends State<EditorScreen>
                         duration: const Duration(milliseconds: 180),
                         curve: Curves.easeOutCubic,
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 9, vertical: 5),
+                            horizontal: 7.5, vertical: 4),
                         decoration: BoxDecoration(
                           color: isSelected
                               ? AppTheme.primaryPurple
                               : const Color(0xFFF3F4F6),
-                          borderRadius: BorderRadius.circular(14),
+                          borderRadius: BorderRadius.circular(12),
                           boxShadow: isSelected
                               ? [
                                   BoxShadow(
@@ -2475,9 +2483,9 @@ class _EditorScreenState extends State<EditorScreen>
                             // Visual Dot
                             Container(
                               width: (width / (isPen ? 1.5 : 3.5))
-                                  .clamp(3.5, 9.0),
+                                  .clamp(3.0, 7.5),
                               height: (width / (isPen ? 1.5 : 3.5))
-                                  .clamp(3.5, 9.0),
+                                  .clamp(3.0, 7.5),
                               decoration: BoxDecoration(
                                 color: isSelected
                                     ? Colors.white
@@ -2485,11 +2493,11 @@ class _EditorScreenState extends State<EditorScreen>
                                 shape: BoxShape.circle,
                               ),
                             ),
-                            const SizedBox(width: 4.5),
+                            const SizedBox(width: 3.5),
                             Text(
                               label,
                               style: TextStyle(
-                                fontSize: 11,
+                                fontSize: 10.5,
                                 fontWeight: FontWeight.w700,
                                 color: isSelected
                                     ? Colors.white
@@ -2504,9 +2512,9 @@ class _EditorScreenState extends State<EditorScreen>
                 );
               }),
 
-              const SizedBox(width: 4),
-              _buildVerticalDivider(),
               const SizedBox(width: 3),
+              _buildVerticalDivider(),
+              const SizedBox(width: 2),
 
               // Collapse / Close Button
               Tooltip(
@@ -2520,14 +2528,14 @@ class _EditorScreenState extends State<EditorScreen>
                       setState(() => _isThicknessMenuExpanded = false);
                     },
                     child: Container(
-                      padding: const EdgeInsets.all(5),
+                      padding: const EdgeInsets.all(4.5),
                       decoration: const BoxDecoration(
                         color: Color(0xFFF3F4F6),
                         shape: BoxShape.circle,
                       ),
                       child: const Icon(
                         CupertinoIcons.chevron_down,
-                        size: 13,
+                        size: 12,
                         color: AppTheme.textSecondary,
                       ),
                     ),
@@ -2904,7 +2912,9 @@ class _EditorScreenState extends State<EditorScreen>
               // 1. Ballpen Icon (Independent Ballpen tool)
               _buildSubBarPresetIcon(
                 icon: CupertinoIcons.pen,
-                tooltip: 'Ballpen (Fine Pen Stroke)',
+                tooltip: _activeTool == AnnotationTool.straightLine
+                    ? 'Straight Ballpen (Fine Pen)'
+                    : 'Ballpen (Fine Pen Stroke)',
                 isSelected: _activeTool != AnnotationTool.eraser &&
                     _penSubTool == PenSubTool.ballpen,
                 onTap: () {
@@ -2926,7 +2936,9 @@ class _EditorScreenState extends State<EditorScreen>
               // 2. Highlighter Icon (Independent Highlighter tool)
               _buildSubBarPresetIcon(
                 icon: CupertinoIcons.pencil_outline,
-                tooltip: 'Highlighter (Marker Stroke)',
+                tooltip: _activeTool == AnnotationTool.straightLine
+                    ? 'Straight Highlighter (Marker)'
+                    : 'Highlighter (Marker Stroke)',
                 isSelected: _activeTool != AnnotationTool.eraser &&
                     _penSubTool == PenSubTool.highlighter,
                 onTap: () {
