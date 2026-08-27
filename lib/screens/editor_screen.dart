@@ -78,6 +78,7 @@ class _EditorScreenState extends State<EditorScreen>
   AnnotationTool _activeTool = AnnotationTool.none;
   PenSubTool _penSubTool = PenSubTool.highlighter;
   Color _selectedColor = AppTheme.highlighterColors[0];
+  Color? _customColor;
   double _ballpenWidth = 3.0;
   double _highlighterWidth = 16.0;
   AnnotationTool _previousDrawingTool = AnnotationTool.highlighter;
@@ -2622,14 +2623,179 @@ class _EditorScreenState extends State<EditorScreen>
     );
   }
 
+  /// Opens a modern modal bottom sheet with 24 custom colors to choose from
+  void _openCustomColorPicker() {
+    // 24 Curated Stationery & Highlighter Tones
+    const List<Color> customSpectrum = [
+      // Neutrals & Darks
+      Color(0xFF0F172A), // Midnight Black
+      Color(0xFF475569), // Slate Grey
+      Color(0xFF78350F), // Espresso Brown
+      Color(0xFFB45309), // Amber Brown
+      Color(0xFFD97706), // Warm Orange
+      Color(0xFFF59E0B), // Vibrant Gold
+      // Greens & Teals
+      Color(0xFF14532D), // Forest Green
+      Color(0xFF16A34A), // Emerald
+      Color(0xFF22C55E), // Fresh Green
+      Color(0xFF86EFAC), // Soft Mint
+      Color(0xFF0D9488), // Deep Teal
+      Color(0xFF14B8A6), // Aqua Teal
+      // Blues & Purples
+      Color(0xFF0284C7), // Sky Blue
+      Color(0xFF2563EB), // Royal Blue
+      Color(0xFF1D4ED8), // Cobalt Blue
+      Color(0xFF4F46E5), // Indigo
+      Color(0xFF7C3AED), // Violet
+      Color(0xFF9333EA), // Purple
+      // Pinks & Reds
+      Color(0xFFC026D3), // Fuchsia
+      Color(0xFFDB2777), // Magenta Pink
+      Color(0xFFF43F5E), // Coral Rose
+      Color(0xFFE11D48), // Crimson
+      Color(0xFFDC2626), // Bold Red
+      Color(0xFFEA580C), // Tangy Orange
+    ];
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) {
+        return Container(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+            boxShadow: [
+              BoxShadow(
+                color: Color(0x221E1B4B),
+                blurRadius: 30,
+                offset: Offset(0, -6),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Top drag pill
+              Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppTheme.dividerColor,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Title Header
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Row(
+                    children: [
+                      Icon(Icons.palette_rounded,
+                          size: 20, color: AppTheme.primaryPurple),
+                      SizedBox(width: 8),
+                      Text(
+                        'Choose Custom Color',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: AppTheme.textPrimary,
+                        ),
+                      ),
+                    ],
+                  ),
+                  IconButton(
+                    icon: const Icon(CupertinoIcons.xmark_circle_fill,
+                        size: 22, color: AppTheme.textMuted),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+
+              // 24 Swatches Grid
+              Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                alignment: WrapAlignment.center,
+                children: customSpectrum.map((color) {
+                  final colorWithAlpha = color.withValues(alpha: 0.4);
+                  final isSelected = (_selectedColor.toARGB32() & 0x00FFFFFF) ==
+                      (color.toARGB32() & 0x00FFFFFF);
+
+                  return GestureDetector(
+                    onTap: () {
+                      HapticFeedback.selectionClick();
+                      setState(() {
+                        _customColor = colorWithAlpha;
+                        _selectedColor = colorWithAlpha;
+                        if (_activeTool == AnnotationTool.eraser) {
+                          _activeTool = _previousDrawingTool;
+                          _isThicknessMenuExpanded = true;
+                        }
+                      });
+                      Navigator.pop(context);
+                    },
+                    child: Container(
+                      width: 42,
+                      height: 42,
+                      decoration: BoxDecoration(
+                        color: color,
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: isSelected
+                              ? AppTheme.textPrimary
+                              : Colors.white,
+                          width: isSelected ? 3.0 : 2.0,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: color.withValues(alpha: 0.35),
+                            blurRadius: 6,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: isSelected
+                          ? const Icon(
+                              CupertinoIcons.checkmark,
+                              size: 18,
+                              color: Colors.white,
+                            )
+                          : null,
+                    ),
+                  );
+                }).toList(),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   /// Secondary floating color palette & tool presets picker
   Widget _buildColorPickerSubBar() {
+    // List of active dots: 5 presets + optional active custom color
+    final List<Color> activeColorDots = [
+      ...AppTheme.highlighterColors,
+      if (_customColor != null &&
+          !AppTheme.highlighterColors.any((c) =>
+              (c.toARGB32() & 0x00FFFFFF) ==
+              (_customColor!.toARGB32() & 0x00FFFFFF)))
+        _customColor!,
+    ];
+
     return ClipRRect(
       borderRadius: BorderRadius.circular(24),
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
             color: AppTheme.surfaceWhite.withValues(alpha: 0.94),
             borderRadius: BorderRadius.circular(24),
@@ -2640,9 +2806,11 @@ class _EditorScreenState extends State<EditorScreen>
             mainAxisSize: MainAxisSize.min,
             children: [
               // Color Dots
-              ...AppTheme.highlighterColors.map((color) {
-                final isSelected = _selectedColor == color &&
-                    _activeTool != AnnotationTool.eraser;
+              ...activeColorDots.map((color) {
+                final isSelected =
+                    (_selectedColor.toARGB32() & 0x00FFFFFF) ==
+                            (color.toARGB32() & 0x00FFFFFF) &&
+                        _activeTool != AnnotationTool.eraser;
                 return GestureDetector(
                   onTap: () {
                     setState(() {
@@ -2654,9 +2822,9 @@ class _EditorScreenState extends State<EditorScreen>
                     });
                   },
                   child: Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 4),
-                    width: 26,
-                    height: 26,
+                    margin: const EdgeInsets.symmetric(horizontal: 3.5),
+                    width: 25,
+                    height: 25,
                     decoration: BoxDecoration(
                       color: color.withValues(alpha: 1.0),
                       shape: BoxShape.circle,
@@ -2676,9 +2844,58 @@ class _EditorScreenState extends State<EditorScreen>
                 );
               }),
 
-              const SizedBox(width: 6),
+              // Custom Rainbow Color Wheel Button
+              Tooltip(
+                message: 'Custom Color Palette',
+                child: GestureDetector(
+                  onTap: _openCustomColorPicker,
+                  child: Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 3.5),
+                    width: 25,
+                    height: 25,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: const SweepGradient(
+                        colors: [
+                          Color(0xFFEF4444),
+                          Color(0xFFF59E0B),
+                          Color(0xFF10B981),
+                          Color(0xFF06B6D4),
+                          Color(0xFF6366F1),
+                          Color(0xFFEC4899),
+                          Color(0xFFEF4444),
+                        ],
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.1),
+                          blurRadius: 4,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Center(
+                      child: Container(
+                        width: 13,
+                        height: 13,
+                        decoration: const BoxDecoration(
+                          color: Colors.white,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          CupertinoIcons.plus,
+                          size: 9,
+                          color: AppTheme.textPrimary,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+
+              const SizedBox(width: 5),
               _buildVerticalDivider(),
-              const SizedBox(width: 6),
+              const SizedBox(width: 5),
 
               // 1. Ballpen Icon (Independent Ballpen tool)
               _buildSubBarPresetIcon(

@@ -25,14 +25,13 @@ class AppTheme {
   static const Color textSecondary = Color(0xFF7F7695);
   static const Color textMuted = Color(0xFFA59EB5);
 
-  // Annotation Palette Colors (Soft pastel highlighters)
+  // Annotation Palette Colors (Essential curated stationery presets + Black)
   static const List<Color> highlighterColors = [
+    Color(0x661E293B), // Black / Ink
     Color(0x66FFEB3B), // Soft Yellow
+    Color(0x666EE7B7), // Mint Green
+    Color(0x6638BDF8), // Sky Blue
     Color(0x66FF85A1), // Soft Pink
-    Color(0x668E7CE6), // Soft Lilac
-    Color(0x666EE7B7), // Soft Mint
-    Color(0x6693C5FD), // Soft Sky Blue
-    Color(0x66FDBA74), // Soft Peach
   ];
 
   // Soft box shadows for cards & floating bars
