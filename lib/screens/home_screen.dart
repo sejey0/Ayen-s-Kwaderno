@@ -155,11 +155,24 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  /// Opens Profile Settings and displays a verification modal if the user switched accounts
-  Future<void> _openProfileSettings() async {
+  /// Opens Profile Settings and displays a verification modal if the user switched accounts,
+  /// or auto-directs directly to the sidebar drawer when closed/cancelled
+  Future<void> _openProfileSettings({bool autoDirectToSidebar = true}) async {
+    if (_scaffoldKey.currentState?.isDrawerOpen == true) {
+      _scaffoldKey.currentState?.closeDrawer();
+    }
     final switchedProfile = await AccountProfileDialog.show(context);
     if (switchedProfile != null && mounted) {
       _showAccountSwitchedModal(switchedProfile);
+    } else if (autoDirectToSidebar && mounted) {
+      final isWide = MediaQuery.of(context).size.width >= 800;
+      if (!isWide) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && _scaffoldKey.currentState?.isDrawerOpen != true) {
+            _scaffoldKey.currentState?.openDrawer();
+          }
+        });
+      }
     }
   }
 
@@ -325,23 +338,50 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   /// Handles selection of items from the dynamic Side Navigation Panel
-  void _handleSidebarNavSelected(SidebarNavItem item) {
-    if (_scaffoldKey.currentState?.isDrawerOpen == true) {
+  Future<void> _handleSidebarNavSelected(SidebarNavItem item) async {
+    final wasDrawer = _scaffoldKey.currentState?.isDrawerOpen == true;
+    if (wasDrawer) {
       _scaffoldKey.currentState?.closeDrawer();
     }
-    setState(() => _selectedSidebarNav = item);
     switch (item) {
       case SidebarNavItem.dashboard:
-        setState(() => _currentSection = LibrarySection.dashboard);
+        setState(() {
+          _selectedSidebarNav = item;
+          _currentSection = LibrarySection.dashboard;
+        });
         break;
       case SidebarNavItem.documents:
-        setState(() => _currentSection = LibrarySection.documents);
+        setState(() {
+          _selectedSidebarNav = item;
+          _currentSection = LibrarySection.documents;
+        });
         break;
       case SidebarNavItem.notes:
-        setState(() => _currentSection = LibrarySection.notes);
+        setState(() {
+          _selectedSidebarNav = item;
+          _currentSection = LibrarySection.notes;
+        });
         break;
       case SidebarNavItem.settings:
-        _openProfileSettings();
+        await _openProfileSettings(autoDirectToSidebar: true);
+        break;
+      case SidebarNavItem.switchAccount:
+        final switched = await showModalBottomSheet<bool>(
+          context: context,
+          isScrollControlled: true,
+          backgroundColor: Colors.transparent,
+          builder: (ctx) => const SwitchAccountBottomSheet(),
+        );
+        if (mounted && switched != true) {
+          final isWide = MediaQuery.of(context).size.width >= 800;
+          if (!isWide) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted && _scaffoldKey.currentState?.isDrawerOpen != true) {
+                _scaffoldKey.currentState?.openDrawer();
+              }
+            });
+          }
+        }
         break;
     }
   }

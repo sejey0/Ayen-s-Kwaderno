@@ -3,12 +3,11 @@ import 'package:flutter/material.dart';
 import '../models/user_profile_model.dart';
 import '../screens/welcome_auth_screen.dart';
 import '../services/auto_sync_service.dart';
-import '../services/document_storage_service.dart';
 import '../services/user_service.dart';
 import '../theme/app_theme.dart';
 
 /// Opens the dedicated full-screen [ProfileSettingsScreen].
-/// Returns the [UserProfile] if the user switched accounts, or null otherwise.
+/// Returns the [UserProfile] if the user edited profile, or null otherwise.
 class AccountProfileDialog extends StatelessWidget {
   const AccountProfileDialog({super.key});
 
@@ -161,219 +160,6 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
     }
   }
 
-  /// Non-Destructive Logout: Signs out active session without deleting profile cards
-  Future<void> _handleLogout() async {
-    final confirmed = await showCupertinoDialog<bool>(
-      context: context,
-      builder: (context) => CupertinoAlertDialog(
-        title: const Text('Log Out of Account?'),
-        content: const Text(
-          'Your profile and notes remain safely saved on this device. You can easily switch back or re-authenticate anytime.',
-        ),
-        actions: [
-          CupertinoDialogAction(
-            child: const Text('Cancel'),
-            onPressed: () => Navigator.pop(context, false),
-          ),
-          CupertinoDialogAction(
-            isDestructiveAction: true,
-            child: const Text('Log Out'),
-            onPressed: () => Navigator.pop(context, true),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed == true && mounted) {
-      if (Navigator.of(context).canPop()) {
-        Navigator.of(context).pop();
-      }
-      await UserService.instance.logout();
-    }
-  }
-
-  /// Explicit Profile Removal
-  Future<void> _handleDeleteProfile(UserProfile targetProfile) async {
-    final confirmed = await showCupertinoDialog<bool>(
-      context: context,
-      builder: (context) => CupertinoAlertDialog(
-        title: Text('Remove "${targetProfile.name}"?'),
-        content: const Text(
-          'Are you sure you want to remove this profile from this device? Cloud-synced data will remain safe in your cloud account.',
-        ),
-        actions: [
-          CupertinoDialogAction(
-            child: const Text('Cancel'),
-            onPressed: () => Navigator.pop(context, false),
-          ),
-          CupertinoDialogAction(
-            isDestructiveAction: true,
-            child: const Text('Remove Profile'),
-            onPressed: () => Navigator.pop(context, true),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed == true && mounted) {
-      await UserService.instance.deleteProfile(targetProfile.id);
-      if (!mounted) return;
-      if (UserService.instance.currentUser == null) {
-        if (Navigator.of(context).canPop()) {
-          Navigator.of(context).pop();
-        }
-      } else {
-        setState(() {});
-      }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Profile "${targetProfile.name}" removed from device.'),
-          backgroundColor: AppTheme.primaryPurpleDark,
-          behavior: SnackBarBehavior.floating,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          duration: const Duration(seconds: 2),
-        ),
-      );
-    }
-  }
-
-  Future<void> _handleResetLocalCache() async {
-    final user = UserService.instance.currentUser;
-    if (user == null) return;
-
-    final confirmed = await showCupertinoDialog<bool>(
-      context: context,
-      builder: (context) => CupertinoAlertDialog(
-        title: const Text('Reset Local Cache?'),
-        content: const Text(
-          'This will clear local device files for this profile and re-download fresh data from the cloud.',
-        ),
-        actions: [
-          CupertinoDialogAction(
-            child: const Text('Cancel'),
-            onPressed: () => Navigator.pop(context, false),
-          ),
-          CupertinoDialogAction(
-            isDestructiveAction: true,
-            child: const Text('Reset Cache'),
-            onPressed: () => Navigator.pop(context, true),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed == true && mounted) {
-      await DocumentStorageService.deleteAllUserData(user.id);
-      await AutoSyncService.instance.syncAllToCloud();
-      UserService.instance.currentUserNotifier.value = user;
-      if (!mounted) return;
-      if (Navigator.of(context).canPop()) {
-        Navigator.of(context).pop();
-      }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-              'Local cache reset for ${user.name}. Fresh cloud sync complete.'),
-          backgroundColor: const Color(0xFF2E7D32),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-    }
-  }
-
-  /// Switches account with loading feedback, directs to main screen, and returns switched profile
-  Future<void> _handleSwitchProfile(String profileId) async {
-    final list = UserService.instance.profilesListNotifier.value;
-    final target = list.firstWhere(
-      (p) => p.id == profileId,
-      orElse: () => list.first,
-    );
-
-    // 1. Show sleek loading dialog
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogCtx) => PopScope(
-        canPop: false,
-        child: Dialog(
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-            decoration: BoxDecoration(
-              color: AppTheme.surfaceWhite,
-              borderRadius: BorderRadius.circular(20),
-              boxShadow: [
-                BoxShadow(
-                  color: AppTheme.primaryPurple.withValues(alpha: 0.15),
-                  blurRadius: 20,
-                  offset: const Offset(0, 6),
-                ),
-              ],
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const SizedBox(
-                  width: 24,
-                  height: 24,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2.5,
-                    color: AppTheme.primaryPurple,
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Switching to ${target.name}...',
-                        style: const TextStyle(
-                          fontSize: 14.5,
-                          fontWeight: FontWeight.w800,
-                          color: AppTheme.textPrimary,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      const Text(
-                        'Loading workspace & notes...',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: AppTheme.textSecondary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-
-    // 2. Perform switch & sync
-    await UserService.instance.switchProfile(profileId);
-
-    // Smooth perception delay
-    await Future.delayed(const Duration(milliseconds: 350));
-
-    if (!mounted) return;
-
-    // 3. Pop loading dialog
-    if (Navigator.of(context).canPop()) {
-      Navigator.of(context).pop();
-    }
-
-    // 4. Pop ProfileSettingsScreen and pass back the switched profile to HomeScreen
-    if (mounted && Navigator.of(context).canPop()) {
-      Navigator.of(context).pop(target);
-    }
-  }
-
   /// Navigates directly to the Main Login / Sign-Up Page with Cancel capability
   void _navigateToAddProfile() {
     Navigator.of(context).push(
@@ -470,16 +256,6 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
 
                       // ── 3. CLOUD STATUS CARD ──
                       _buildCloudStatusCard(user, isCloud),
-
-                      const SizedBox(height: 24),
-
-                      // ── 4. SWITCH PROFILE & ACCOUNTS ──
-                      _buildSwitchProfilesSection(user),
-
-                      const SizedBox(height: 32),
-
-                      // ── 5. SESSION MANAGEMENT & DANGER ZONE ──
-                      _buildSessionManagementSection(user, isCloud),
                     ],
                   ),
                 ),
@@ -525,9 +301,9 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
               ),
               boxShadow: [
                 BoxShadow(
-                  color: AppTheme.primaryPurple.withValues(alpha: 0.28),
-                  blurRadius: 14,
-                  offset: const Offset(0, 5),
+                  color: AppTheme.primaryPurple.withValues(alpha: 0.3),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
                 ),
               ],
             ),
@@ -539,7 +315,8 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
             ),
           ),
           const SizedBox(width: 16),
-          // Name and Registered Email
+
+          // User details
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -547,75 +324,52 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
                 Text(
                   user.name,
                   style: const TextStyle(
-                    fontSize: 19,
+                    fontSize: 18,
                     fontWeight: FontWeight.w800,
                     color: AppTheme.textPrimary,
                     letterSpacing: -0.3,
                   ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 3),
-                Row(
-                  children: [
-                    Container(
-                      width: 7,
-                      height: 7,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: user.isCloudLinked
-                            ? const Color(0xFF10B981)
-                            : const Color(0xFF94A3B8),
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        user.isCloudLinked
-                            ? (user.email ?? 'Cloud Synced')
-                            : 'Offline · Local Storage',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w600,
-                          color: user.isCloudLinked
-                              ? const Color(0xFF065F46)
-                              : AppTheme.textSecondary,
-                        ),
-                      ),
-                    ),
-                  ],
+                Text(
+                  user.isCloudLinked
+                      ? (user.email ?? 'Cloud Synced')
+                      : 'Offline Local Account',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: AppTheme.textSecondary,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),
           ),
-          // Subtle Profile Edit Action Button
-          GestureDetector(
-            onTap: () {
-              if (_isEditingProfile) {
-                _handleSaveProfile();
-              } else {
-                setState(() => _isEditingProfile = true);
-              }
-            },
-            child: Container(
-              width: 38,
-              height: 38,
-              decoration: BoxDecoration(
-                color: _isEditingProfile
-                    ? AppTheme.primaryPurple
-                    : AppTheme.primaryPurpleLight,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(
-                _isEditingProfile
-                    ? CupertinoIcons.checkmark
-                    : CupertinoIcons.pencil,
-                size: 16,
-                color: _isEditingProfile
-                    ? Colors.white
-                    : AppTheme.primaryPurple,
-              ),
+
+          // Edit Profile toggle
+          IconButton(
+            icon: Icon(
+              _isEditingProfile
+                  ? CupertinoIcons.xmark_circle_fill
+                  : CupertinoIcons.pencil_circle_fill,
+              size: 28,
+              color: _isEditingProfile
+                  ? AppTheme.textSecondary
+                  : AppTheme.primaryPurple,
             ),
+            tooltip: _isEditingProfile ? 'Close Edit' : 'Edit Profile',
+            onPressed: () {
+              setState(() {
+                _isEditingProfile = !_isEditingProfile;
+                if (_isEditingProfile) {
+                  _nameController.text = user.name;
+                  _currentEmoji = user.avatarEmoji;
+                }
+              });
+            },
           ),
         ],
       ),
@@ -631,8 +385,17 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppTheme.surfaceWhite,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppTheme.dividerColor),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: AppTheme.primaryPurple.withValues(alpha: 0.3),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: AppTheme.primaryPurple.withValues(alpha: 0.05),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -643,41 +406,44 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
               fontSize: 12,
               fontWeight: FontWeight.w700,
               color: AppTheme.textSecondary,
-              letterSpacing: 0.2,
             ),
           ),
           const SizedBox(height: 6),
           TextField(
             controller: _nameController,
+            style: const TextStyle(
+              fontSize: 14.5,
+              fontWeight: FontWeight.w600,
+              color: AppTheme.textPrimary,
+            ),
             decoration: InputDecoration(
-              hintText: 'Enter name',
+              hintText: 'Enter your display name',
               filled: true,
               fillColor: AppTheme.background,
               contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(10),
                 borderSide: const BorderSide(color: AppTheme.dividerColor),
               ),
               enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(10),
                 borderSide: const BorderSide(color: AppTheme.dividerColor),
               ),
               focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide:
-                    const BorderSide(color: AppTheme.primaryPurple, width: 1.5),
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(
+                    color: AppTheme.primaryPurple, width: 1.5),
               ),
             ),
           ),
           const SizedBox(height: 14),
           const Text(
-            'Choose Avatar',
+            'Choose Avatar Emoji',
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w700,
               color: AppTheme.textSecondary,
-              letterSpacing: 0.2,
             ),
           ),
           const SizedBox(height: 8),
@@ -763,7 +529,7 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
             const SizedBox(height: 14),
             Row(
               children: [
-                // Balanced "Sync Now" Button
+                // "Sync Now" Button
                 Expanded(
                   child: SizedBox(
                     height: 38,
@@ -793,7 +559,7 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
                   ),
                 ),
                 const SizedBox(width: 10),
-                // Balanced "Unlink Cloud" Button
+                // "Unlink Cloud" Button
                 Expanded(
                   child: SizedBox(
                     height: 38,
@@ -839,10 +605,10 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
                   color: AppTheme.primaryPurple, size: 20),
             ),
             const SizedBox(width: 12),
-            Expanded(
+            const Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                children: const [
+                children: [
                   Text(
                     'Link Cloud Backup',
                     style: TextStyle(
@@ -881,281 +647,5 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
         ),
       );
     }
-  }
-
-  // ===========================================================================
-  // 4. SWITCH PROFILE & ACCOUNTS SECTION
-  // ===========================================================================
-
-  Widget _buildSwitchProfilesSection(UserProfile activeUser) {
-    return ValueListenableBuilder<List<UserProfile>>(
-      valueListenable: UserService.instance.profilesListNotifier,
-      builder: (context, profiles, _) {
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Section Title with "+ Add Profile" action button
-            Row(
-              children: [
-                const Expanded(
-                  child: Text(
-                    'Switch Profile & Accounts',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w800,
-                      color: AppTheme.textPrimary,
-                      letterSpacing: -0.2,
-                    ),
-                  ),
-                ),
-                GestureDetector(
-                  onTap: _navigateToAddProfile,
-                  child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: AppTheme.primaryPurpleLight,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(CupertinoIcons.plus,
-                            size: 13, color: AppTheme.primaryPurple),
-                        SizedBox(width: 4),
-                        Text(
-                          'Add Profile',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                            color: AppTheme.primaryPurple,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-
-            // Profile List Cards (Tappable cards to switch, active with checkmark, dedicated trash icon)
-            ...profiles.map((p) {
-              final isActive = p.id == activeUser.id;
-              return _buildProfileItemCard(p, isActive);
-            }),
-          ],
-        );
-      },
-    );
-  }
-
-  Widget _buildProfileItemCard(UserProfile profile, bool isActive) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      decoration: BoxDecoration(
-        color: isActive
-            ? AppTheme.primaryPurpleLight.withValues(alpha: 0.5)
-            : AppTheme.surfaceWhite,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: isActive
-              ? AppTheme.primaryPurple.withValues(alpha: 0.35)
-              : AppTheme.dividerColor,
-        ),
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(14),
-          onTap: isActive ? null : () => _handleSwitchProfile(profile.id),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            child: Row(
-              children: [
-                // Emoji Avatar Container
-                Container(
-                  width: 42,
-                  height: 42,
-                  decoration: BoxDecoration(
-                    color: isActive
-                        ? AppTheme.primaryPurple.withValues(alpha: 0.12)
-                        : AppTheme.background,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Center(
-                    child: Text(profile.avatarEmoji,
-                        style: const TextStyle(fontSize: 20)),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                // Profile Name & Status
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Flexible(
-                            child: Text(
-                              profile.name,
-                              style: TextStyle(
-                                fontWeight: isActive
-                                    ? FontWeight.w800
-                                    : FontWeight.w600,
-                                fontSize: 14,
-                                color: AppTheme.textPrimary,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          if (isActive) ...[
-                            const SizedBox(width: 6),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: AppTheme.primaryPurple,
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: const Text(
-                                'ACTIVE',
-                                style: TextStyle(
-                                  fontSize: 9,
-                                  fontWeight: FontWeight.w800,
-                                  color: Colors.white,
-                                  letterSpacing: 0.5,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        profile.isCloudLinked
-                            ? (profile.email ?? '☁️ Cloud Linked')
-                            : '📱 Local · Offline',
-                        style: const TextStyle(
-                          fontSize: 11,
-                          color: AppTheme.textMuted,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ),
-                ),
-                // Active Checkmark Indicator
-                if (isActive)
-                  Container(
-                    width: 24,
-                    height: 24,
-                    margin: const EdgeInsets.only(right: 6),
-                    decoration: BoxDecoration(
-                      color: AppTheme.primaryPurple.withValues(alpha: 0.15),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      CupertinoIcons.checkmark,
-                      size: 13,
-                      color: AppTheme.primaryPurple,
-                    ),
-                  ),
-                // Dedicated Trash / Remove Icon Button
-                IconButton(
-                  icon: const Icon(
-                    CupertinoIcons.trash,
-                    size: 16,
-                    color: Color(0xFFEF4444),
-                  ),
-                  tooltip: 'Remove Profile',
-                  padding: const EdgeInsets.all(6),
-                  constraints: const BoxConstraints(),
-                  splashRadius: 18,
-                  onPressed: () => _handleDeleteProfile(profile),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  // ===========================================================================
-  // 5. DANGER ZONE & SESSION ACTIONS
-  // ===========================================================================
-
-  Widget _buildSessionManagementSection(UserProfile user, bool isCloud) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Subtle neutral divider
-        Container(
-          height: 1,
-          color: AppTheme.dividerColor,
-        ),
-        const SizedBox(height: 20),
-
-        // "Reset Local Cache & Re-sync": Secondary outlined button
-        if (isCloud) ...[
-          SizedBox(
-            width: double.infinity,
-            height: 46,
-            child: OutlinedButton.icon(
-              onPressed: _handleResetLocalCache,
-              icon: const Icon(Icons.refresh_rounded,
-                  size: 16, color: AppTheme.textSecondary),
-              label: const Text(
-                'Reset Local Cache & Re-sync',
-                style: TextStyle(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 13,
-                  color: AppTheme.textPrimary,
-                ),
-              ),
-              style: OutlinedButton.styleFrom(
-                side: const BorderSide(color: AppTheme.dividerColor),
-                backgroundColor: AppTheme.surfaceWhite,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 10),
-        ],
-
-        // "Log Out Account": Primary red action button (Non-destructive)
-        SizedBox(
-          width: double.infinity,
-          height: 46,
-          child: TextButton.icon(
-            onPressed: _handleLogout,
-            icon: const Icon(
-              Icons.logout_rounded,
-              size: 17,
-              color: Color(0xFFDC2626),
-            ),
-            label: const Text(
-              'Log Out Account',
-              style: TextStyle(
-                fontWeight: FontWeight.w700,
-                fontSize: 14,
-                color: Color(0xFFDC2626),
-              ),
-            ),
-            style: TextButton.styleFrom(
-              backgroundColor: const Color(0xFFFEF2F2),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
   }
 }
