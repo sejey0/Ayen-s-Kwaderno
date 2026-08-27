@@ -15,8 +15,6 @@ class DocumentStorageService {
   static const String _legacyDocumentsKey = 'ayens_kwaderno_recent_documents_v2';
   static const String _legacyHandwritingNotesKey =
       'ayens_kwaderno_handwriting_notes_v1';
-  static String _legacyAnnotationsKey(String documentName) =>
-      'ayens_kwaderno_annotations_$documentName';
 
   static String _getScopedDocumentsKey([String? userId]) {
     final uid = userId ?? UserService.instance.activeUserId;
@@ -77,18 +75,12 @@ class DocumentStorageService {
   // DOCUMENT FILES PERSISTENCE
   // ==========================================
 
-  /// Loads saved documents from SharedPreferences scoped for the active user
+  /// Loads saved documents from SharedPreferences scoped strictly for the active user
   static Future<List<DocumentItem>> loadSavedDocuments([String? userId]) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final scopedKey = _getScopedDocumentsKey(userId);
-      String? jsonString = prefs.getString(scopedKey);
-
-      // Fallback to legacy key if scoped key not populated yet
-      if ((jsonString == null || jsonString.isEmpty) &&
-          prefs.containsKey(_legacyDocumentsKey)) {
-        jsonString = prefs.getString(_legacyDocumentsKey);
-      }
+      final String? jsonString = prefs.getString(scopedKey);
 
       if (jsonString == null || jsonString.isEmpty) {
         return [];
@@ -115,7 +107,8 @@ class DocumentStorageService {
     String? userId,
   }) async {
     try {
-      final docs = await loadSavedDocuments(userId);
+      final targetUserId = userId ?? UserService.instance.activeUserId;
+      final docs = await loadSavedDocuments(targetUserId);
 
       // Remove existing entry by filename if any
       final existingIndex =
@@ -140,14 +133,16 @@ class DocumentStorageService {
         docs.removeRange(50, docs.length);
       }
 
-      await _persistDocumentsList(docs, userId);
+      await _persistDocumentsList(docs, targetUserId);
 
       // Immediately push document annotations if available
       try {
         final client = Supabase.instance.client;
-        final annotationsData = await loadLocalAnnotations(doc.fileName, userId);
+        final annotationsData =
+            await loadLocalAnnotations(doc.fileName, targetUserId);
         if (annotationsData != null) {
           final payload = {
+            'user_id': targetUserId,
             'document_name': doc.fileName,
             'strokes_data': annotationsData['strokes'] ?? [],
             'texts_data': annotationsData['texts'] ?? [],
@@ -172,10 +167,11 @@ class DocumentStorageService {
   /// Removes a document from local storage and Supabase
   static Future<void> deleteDocument(String fileName, [String? userId]) async {
     try {
-      final docs = await loadSavedDocuments(userId);
+      final targetUserId = userId ?? UserService.instance.activeUserId;
+      final docs = await loadSavedDocuments(targetUserId);
       docs.removeWhere((d) => d.fileName == fileName);
-      await _persistDocumentsList(docs, userId);
-      await clearLocalAnnotations(fileName, userId);
+      await _persistDocumentsList(docs, targetUserId);
+      await clearLocalAnnotations(fileName, targetUserId);
 
       // Async background deletion from Supabase
       try {
@@ -183,7 +179,8 @@ class DocumentStorageService {
         await client
             .from('document_annotations')
             .delete()
-            .eq('document_name', fileName);
+            .eq('document_name', fileName)
+            .eq('user_id', targetUserId);
       } catch (_) {}
 
       AutoSyncService.instance.triggerSync(immediate: true);
@@ -201,6 +198,7 @@ class DocumentStorageService {
     String? userId,
   }) async {
     try {
+      final targetUserId = userId ?? UserService.instance.activeUserId;
       final prefs = await SharedPreferences.getInstance();
       final Map<String, dynamic> data = {
         'strokes': strokes.map((s) => s.toJson()).toList(),
@@ -212,12 +210,13 @@ class DocumentStorageService {
         data.addAll(extraData);
       }
       await prefs.setString(
-          _getScopedAnnotationsKey(documentName, userId), jsonEncode(data));
+          _getScopedAnnotationsKey(documentName, targetUserId), jsonEncode(data));
 
       // Immediate auto-upload of annotations to Supabase database
       try {
         final client = Supabase.instance.client;
         final payload = {
+          'user_id': targetUserId,
           'document_name': documentName,
           'strokes_data': strokes.map((s) => s.toJson()).toList(),
           'texts_data': texts.map((t) => t.toJson()).toList(),
@@ -241,15 +240,10 @@ class DocumentStorageService {
   static Future<Map<String, dynamic>?> loadLocalAnnotations(
       String documentName, [String? userId]) async {
     try {
+      final targetUserId = userId ?? UserService.instance.activeUserId;
       final prefs = await SharedPreferences.getInstance();
-      final scopedKey = _getScopedAnnotationsKey(documentName, userId);
-      String? jsonString = prefs.getString(scopedKey);
-
-      // Fallback to legacy key
-      if ((jsonString == null || jsonString.isEmpty) &&
-          prefs.containsKey(_legacyAnnotationsKey(documentName))) {
-        jsonString = prefs.getString(_legacyAnnotationsKey(documentName));
-      }
+      final scopedKey = _getScopedAnnotationsKey(documentName, targetUserId);
+      final String? jsonString = prefs.getString(scopedKey);
 
       if (jsonString != null && jsonString.isNotEmpty) {
         return jsonDecode(jsonString) as Map<String, dynamic>;
@@ -262,38 +256,34 @@ class DocumentStorageService {
   static Future<void> clearLocalAnnotations(
       String documentName, [String? userId]) async {
     try {
+      final targetUserId = userId ?? UserService.instance.activeUserId;
       final prefs = await SharedPreferences.getInstance();
-      await prefs.remove(_getScopedAnnotationsKey(documentName, userId));
-      await prefs.remove(_legacyAnnotationsKey(documentName));
+      await prefs.remove(_getScopedAnnotationsKey(documentName, targetUserId));
     } catch (_) {}
   }
 
   /// Saves the complete document list to SharedPreferences
   static Future<void> _persistDocumentsList(
       List<DocumentItem> docs, [String? userId]) async {
+    final targetUserId = userId ?? UserService.instance.activeUserId;
     final prefs = await SharedPreferences.getInstance();
     final String encoded =
         jsonEncode(docs.map((d) => d.toJson()).toList());
-    await prefs.setString(_getScopedDocumentsKey(userId), encoded);
+    await prefs.setString(_getScopedDocumentsKey(targetUserId), encoded);
   }
 
   // ==========================================
   // HANDWRITING NOTES PERSISTENCE & CLOUD SYNC
   // ==========================================
 
-  /// Loads all saved handwriting notes from SharedPreferences scoped for the active user
+  /// Loads all saved handwriting notes from SharedPreferences scoped strictly for the active user
   static Future<List<HandwritingNote>> loadHandwritingNotes(
       [String? userId]) async {
     try {
+      final targetUserId = userId ?? UserService.instance.activeUserId;
       final prefs = await SharedPreferences.getInstance();
-      final scopedKey = _getScopedNotesKey(userId);
-      String? jsonString = prefs.getString(scopedKey);
-
-      // Fallback to legacy key if scoped not populated
-      if ((jsonString == null || jsonString.isEmpty) &&
-          prefs.containsKey(_legacyHandwritingNotesKey)) {
-        jsonString = prefs.getString(_legacyHandwritingNotesKey);
-      }
+      final scopedKey = _getScopedNotesKey(targetUserId);
+      final String? jsonString = prefs.getString(scopedKey);
 
       if (jsonString == null || jsonString.isEmpty) {
         return [];
@@ -321,7 +311,8 @@ class DocumentStorageService {
     String? userId,
   }) async {
     try {
-      final notes = await loadHandwritingNotes(userId);
+      final targetUserId = userId ?? UserService.instance.activeUserId;
+      final notes = await loadHandwritingNotes(targetUserId);
       final existingIndex = notes.indexWhere((n) => n.id == note.id);
 
       if (existingIndex >= 0) {
@@ -335,18 +326,21 @@ class DocumentStorageService {
         notes.removeRange(100, notes.length);
       }
 
-      await _persistHandwritingNotesList(notes, userId);
+      await _persistHandwritingNotesList(notes, targetUserId);
 
       // Immediate auto-upload of note to Supabase database in background
       try {
         final client = Supabase.instance.client;
         final payload = {
           'id': note.id,
+          'user_id': targetUserId,
           'title': note.title,
           'content': note.content,
           'palette_index': note.paletteIndex,
           'updated_at': note.updatedAt.toUtc().toIso8601String(),
           'created_at': note.createdAt.toUtc().toIso8601String(),
+          if (note.strokesJson != null) 'strokes_json': note.strokesJson,
+          'is_handwritten': note.isHandwritten,
         };
         client
             .from('handwriting_notes')
@@ -364,14 +358,19 @@ class DocumentStorageService {
   /// Deletes a handwriting note from local storage and Supabase
   static Future<void> deleteHandwritingNote(String id, [String? userId]) async {
     try {
-      final notes = await loadHandwritingNotes(userId);
+      final targetUserId = userId ?? UserService.instance.activeUserId;
+      final notes = await loadHandwritingNotes(targetUserId);
       notes.removeWhere((n) => n.id == id);
-      await _persistHandwritingNotesList(notes, userId);
+      await _persistHandwritingNotesList(notes, targetUserId);
 
       // Async background deletion from Supabase
       try {
         final client = Supabase.instance.client;
-        await client.from('handwriting_notes').delete().eq('id', id);
+        await client
+            .from('handwriting_notes')
+            .delete()
+            .eq('id', id)
+            .eq('user_id', targetUserId);
       } catch (_) {}
 
       AutoSyncService.instance.triggerSync(immediate: true);
@@ -381,9 +380,10 @@ class DocumentStorageService {
   /// Saves the complete handwriting notes list to SharedPreferences
   static Future<void> _persistHandwritingNotesList(
       List<HandwritingNote> notes, [String? userId]) async {
+    final targetUserId = userId ?? UserService.instance.activeUserId;
     final prefs = await SharedPreferences.getInstance();
     final String encoded =
         jsonEncode(notes.map((n) => n.toJson()).toList());
-    await prefs.setString(_getScopedNotesKey(userId), encoded);
+    await prefs.setString(_getScopedNotesKey(targetUserId), encoded);
   }
 }

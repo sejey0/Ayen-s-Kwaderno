@@ -3,7 +3,6 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/document_item_model.dart';
 import '../models/handwriting_note_model.dart';
 import '../models/user_profile_model.dart';
@@ -124,110 +123,22 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  /// Fetches saved document annotations from Supabase and merges with local list
+  /// Fetches saved document annotations and notes from Supabase strictly for active user
   Future<void> _syncWithCloud() async {
     try {
       setState(() => _isLoadingCloudDocuments = true);
+      await AutoSyncService.instance.syncAllToCloud();
 
-      final client = Supabase.instance.client;
-      final response = await client
-          .from('document_annotations')
-          .select(
-              'document_name, updated_at, strokes_data, texts_data, images_data')
-          .order('updated_at', ascending: false);
+      final activeUserId = UserService.instance.activeUserId;
+      final localDocs =
+          await DocumentStorageService.loadSavedDocuments(activeUserId);
+      final localNotes =
+          await DocumentStorageService.loadHandwritingNotes(activeUserId);
 
       if (!mounted) return;
-
-      final localDocs = await DocumentStorageService.loadSavedDocuments();
-      final Map<String, DocumentItem> docMap = {
-        for (var doc in localDocs) doc.fileName: doc
-      };
-
-      for (int i = 0; i < response.length; i++) {
-        final row = response[i];
-        final docName = row['document_name'] as String? ?? 'Untitled Document';
-        final updatedAtStr = row['updated_at'] as String?;
-        final strokes = row['strokes_data'] as List<dynamic>? ?? [];
-        final texts = row['texts_data'] as List<dynamic>? ?? [];
-        final images = row['images_data'] as List<dynamic>? ?? [];
-        final totalAnnotations = strokes.length + texts.length + images.length;
-
-        DateTime cloudUpdatedAt = DateTime.now();
-        if (updatedAtStr != null) {
-          cloudUpdatedAt =
-              DateTime.tryParse(updatedAtStr)?.toLocal() ?? DateTime.now();
-        }
-
-        if (docMap.containsKey(docName)) {
-          // Update existing local document with cloud state
-          final existing = docMap[docName]!;
-          docMap[docName] = existing.copyWith(
-            annotationsCount: totalAnnotations,
-            isCloudSynced: true,
-            lastOpenedAt: cloudUpdatedAt.isAfter(existing.lastOpenedAt)
-                ? cloudUpdatedAt
-                : existing.lastOpenedAt,
-          );
-        } else {
-          // Add new cloud-synced document
-          docMap[docName] = DocumentItem(
-            fileName: docName,
-            filePath: null, // Cloud-only until user opens file locally
-            lastOpenedAt: cloudUpdatedAt,
-            annotationsCount: totalAnnotations,
-            isCloudSynced: true,
-            paletteIndex: 0,
-          );
-        }
-
-        // Persist merged document
-        await DocumentStorageService.saveOrUpdateDocument(docMap[docName]!);
-      }
-
-      final mergedList = docMap.values.toList()
-        ..sort((a, b) => b.lastOpenedAt.compareTo(a.lastOpenedAt));
-
-      // 2. Fetch and merge Handwriting Notes from Supabase
-      List<HandwritingNote> mergedNotes =
-          await DocumentStorageService.loadHandwritingNotes();
-      try {
-        final notesResponse = await client
-            .from('handwriting_notes')
-            .select()
-            .order('updated_at', ascending: false);
-
-        final Map<String, HandwritingNote> noteMap = {
-          for (var n in mergedNotes) n.id: n
-        };
-
-        for (final row in notesResponse) {
-          final cloudNote =
-              HandwritingNote.fromJson(Map<String, dynamic>.from(row))
-                  .copyWith(isCloudSynced: true);
-
-          final localNote = noteMap[cloudNote.id];
-          if (localNote != null) {
-            noteMap[cloudNote.id] = cloudNote.copyWith(
-              isHandwritten: cloudNote.isHandwritten || localNote.isHandwritten,
-              strokesJson: cloudNote.strokesJson ?? localNote.strokesJson,
-            );
-          } else {
-            noteMap[cloudNote.id] = cloudNote;
-          }
-
-          await DocumentStorageService.saveOrUpdateHandwritingNote(
-              noteMap[cloudNote.id]!);
-        }
-
-        mergedNotes = noteMap.values.toList()
-          ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
-      } catch (noteErr) {
-        debugPrint('Supabase handwriting_notes notice (offline or table pending): $noteErr');
-      }
-
       setState(() {
-        _documents = mergedList;
-        _handwritingNotes = mergedNotes;
+        _documents = localDocs;
+        _handwritingNotes = localNotes;
         _isLoadingCloudDocuments = false;
       });
     } catch (e) {

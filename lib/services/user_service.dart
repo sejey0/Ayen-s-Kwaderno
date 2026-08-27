@@ -170,38 +170,45 @@ class UserService {
       throw const AuthException('Unable to obtain user session from Supabase.');
     }
 
-    final current = currentUser;
-    UserProfile linkedProfile;
+    // Fetch remote user profile if already exists in Supabase
+    String displayName = optionalName?.trim().isNotEmpty == true
+        ? optionalName!.trim()
+        : (currentUser?.name ?? user.email?.split('@').first ?? 'Student');
+    String avatarEmoji = currentUser?.avatarEmoji ?? '📓';
+    int avatarColorIndex = currentUser?.avatarColorIndex ?? 0;
 
-    if (current != null) {
-      linkedProfile = current.copyWith(
-        id: user.id,
-        email: user.email ?? email.trim(),
-        isCloudLinked: true,
-        supabaseUserId: user.id,
-        name: optionalName != null && optionalName.trim().isNotEmpty
-            ? optionalName.trim()
-            : current.name,
-        lastActiveAt: DateTime.now(),
-      );
-      if (current.id != user.id) {
-        await DocumentStorageService.migrateLegacyDataToUser(user.id);
+    try {
+      final remoteProfileRes = await client
+          .from('user_profiles')
+          .select()
+          .eq('id', user.id)
+          .maybeSingle();
+      if (remoteProfileRes != null) {
+        if (remoteProfileRes['name'] != null &&
+            (remoteProfileRes['name'] as String).trim().isNotEmpty) {
+          displayName = (remoteProfileRes['name'] as String).trim();
+        }
+        if (remoteProfileRes['avatar_emoji'] != null) {
+          avatarEmoji = remoteProfileRes['avatar_emoji'] as String;
+        }
+        if (remoteProfileRes['avatar_color_index'] != null) {
+          avatarColorIndex = remoteProfileRes['avatar_color_index'] as int;
+        }
       }
-    } else {
-      // Direct cloud signup without existing profile
-      final now = DateTime.now();
-      linkedProfile = UserProfile(
-        id: user.id,
-        name: optionalName?.trim().isNotEmpty == true
-            ? optionalName!.trim()
-            : (user.email?.split('@').first ?? 'Student'),
-        email: user.email ?? email.trim(),
-        isCloudLinked: true,
-        supabaseUserId: user.id,
-        createdAt: now,
-        lastActiveAt: now,
-      );
-    }
+    } catch (_) {}
+
+    final now = DateTime.now();
+    final linkedProfile = UserProfile(
+      id: user.id,
+      name: displayName,
+      avatarEmoji: avatarEmoji,
+      avatarColorIndex: avatarColorIndex,
+      email: user.email ?? email.trim(),
+      isCloudLinked: true,
+      supabaseUserId: user.id,
+      createdAt: currentUser?.createdAt ?? now,
+      lastActiveAt: now,
+    );
 
     await _saveProfile(linkedProfile, makeActive: true);
 
@@ -224,8 +231,8 @@ class UserService {
       debugPrint('Notice saving user profile to cloud: $e');
     }
 
-    // Trigger instant cloud sync for all notes and documents
-    AutoSyncService.instance.triggerSync(immediate: true);
+    // Immediately download and sync all documents & notes for this account onto this device
+    await AutoSyncService.instance.syncAllToCloud();
   }
 
   /// Unlinks the active profile from Supabase Cloud (keeps local offline data safe)

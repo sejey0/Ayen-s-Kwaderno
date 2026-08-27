@@ -13,6 +13,7 @@ import '../models/image_annotation_model.dart';
 import '../models/stroke_model.dart';
 import '../models/text_annotation_model.dart';
 import '../services/document_storage_service.dart';
+import '../services/user_service.dart';
 import '../theme/app_theme.dart';
 
 /// Supported annotation tool types in document editor
@@ -458,15 +459,28 @@ class _EditorScreenState extends State<EditorScreen>
     // 2. BACKGROUND CLOUD SYNC FROM SUPABASE
     try {
       final client = Supabase.instance.client;
-      final response = await client
-          .from('document_annotations')
-          .select()
-          .eq('document_name', _documentIdentifier)
-          .maybeSingle();
+      final activeUserId = UserService.instance.activeUserId;
+      final authUserId = client.auth.currentUser?.id ?? activeUserId;
+
+      dynamic response;
+      try {
+        response = await client
+            .from('document_annotations')
+            .select()
+            .eq('document_name', _documentIdentifier)
+            .eq('user_id', authUserId)
+            .maybeSingle();
+      } catch (_) {
+        response = await client
+            .from('document_annotations')
+            .select()
+            .eq('document_name', _documentIdentifier)
+            .maybeSingle();
+      }
 
       if (!mounted) return;
 
-      if (response != null) {
+      if (response != null && response is Map) {
         final Map<dynamic, dynamic>? strokesByPage =
             response['strokes_data'] is Map ? response['strokes_data'] : null;
         final Map<dynamic, dynamic>? textsByPage =
@@ -653,7 +667,11 @@ class _EditorScreenState extends State<EditorScreen>
   Future<void> _syncToSupabaseDirect() async {
     try {
       final client = Supabase.instance.client;
+      final activeUserId = UserService.instance.activeUserId;
+      final authUserId = client.auth.currentUser?.id ?? activeUserId;
+
       final payload = {
+        'user_id': authUserId,
         'document_name': _documentIdentifier,
         'strokes_data': {
           for (var entry in _perPageStrokes.entries)
