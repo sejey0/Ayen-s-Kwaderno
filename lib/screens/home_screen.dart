@@ -12,6 +12,7 @@ import '../services/document_storage_service.dart';
 import '../services/user_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/account_profile_dialog.dart';
+import '../widgets/app_side_navigation_panel.dart';
 import '../widgets/handwriting_canvas.dart';
 import '../widgets/pdf_thumbnail_widget.dart';
 import '../widgets/type_note_dialog.dart';
@@ -36,6 +37,11 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isLoadingCloudDocuments = false;
 
   LibrarySection _currentSection = LibrarySection.all;
+
+  // Sidebar navigation panel state
+  SidebarNavItem _selectedSidebarNav = SidebarNavItem.dashboard;
+  bool _isSidebarExpanded = true;
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   // Persistent dynamic document and handwriting note lists
   List<DocumentItem> _documents = [];
@@ -314,6 +320,70 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  /// Handles selection of items from the dynamic Side Navigation Panel
+  void _handleSidebarNavSelected(SidebarNavItem item) {
+    setState(() => _selectedSidebarNav = item);
+    switch (item) {
+      case SidebarNavItem.dashboard:
+        setState(() => _currentSection = LibrarySection.all);
+        break;
+      case SidebarNavItem.documents:
+        setState(() => _currentSection = LibrarySection.documents);
+        break;
+      case SidebarNavItem.notes:
+        setState(() => _currentSection = LibrarySection.notes);
+        break;
+      case SidebarNavItem.settings:
+        _openProfileSettings();
+        break;
+      case SidebarNavItem.aiOcr:
+        _launchHandwritingToText();
+        break;
+      case SidebarNavItem.archive:
+        _showArchiveInfoDialog();
+        break;
+      case SidebarNavItem.help:
+        _showHelpInfoDialog();
+        break;
+    }
+  }
+
+  void _showArchiveInfoDialog() {
+    showCupertinoDialog(
+      context: context,
+      builder: (ctx) => CupertinoAlertDialog(
+        title: const Text('Archive & Trash'),
+        content: const Text(
+          'Archived items and notes are scoped per user profile. Cloud-backed notes are backed up safely with Supabase.',
+        ),
+        actions: [
+          CupertinoDialogAction(
+            child: const Text('Got it'),
+            onPressed: () => Navigator.pop(ctx),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showHelpInfoDialog() {
+    showCupertinoDialog(
+      context: context,
+      builder: (ctx) => CupertinoAlertDialog(
+        title: const Text("About Ayen's Kwaderno"),
+        content: const Text(
+          "Ayen's Kwaderno is your smart offline-first digital notebook with AI handwriting, PDF annotation, and real-time Supabase cloud sync.\n\nVersion: 1.2.0\nTheme: Digital Stationery",
+        ),
+        actions: [
+          CupertinoDialogAction(
+            child: const Text('Close'),
+            onPressed: () => Navigator.pop(ctx),
+          ),
+        ],
       ),
     );
   }
@@ -744,10 +814,11 @@ class _HomeScreenState extends State<HomeScreen> {
     final totalDocsCount = _documents.length;
     final totalNotesCount = _handwritingNotes.length;
 
-    return Scaffold(
-      backgroundColor: AppTheme.background,
-      body: SafeArea(
-        child: RefreshIndicator(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isWideScreen = constraints.maxWidth >= 800;
+
+        final mainContent = RefreshIndicator(
           color: AppTheme.primaryPurple,
           backgroundColor: AppTheme.surfaceWhite,
           onRefresh: _syncWithCloud,
@@ -869,7 +940,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 else
                   SliverPadding(
                     padding: const EdgeInsets.symmetric(
-                         horizontal: 20.0, vertical: 4.0),
+                        horizontal: 20.0, vertical: 4.0),
                     sliver: SliverGrid(
                       gridDelegate:
                           const SliverGridDelegateWithFixedCrossAxisCount(
@@ -985,41 +1056,74 @@ class _HomeScreenState extends State<HomeScreen> {
               const SliverToBoxAdapter(child: SizedBox(height: 90)),
             ],
           ),
-        ),
-      ),
+        );
 
-      // Floating Action Button or Multi-Select Bottom Bar
-      floatingActionButtonLocation: _isSelectionMode
-          ? FloatingActionButtonLocation.centerFloat
-          : FloatingActionButtonLocation.endFloat,
-      floatingActionButton: _isSelectionMode
-          ? _buildSelectionBottomBar()
-          : FloatingActionButton.extended(
-              onPressed: _currentSection == LibrarySection.notes
-                  ? _launchHandwritingToText
-                  : _pickAndOpenDocument,
-              backgroundColor: _currentSection == LibrarySection.notes
-                  ? AppTheme.primaryPurple
-                  : AppTheme.accentPink,
-              foregroundColor: Colors.white,
-              elevation: 4,
-              icon: Icon(
-                _currentSection == LibrarySection.notes
-                    ? CupertinoIcons.pencil_outline
-                    : CupertinoIcons.cloud_upload_fill,
-                size: 20,
-              ),
-              label: Text(
-                _currentSection == LibrarySection.notes
-                    ? 'Write a Note'
-                    : 'Upload Document',
-                style: const TextStyle(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 14,
-                  letterSpacing: 0.2,
+        return Scaffold(
+          key: _scaffoldKey,
+          backgroundColor: AppTheme.background,
+          drawer: isWideScreen
+              ? null
+              : Drawer(
+                  backgroundColor: Colors.transparent,
+                  elevation: 0,
+                  child: AppSideNavigationPanel(
+                    isDrawerMode: true,
+                    selectedItem: _selectedSidebarNav,
+                    onItemSelected: _handleSidebarNavSelected,
+                    onCloseDrawer: () =>
+                        _scaffoldKey.currentState?.closeDrawer(),
+                  ),
                 ),
-              ),
-            ),
+          body: SafeArea(
+            child: isWideScreen
+                ? Row(
+                    children: [
+                      AppSideNavigationPanel(
+                        isDrawerMode: false,
+                        initiallyExpanded: _isSidebarExpanded,
+                        onExpansionChanged: (exp) =>
+                            setState(() => _isSidebarExpanded = exp),
+                        selectedItem: _selectedSidebarNav,
+                        onItemSelected: _handleSidebarNavSelected,
+                      ),
+                      Expanded(child: mainContent),
+                    ],
+                  )
+                : mainContent,
+          ),
+          floatingActionButtonLocation: _isSelectionMode
+              ? FloatingActionButtonLocation.centerFloat
+              : FloatingActionButtonLocation.endFloat,
+          floatingActionButton: _isSelectionMode
+              ? _buildSelectionBottomBar()
+              : FloatingActionButton.extended(
+                  onPressed: _currentSection == LibrarySection.notes
+                      ? _launchHandwritingToText
+                      : _pickAndOpenDocument,
+                  backgroundColor: _currentSection == LibrarySection.notes
+                      ? AppTheme.primaryPurple
+                      : AppTheme.accentPink,
+                  foregroundColor: Colors.white,
+                  elevation: 4,
+                  icon: Icon(
+                    _currentSection == LibrarySection.notes
+                        ? CupertinoIcons.pencil_outline
+                        : CupertinoIcons.cloud_upload_fill,
+                    size: 20,
+                  ),
+                  label: Text(
+                    _currentSection == LibrarySection.notes
+                        ? 'Write a Note'
+                        : 'Upload Document',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 14,
+                      letterSpacing: 0.2,
+                    ),
+                  ),
+                ),
+        );
+      },
     );
   }
 
@@ -1193,10 +1297,47 @@ class _HomeScreenState extends State<HomeScreen> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        GestureDetector(
-          onTap: _openProfileSettings,
-          child: Row(
-            children: [
+        Row(
+          children: [
+            // Side Navigation Drawer / Sidebar Toggle Button
+            Builder(
+              builder: (ctx) => Container(
+                margin: const EdgeInsets.only(right: 12),
+                decoration: BoxDecoration(
+                  color: AppTheme.surfaceWhite,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppTheme.dividerColor),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.03),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: IconButton(
+                  icon: const Icon(CupertinoIcons.bars,
+                      size: 20, color: AppTheme.textPrimary),
+                  tooltip: 'Menu & Navigation',
+                  padding: const EdgeInsets.all(8),
+                  constraints: const BoxConstraints(),
+                  onPressed: () {
+                    final isWide = MediaQuery.of(context).size.width >= 800;
+                    if (isWide) {
+                      setState(() => _isSidebarExpanded = !_isSidebarExpanded);
+                    } else {
+                      _scaffoldKey.currentState?.openDrawer();
+                    }
+                  },
+                ),
+              ),
+            ),
+
+            // Profile Avatar & Greeting
+            GestureDetector(
+              onTap: _openProfileSettings,
+              child: Row(
+                children: [
               ValueListenableBuilder<UserProfile?>(
                 valueListenable: UserService.instance.currentUserNotifier,
                 builder: (context, user, _) {
@@ -1270,8 +1411,10 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           ),
         ),
-        Row(
-          children: [
+      ],
+    ),
+    Row(
+      children: [
             if (hasItems) ...[
               Container(
                 margin: const EdgeInsets.only(right: 8),
