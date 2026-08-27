@@ -57,10 +57,10 @@ class AutoSyncService {
       }
     });
 
-    // 2. Periodic sync heartbeat (every 25 seconds) to push queued changes
+    // 2. Periodic sync heartbeat (every 2 minutes) to quietly push queued changes
     _periodicHeartbeatTimer =
-        Timer.periodic(const Duration(seconds: 25), (_) {
-      triggerSync();
+        Timer.periodic(const Duration(minutes: 2), (_) {
+      triggerSync(isSilent: true);
     });
 
     // 3. Initial sync on launch
@@ -77,21 +77,21 @@ class AutoSyncService {
   }
 
   /// Triggers an auto-upload sync. If [immediate] is false, debounces rapid updates.
-  void triggerSync({bool immediate = false}) {
+  void triggerSync({bool immediate = false, bool isSilent = false}) {
     if (immediate) {
       _debounceTimer?.cancel();
-      syncAllToCloud();
+      syncAllToCloud(isSilent: isSilent);
     } else {
       _debounceTimer?.cancel();
       _debounceTimer = Timer(const Duration(milliseconds: 1500), () {
-        syncAllToCloud();
+        syncAllToCloud(isSilent: isSilent);
       });
     }
   }
 
   /// Performs full bi-directional sync: uploads all local pending documents, annotations,
   /// and handwriting notes to Supabase, and merges remote changes.
-  Future<void> syncAllToCloud() async {
+  Future<void> syncAllToCloud({bool isSilent = false}) async {
     if (_isSyncing) return;
 
     final user = UserService.instance.currentUser;
@@ -122,7 +122,9 @@ class AutoSyncService {
     }
 
     _isSyncing = true;
-    statusNotifier.value = AutoSyncStatus.syncing;
+    if (!isSilent) {
+      statusNotifier.value = AutoSyncStatus.syncing;
+    }
 
     try {
       final client = Supabase.instance.client;
@@ -164,8 +166,10 @@ class AutoSyncService {
           await DocumentStorageService.loadSavedDocuments(activeUserId);
 
       try {
-        final annotationsResponse =
-            await client.from('document_annotations').select();
+        final annotationsResponse = await client
+            .from('document_annotations')
+            .select()
+            .timeout(const Duration(seconds: 10));
 
         for (final row in annotationsResponse) {
           final rawDocName = row['document_name'] as String?;
@@ -244,7 +248,8 @@ class AutoSyncService {
         final notesResponse = await client
             .from('handwriting_notes')
             .select()
-            .order('updated_at', ascending: false);
+            .order('updated_at', ascending: false)
+            .timeout(const Duration(seconds: 10));
 
         for (final row in notesResponse) {
           final rawId = row['id'] as String? ?? '';
