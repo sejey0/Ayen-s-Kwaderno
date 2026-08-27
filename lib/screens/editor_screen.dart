@@ -766,6 +766,9 @@ class _EditorScreenState extends State<EditorScreen>
     final displayName = widget.fileName ?? 'Study Document';
     final totalAnnotationsCount =
         _strokes.length + _textAnnotations.length + _imageAnnotations.length;
+    final bool isPaletteOpen = _activeTool == AnnotationTool.highlighter ||
+        _activeTool == AnnotationTool.straightLine;
+    final double bottomVerticalArrowOffset = isPaletteOpen ? 180.0 : 96.0;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF3F4F6),
@@ -974,10 +977,8 @@ class _EditorScreenState extends State<EditorScreen>
                     top: 0,
                     bottom: 0,
                     child: Center(
-                      child: _buildSideFloatingArrow(
+                      child: _buildFloatingNavArrowButton(
                         icon: CupertinoIcons.chevron_left,
-                        pageNumber: _currentPage - 1,
-                        isNext: false,
                         onTap: () => _goToPage(_currentPage - 1),
                       ),
                     ),
@@ -990,10 +991,8 @@ class _EditorScreenState extends State<EditorScreen>
                     top: 0,
                     bottom: 0,
                     child: Center(
-                      child: _buildSideFloatingArrow(
+                      child: _buildFloatingNavArrowButton(
                         icon: CupertinoIcons.chevron_right,
-                        pageNumber: _currentPage + 1,
-                        isNext: true,
                         onTap: () => _goToPage(_currentPage + 1),
                       ),
                     ),
@@ -1006,10 +1005,8 @@ class _EditorScreenState extends State<EditorScreen>
                     left: 0,
                     right: 0,
                     child: Center(
-                      child: _buildVerticalFloatingArrow(
+                      child: _buildFloatingNavArrowButton(
                         icon: CupertinoIcons.chevron_up,
-                        pageNumber: _currentPage - 1,
-                        isNext: false,
                         onTap: () => _goToPage(_currentPage - 1),
                       ),
                     ),
@@ -1018,14 +1015,12 @@ class _EditorScreenState extends State<EditorScreen>
                 // Bottom Floating Arrow (Up & Down Next)
                 if (_currentPage < _pageCount)
                   Positioned(
-                    bottom: 110,
+                    bottom: bottomVerticalArrowOffset,
                     left: 0,
                     right: 0,
                     child: Center(
-                      child: _buildVerticalFloatingArrow(
+                      child: _buildFloatingNavArrowButton(
                         icon: CupertinoIcons.chevron_down,
-                        pageNumber: _currentPage + 1,
-                        isNext: true,
                         onTap: () => _goToPage(_currentPage + 1),
                       ),
                     ),
@@ -1113,14 +1108,14 @@ class _EditorScreenState extends State<EditorScreen>
     );
   }
 
-  /// Side-by-side floating circular arrow button for Horizontal slide mode
-  Widget _buildSideFloatingArrow({
+  /// Universal Floating Circular Navigation Arrow Button (used for both Horizontal and Vertical modes)
+  Widget _buildFloatingNavArrowButton({
     required IconData icon,
-    required int pageNumber,
-    required bool isNext,
     required VoidCallback onTap,
   }) {
     return Container(
+      width: 48,
+      height: 48,
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.96),
         shape: BoxShape.circle,
@@ -1135,56 +1130,7 @@ class _EditorScreenState extends State<EditorScreen>
             offset: const Offset(0, 4),
           ),
           BoxShadow(
-            color: AppTheme.primaryPurple.withValues(alpha: 0.16),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(26),
-          onTap: () {
-            HapticFeedback.lightImpact();
-            onTap();
-          },
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Icon(
-              icon,
-              size: 24,
-              color: AppTheme.primaryPurpleDark,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  /// Up and down floating pill arrow button for Vertical scroll mode
-  Widget _buildVerticalFloatingArrow({
-    required IconData icon,
-    required int pageNumber,
-    required bool isNext,
-    required VoidCallback onTap,
-  }) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.96),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(
-          color: const Color(0xFF0284C7).withValues(alpha: 0.4),
-          width: 1.5,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF0F172A).withValues(alpha: 0.16),
-            blurRadius: 16,
-            offset: const Offset(0, 4),
-          ),
-          BoxShadow(
-            color: const Color(0xFF0284C7).withValues(alpha: 0.15),
+            color: AppTheme.primaryPurple.withValues(alpha: 0.18),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -1198,27 +1144,11 @@ class _EditorScreenState extends State<EditorScreen>
             HapticFeedback.lightImpact();
             onTap();
           },
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  icon,
-                  size: 18,
-                  color: const Color(0xFF0284C7),
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  isNext ? 'Page $pageNumber →' : '← Page $pageNumber',
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w800,
-                    color: Color(0xFF0369A1),
-                    letterSpacing: -0.2,
-                  ),
-                ),
-              ],
+          child: Center(
+            child: Icon(
+              icon,
+              size: 24,
+              color: AppTheme.primaryPurpleDark,
             ),
           ),
         ),
