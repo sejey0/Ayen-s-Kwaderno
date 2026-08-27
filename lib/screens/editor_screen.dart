@@ -25,6 +25,12 @@ enum AnnotationTool {
   addImage, // Draggable/resizable image overlay
 }
 
+/// Eraser operating modes
+enum EraserMode {
+  drawErase, // Precision point-by-point drawing eraser
+  wipeStroke, // Wipes entire stroke on contact
+}
+
 /// PDF Page Slide & Scroll Navigation Orientation
 enum PageSlideOrientation {
   horizontal, // Slide left & right with side-by-side arrows (Default)
@@ -81,6 +87,8 @@ class _EditorScreenState extends State<EditorScreen>
   final List<List<Stroke>> _redoStack = [];
   Stroke? _currentStroke;
   Offset? _currentEraserPos;
+  EraserMode _eraserMode = EraserMode.drawErase;
+  bool _isEraserMenuExpanded = true;
 
   // Digital Text Annotations state (Saved notes)
   final List<TextAnnotation> _textAnnotations = [];
@@ -767,6 +775,19 @@ class _EditorScreenState extends State<EditorScreen>
       return;
     }
 
+    if (tool == AnnotationTool.highlighter &&
+        _activeTool == AnnotationTool.eraser) {
+      setState(() {
+        _activeTool = AnnotationTool.highlighter;
+      });
+      return;
+    }
+
+    if (tool == _activeTool) {
+      setState(() => _activeTool = AnnotationTool.none);
+      return;
+    }
+
     setState(() {
       _activeTool = tool;
       _selectedImageId = null;
@@ -919,60 +940,81 @@ class _EditorScreenState extends State<EditorScreen>
     );
   }
 
-  /// Precision draw-to-erase: carves only the exact points within 10px radius
+  /// Erases strokes near eraserPos depending on the active _eraserMode
   void _eraseStrokesNear(Offset eraserPos, double radius) {
-    bool modified = false;
-    final List<Stroke> updatedStrokes = [];
-
-    for (final stroke in _strokes) {
-      if (stroke.points.isEmpty) continue;
-
-      // Densify points along path to ensure high-resolution point-by-point erasing
-      final points = stroke.points.length < 5
-          ? _densifyPoints(stroke.points)
-          : stroke.points;
-
-      final List<List<Offset>> subSegments = [];
-      List<Offset> currentSegment = [];
-
-      for (final p in points) {
-        final dist = (p - eraserPos).distance;
-        if (dist > radius) {
-          currentSegment.add(p);
-        } else {
-          // Point erased! End current segment
-          if (currentSegment.isNotEmpty) {
-            subSegments.add(List.from(currentSegment));
-            currentSegment.clear();
-          }
-          modified = true;
-        }
-      }
-
-      if (currentSegment.isNotEmpty) {
-        subSegments.add(List.from(currentSegment));
-      }
-
-      // Re-add remaining sub-segments
-      for (final seg in subSegments) {
-        if (seg.isNotEmpty) {
-          updatedStrokes.add(Stroke(
-            points: seg,
-            color: stroke.color,
-            strokeWidth: stroke.strokeWidth,
-            isStraightLine: stroke.isStraightLine,
-          ));
-        }
-      }
-    }
-
-    if (modified) {
+    if (_eraserMode == EraserMode.wipeStroke) {
+      // Mode 1: Wipe Whole Stroke (deletes entire line on contact)
+      bool removedAny = false;
       setState(() {
-        _strokes.clear();
-        _strokes.addAll(updatedStrokes);
-        _perPageStrokes[_currentPage] = List.from(_strokes);
+        _strokes.removeWhere((stroke) {
+          final hit = stroke.points
+              .any((p) => (p - eraserPos).distance <= radius + 4.0);
+          if (hit) removedAny = true;
+          return hit;
+        });
+        if (removedAny) {
+          _perPageStrokes[_currentPage] = List.from(_strokes);
+        }
       });
-      _autoSaveAndSync();
+      if (removedAny) {
+        HapticFeedback.mediumImpact();
+        _autoSaveAndSync();
+      }
+    } else {
+      // Mode 2: Precision Draw Erase (point-by-point path carving)
+      bool modified = false;
+      final List<Stroke> updatedStrokes = [];
+
+      for (final stroke in _strokes) {
+        if (stroke.points.isEmpty) continue;
+
+        // Densify points along path to ensure high-resolution point-by-point erasing
+        final points = stroke.points.length < 5
+            ? _densifyPoints(stroke.points)
+            : stroke.points;
+
+        final List<List<Offset>> subSegments = [];
+        List<Offset> currentSegment = [];
+
+        for (final p in points) {
+          final dist = (p - eraserPos).distance;
+          if (dist > radius) {
+            currentSegment.add(p);
+          } else {
+            // Point erased! End current segment
+            if (currentSegment.isNotEmpty) {
+              subSegments.add(List.from(currentSegment));
+              currentSegment.clear();
+            }
+            modified = true;
+          }
+        }
+
+        if (currentSegment.isNotEmpty) {
+          subSegments.add(List.from(currentSegment));
+        }
+
+        // Re-add remaining sub-segments
+        for (final seg in subSegments) {
+          if (seg.isNotEmpty) {
+            updatedStrokes.add(Stroke(
+              points: seg,
+              color: stroke.color,
+              strokeWidth: stroke.strokeWidth,
+              isStraightLine: stroke.isStraightLine,
+            ));
+          }
+        }
+      }
+
+      if (modified) {
+        setState(() {
+          _strokes.clear();
+          _strokes.addAll(updatedStrokes);
+          _perPageStrokes[_currentPage] = List.from(_strokes);
+        });
+        _autoSaveAndSync();
+      }
     }
   }
 
@@ -1311,7 +1353,14 @@ class _EditorScreenState extends State<EditorScreen>
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Secondary Color/Stroke Palette (stays open in highlighter, straightLine, and eraser modes)
+                  // 1. Floating Eraser Options Bubble (Floats on top of the icons)
+                  if (_activeTool == AnnotationTool.eraser &&
+                      _isEraserMenuExpanded) ...[
+                    _buildFloatingEraserOptionsBubble(),
+                    const SizedBox(height: 8),
+                  ],
+
+                  // 2. Secondary Color/Stroke Palette (with Ballpen, Highlighter, Eraser)
                   if (_activeTool == AnnotationTool.highlighter ||
                       _activeTool == AnnotationTool.straightLine ||
                       _activeTool == AnnotationTool.eraser)
@@ -1319,7 +1368,7 @@ class _EditorScreenState extends State<EditorScreen>
 
                   const SizedBox(height: 10),
 
-                  // Main Floating Annotation Toolbar
+                  // 3. Main Floating Annotation Toolbar
                   _buildFloatingBottomToolbar(),
                 ],
               ),
@@ -1465,6 +1514,7 @@ class _EditorScreenState extends State<EditorScreen>
                             currentStroke: pageCurrentStroke,
                             activeTool: _activeTool,
                             eraserPos: isCurrent ? _currentEraserPos : null,
+                            eraserMode: _eraserMode,
                           ),
                           size: Size.infinite,
                         ),
@@ -2258,7 +2308,93 @@ class _EditorScreenState extends State<EditorScreen>
     );
   }
 
-  /// Secondary floating color palette picker with stroke width options
+  /// Floating options bubble that sits directly on top of the Eraser icon
+  Widget _buildFloatingEraserOptionsBubble() {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(20),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: AppTheme.surfaceWhite.withValues(alpha: 0.96),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: const Color(0xFFEF4444).withValues(alpha: 0.3),
+              width: 1.2,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFFEF4444).withValues(alpha: 0.14),
+                blurRadius: 14,
+                offset: const Offset(0, 4),
+              ),
+              BoxShadow(
+                color: const Color(0xFF1E1B4B).withValues(alpha: 0.08),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // 1. Draw Erase (Precision carving)
+              _buildEraserModePill(
+                mode: EraserMode.drawErase,
+                icon: CupertinoIcons.scribble,
+                label: 'Draw Erase',
+                tooltip: 'Precision: Erase only what you draw across',
+              ),
+
+              const SizedBox(width: 4),
+
+              // 2. Wipe Erase (Whole line wiping)
+              _buildEraserModePill(
+                mode: EraserMode.wipeStroke,
+                icon: CupertinoIcons.trash_fill,
+                label: 'Wipe Erase',
+                tooltip: 'Wipe: Erase whole line on contact',
+              ),
+
+              const SizedBox(width: 6),
+              _buildVerticalDivider(),
+              const SizedBox(width: 3),
+
+              // 3. Collapse / Close Button
+              Tooltip(
+                message: 'Collapse Options',
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(14),
+                    onTap: () {
+                      HapticFeedback.lightImpact();
+                      setState(() => _isEraserMenuExpanded = false);
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.all(5),
+                      decoration: const BoxDecoration(
+                        color: Color(0xFFF3F4F6),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        CupertinoIcons.chevron_down,
+                        size: 13,
+                        color: AppTheme.textSecondary,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Secondary floating color palette & tool presets picker
   Widget _buildColorPickerSubBar() {
     return ClipRRect(
       borderRadius: BorderRadius.circular(24),
@@ -2277,9 +2413,17 @@ class _EditorScreenState extends State<EditorScreen>
             children: [
               // Color Dots
               ...AppTheme.highlighterColors.map((color) {
-                final isSelected = _selectedColor == color;
+                final isSelected = _selectedColor == color &&
+                    _activeTool != AnnotationTool.eraser;
                 return GestureDetector(
-                  onTap: () => setState(() => _selectedColor = color),
+                  onTap: () {
+                    setState(() {
+                      _selectedColor = color;
+                      if (_activeTool == AnnotationTool.eraser) {
+                        _activeTool = AnnotationTool.highlighter;
+                      }
+                    });
+                  },
                   child: Container(
                     margin: const EdgeInsets.symmetric(horizontal: 4),
                     width: 26,
@@ -2341,21 +2485,86 @@ class _EditorScreenState extends State<EditorScreen>
                 },
               ),
 
-              // 3. Eraser Icon (replaces 'L')
+              // 3. Eraser Icon (Toggles / Expands floating options above)
               _buildSubBarPresetIcon(
                 icon: CupertinoIcons.bandage,
-                tooltip: 'Eraser (Drag to Erase)',
+                tooltip: _activeTool == AnnotationTool.eraser
+                    ? (_isEraserMenuExpanded
+                        ? 'Collapse Eraser Options'
+                        : 'Expand Eraser Options')
+                    : 'Eraser (Open Options)',
                 isSelected: _activeTool == AnnotationTool.eraser,
                 selectedColor: const Color(0xFFEF4444),
                 onTap: () {
                   setState(() {
                     if (_activeTool == AnnotationTool.eraser) {
-                      _activeTool = AnnotationTool.highlighter;
+                      _isEraserMenuExpanded = !_isEraserMenuExpanded;
                     } else {
                       _activeTool = AnnotationTool.eraser;
+                      _isEraserMenuExpanded = true;
                     }
                   });
                 },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Eraser mode pill tab button (Draw Erase vs Wipe Stroke)
+  Widget _buildEraserModePill({
+    required EraserMode mode,
+    required IconData icon,
+    required String label,
+    required String tooltip,
+  }) {
+    final isSelected = _eraserMode == mode;
+
+    return Tooltip(
+      message: tooltip,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () {
+          HapticFeedback.selectionClick();
+          setState(() => _eraserMode = mode);
+        },
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOutCubic,
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: isSelected
+                ? const Color(0xFFEF4444)
+                : const Color(0xFFF3F4F6),
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: isSelected
+                ? [
+                    BoxShadow(
+                      color: const Color(0xFFEF4444).withValues(alpha: 0.35),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
+                    ),
+                  ]
+                : null,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                icon,
+                size: 13,
+                color: isSelected ? Colors.white : AppTheme.textPrimary,
+              ),
+              const SizedBox(width: 5),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: isSelected ? Colors.white : AppTheme.textPrimary,
+                ),
               ),
             ],
           ),
@@ -2422,12 +2631,14 @@ class BaseAnnotationPainter extends CustomPainter {
   final Stroke? currentStroke;
   final AnnotationTool activeTool;
   final Offset? eraserPos;
+  final EraserMode? eraserMode;
 
   BaseAnnotationPainter({
     required this.strokes,
     required this.currentStroke,
     required this.activeTool,
     this.eraserPos,
+    this.eraserMode,
   });
 
   @override
@@ -2444,17 +2655,20 @@ class BaseAnnotationPainter extends CustomPainter {
 
     // 3. Draw live Eraser cursor indicator while actively erasing
     if (activeTool == AnnotationTool.eraser && eraserPos != null) {
+      final isWipe = eraserMode == EraserMode.wipeStroke;
+      final double cursorRadius = isWipe ? 14.0 : 10.0;
+
       final eraserRingPaint = Paint()
         ..color = const Color(0xFFEF4444).withValues(alpha: 0.85)
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.5;
+        ..strokeWidth = isWipe ? 2.0 : 1.5;
 
       final eraserFillPaint = Paint()
-        ..color = const Color(0xFFFEE2E2).withValues(alpha: 0.55)
+        ..color = const Color(0xFFFEE2E2).withValues(alpha: isWipe ? 0.45 : 0.55)
         ..style = PaintingStyle.fill;
 
-      canvas.drawCircle(eraserPos!, 10.0, eraserFillPaint);
-      canvas.drawCircle(eraserPos!, 10.0, eraserRingPaint);
+      canvas.drawCircle(eraserPos!, cursorRadius, eraserFillPaint);
+      canvas.drawCircle(eraserPos!, cursorRadius, eraserRingPaint);
     }
   }
 
