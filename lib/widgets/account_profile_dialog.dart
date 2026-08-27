@@ -7,13 +7,13 @@ import '../services/document_storage_service.dart';
 import '../services/user_service.dart';
 import '../theme/app_theme.dart';
 
-/// Legacy entry point maintained for compatibility across the app.
 /// Opens the dedicated full-screen [ProfileSettingsScreen].
+/// Returns the [UserProfile] if the user switched accounts, or null otherwise.
 class AccountProfileDialog extends StatelessWidget {
   const AccountProfileDialog({super.key});
 
-  static Future<void> show(BuildContext context) async {
-    await Navigator.of(context).push(
+  static Future<UserProfile?> show(BuildContext context) async {
+    return await Navigator.of(context).push<UserProfile>(
       CupertinoPageRoute(
         builder: (context) => const ProfileSettingsScreen(),
       ),
@@ -161,7 +161,7 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
     }
   }
 
-  /// Non-Destructive Logout: Signs out active session without removing profile card from switcher list
+  /// Non-Destructive Logout: Signs out active session without deleting profile cards
   Future<void> _handleLogout() async {
     final confirmed = await showCupertinoDialog<bool>(
       context: context,
@@ -188,12 +188,11 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
       if (Navigator.of(context).canPop()) {
         Navigator.of(context).pop();
       }
-      // Non-destructive: keeps all profile cards saved on device
       await UserService.instance.logout();
     }
   }
 
-  /// Explicit Profile Removal: Triggers confirmation before deleting profile data from device
+  /// Explicit Profile Removal
   Future<void> _handleDeleteProfile(UserProfile targetProfile) async {
     final confirmed = await showCupertinoDialog<bool>(
       context: context,
@@ -283,14 +282,95 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
     }
   }
 
+  /// Switches account with loading feedback, directs to main screen, and returns switched profile
   Future<void> _handleSwitchProfile(String profileId) async {
+    final list = UserService.instance.profilesListNotifier.value;
+    final target = list.firstWhere(
+      (p) => p.id == profileId,
+      orElse: () => list.first,
+    );
+
+    // 1. Show sleek loading dialog
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogCtx) => PopScope(
+        canPop: false,
+        child: Dialog(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+            decoration: BoxDecoration(
+              color: AppTheme.surfaceWhite,
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(
+                  color: AppTheme.primaryPurple.withValues(alpha: 0.15),
+                  blurRadius: 20,
+                  offset: const Offset(0, 6),
+                ),
+              ],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.5,
+                    color: AppTheme.primaryPurple,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Switching to ${target.name}...',
+                        style: const TextStyle(
+                          fontSize: 14.5,
+                          fontWeight: FontWeight.w800,
+                          color: AppTheme.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      const Text(
+                        'Loading workspace & notes...',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: AppTheme.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    // 2. Perform switch & sync
     await UserService.instance.switchProfile(profileId);
-    if (mounted) {
-      final user = UserService.instance.currentUser;
-      _nameController.text = user?.name ?? 'Student';
-      _currentEmoji = user?.avatarEmoji ?? '📓';
-      _isEditingProfile = false;
-      setState(() {});
+
+    // Smooth perception delay
+    await Future.delayed(const Duration(milliseconds: 350));
+
+    if (!mounted) return;
+
+    // 3. Pop loading dialog
+    if (Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    }
+
+    // 4. Pop ProfileSettingsScreen and pass back the switched profile to HomeScreen
+    if (mounted && Navigator.of(context).canPop()) {
+      Navigator.of(context).pop(target);
     }
   }
 

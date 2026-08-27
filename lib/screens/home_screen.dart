@@ -149,6 +149,175 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  /// Opens Profile Settings and displays a verification modal if the user switched accounts
+  Future<void> _openProfileSettings() async {
+    final switchedProfile = await AccountProfileDialog.show(context);
+    if (switchedProfile != null && mounted) {
+      _showAccountSwitchedModal(switchedProfile);
+    }
+  }
+
+  /// Verification modal shown upon successfully switching account
+  void _showAccountSwitchedModal(UserProfile user) {
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        backgroundColor: AppTheme.surfaceWhite,
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Avatar with checkmark badge
+              Stack(
+                alignment: Alignment.bottomRight,
+                children: [
+                  Container(
+                    width: 72,
+                    height: 72,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: const LinearGradient(
+                        colors: [AppTheme.primaryPurple, AppTheme.accentPink],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppTheme.primaryPurple.withValues(alpha: 0.3),
+                          blurRadius: 16,
+                          offset: const Offset(0, 6),
+                        ),
+                      ],
+                    ),
+                    child: Center(
+                      child: Text(
+                        user.avatarEmoji,
+                        style: const TextStyle(fontSize: 34),
+                      ),
+                    ),
+                  ),
+                  Container(
+                    width: 26,
+                    height: 26,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF10B981),
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white, width: 2),
+                    ),
+                    child: const Icon(
+                      CupertinoIcons.checkmark,
+                      size: 14,
+                      color: Colors.white,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 18),
+
+              // Title
+              Text(
+                'Switched to ${user.name}!',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w900,
+                  color: AppTheme.textPrimary,
+                  letterSpacing: -0.4,
+                ),
+              ),
+              const SizedBox(height: 8),
+
+              // Status chip
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: user.isCloudLinked
+                      ? const Color(0xFFECFDF5)
+                      : AppTheme.primaryPurpleLight,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: user.isCloudLinked
+                        ? const Color(0xFF10B981).withValues(alpha: 0.3)
+                        : AppTheme.primaryPurple.withValues(alpha: 0.3),
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      user.isCloudLinked
+                          ? CupertinoIcons.cloud_fill
+                          : CupertinoIcons.device_phone_portrait,
+                      size: 13,
+                      color: user.isCloudLinked
+                          ? const Color(0xFF065F46)
+                          : AppTheme.primaryPurple,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      user.isCloudLinked
+                          ? (user.email ?? 'Cloud Synced')
+                          : 'Offline Notebook Space',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: user.isCloudLinked
+                            ? const Color(0xFF065F46)
+                            : AppTheme.primaryPurpleDark,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 14),
+
+              Text(
+                user.isCloudLinked
+                    ? 'All notes and documents for ${user.name} have been synchronized and loaded.'
+                    : 'Local notes and drawings for ${user.name} are loaded and ready on this device.',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 13,
+                  color: AppTheme.textSecondary,
+                  height: 1.4,
+                ),
+              ),
+              const SizedBox(height: 22),
+
+              // Got it / Open Workspace button
+              SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: ElevatedButton(
+                  onPressed: () => Navigator.of(dialogCtx).pop(),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.primaryPurple,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                  child: const Text(
+                    'Open Workspace',
+                    style: TextStyle(
+                      fontSize: 14.5,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -0.2,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   /// Opens the Upload Document or Image modal with preview and title editor
   Future<void> _pickAndOpenDocument() async {
     final uploadedDoc = await UploadDocumentDialog.show(context);
@@ -1025,7 +1194,7 @@ class _HomeScreenState extends State<HomeScreen> {
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         GestureDetector(
-          onTap: () => AccountProfileDialog.show(context),
+          onTap: _openProfileSettings,
           child: Row(
             children: [
               ValueListenableBuilder<UserProfile?>(
