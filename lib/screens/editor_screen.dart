@@ -1107,17 +1107,6 @@ class _EditorScreenState extends State<EditorScreen>
     final displayName = widget.fileName ?? 'Study Document';
     final totalAnnotationsCount =
         _strokes.length + _textAnnotations.length + _imageAnnotations.length;
-    final bool isPaletteOpen = _activeTool == AnnotationTool.highlighter ||
-        _activeTool == AnnotationTool.straightLine ||
-        _activeTool == AnnotationTool.eraser;
-    final bool isTopBubbleOpen =
-        (_activeTool == AnnotationTool.eraser && _isEraserMenuExpanded) ||
-            ((_activeTool == AnnotationTool.highlighter ||
-                    _activeTool == AnnotationTool.straightLine) &&
-                _isThicknessMenuExpanded);
-    final double bottomVerticalArrowOffset = isPaletteOpen
-        ? (isTopBubbleOpen ? 220.0 : 180.0)
-        : 96.0;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF3F4F6),
@@ -1252,74 +1241,12 @@ class _EditorScreenState extends State<EditorScreen>
               ),
             ),
 
-            // ==========================================
-            // FLOATING PAGE NAVIGATION CONTROLS
-            // (Side-by-side arrows for Horizontal; Up & Down arrows for Vertical)
-            // ==========================================
-            if (_pageCount > 1) ...[
-              if (_slideOrientation == PageSlideOrientation.horizontal) ...[
-                // Left Floating Arrow (Side-by-side Prev)
-                if (_currentPage > 1)
-                  Positioned(
-                    left: 16,
-                    top: 0,
-                    bottom: 0,
-                    child: Center(
-                      child: _buildFloatingNavArrowButton(
-                        icon: CupertinoIcons.chevron_left,
-                        onTap: () => _goToPage(_currentPage - 1),
-                      ),
-                    ),
-                  ),
 
-                // Right Floating Arrow (Side-by-side Next)
-                if (_currentPage < _pageCount)
-                  Positioned(
-                    right: 16,
-                    top: 0,
-                    bottom: 0,
-                    child: Center(
-                      child: _buildFloatingNavArrowButton(
-                        icon: CupertinoIcons.chevron_right,
-                        onTap: () => _goToPage(_currentPage + 1),
-                      ),
-                    ),
-                  ),
-              ] else ...[
-                // Top Floating Arrow (Up & Down Prev)
-                if (_currentPage > 1)
-                  Positioned(
-                    top: MediaQuery.of(context).padding.top + 76,
-                    left: 0,
-                    right: 0,
-                    child: Center(
-                      child: _buildFloatingNavArrowButton(
-                        icon: CupertinoIcons.chevron_up,
-                        onTap: () => _goToPage(_currentPage - 1),
-                      ),
-                    ),
-                  ),
-
-                // Bottom Floating Arrow (Up & Down Next)
-                if (_currentPage < _pageCount)
-                  Positioned(
-                    bottom: bottomVerticalArrowOffset,
-                    left: 0,
-                    right: 0,
-                    child: Center(
-                      child: _buildFloatingNavArrowButton(
-                        icon: CupertinoIcons.chevron_down,
-                        onTap: () => _goToPage(_currentPage + 1),
-                      ),
-                    ),
-                  ),
-              ],
-            ],
 
             // Rendering Page Progress Shimmer
             if (_isLoadingPage)
               Positioned(
-                top: MediaQuery.of(context).padding.top + 60,
+                top: MediaQuery.of(context).padding.top + 90,
                 left: 20,
                 right: 20,
                 child: Center(
@@ -1609,53 +1536,7 @@ class _EditorScreenState extends State<EditorScreen>
     );
   }
 
-  /// Universal Floating Circular Navigation Arrow Button (used for both Horizontal and Vertical modes)
-  Widget _buildFloatingNavArrowButton({
-    required IconData icon,
-    required VoidCallback onTap,
-  }) {
-    return Container(
-      width: 48,
-      height: 48,
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.96),
-        shape: BoxShape.circle,
-        border: Border.all(
-          color: AppTheme.primaryPurple.withValues(alpha: 0.4),
-          width: 1.5,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF1E1B4B).withValues(alpha: 0.18),
-            blurRadius: 16,
-            offset: const Offset(0, 4),
-          ),
-          BoxShadow(
-            color: AppTheme.primaryPurple.withValues(alpha: 0.18),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(24),
-          onTap: () {
-            HapticFeedback.lightImpact();
-            onTap();
-          },
-          child: Center(
-            child: Icon(
-              icon,
-              size: 24,
-              color: AppTheme.primaryPurpleDark,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
+
 
   /// Draggable & Resizable Image Sticker Widget locked to PDF
   Widget _buildDraggableResizableImageWidget(ImageAnnotation annotation) {
@@ -1937,19 +1818,20 @@ class _EditorScreenState extends State<EditorScreen>
   }
 
   /// Elegant glassmorphic Top App Bar with Auto-Sync Status & Page Navigation
+  /// Elegant glassmorphic Top App Bar with Full Title & dedicated Action Row (Undo, Redo, Sync)
   Widget _buildTopAppBar(String title, int totalAnnotationsCount) {
     return ClipRRect(
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
         child: Container(
           padding: EdgeInsets.only(
-            top: MediaQuery.of(context).padding.top + 8,
-            bottom: 12,
-            left: 16,
-            right: 16,
+            top: MediaQuery.of(context).padding.top + 6,
+            bottom: 8,
+            left: 14,
+            right: 14,
           ),
           decoration: BoxDecoration(
-            color: AppTheme.surfaceWhite.withValues(alpha: 0.88),
+            color: AppTheme.surfaceWhite.withValues(alpha: 0.90),
             border: Border(
               bottom: BorderSide(
                 color: AppTheme.dividerColor.withValues(alpha: 0.8),
@@ -1964,118 +1846,165 @@ class _EditorScreenState extends State<EditorScreen>
               ),
             ],
           ),
-          child: Row(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Back Button
-              Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: AppTheme.primaryPurpleLight.withValues(alpha: 0.6),
-                  shape: BoxShape.circle,
-                ),
-                child: IconButton(
-                  padding: EdgeInsets.zero,
-                  icon: const Icon(
-                    CupertinoIcons.chevron_back,
-                    color: AppTheme.primaryPurple,
-                    size: 20,
-                  ),
-                  onPressed: () => Navigator.of(context).pop(),
-                ),
-              ),
-              const SizedBox(width: 10),
-
-              // Title
-              Expanded(
-                child: Text(
-                  title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                    color: AppTheme.textPrimary,
-                    letterSpacing: -0.2,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 6),
-
-              // Undo Button
-              IconButton(
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                icon: Icon(
-                  CupertinoIcons.arrow_uturn_left,
-                  color: (_undoStack.isNotEmpty || _strokes.isNotEmpty)
-                      ? AppTheme.textPrimary
-                      : AppTheme.textMuted.withValues(alpha: 0.4),
-                  size: 18,
-                ),
-                tooltip: 'Undo (↩)',
-                onPressed: (_undoStack.isNotEmpty || _strokes.isNotEmpty)
-                    ? _undo
-                    : null,
-              ),
-
-              // Redo Button
-              IconButton(
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                icon: Icon(
-                  CupertinoIcons.arrow_uturn_right,
-                  color: _redoStack.isNotEmpty
-                      ? AppTheme.textPrimary
-                      : AppTheme.textMuted.withValues(alpha: 0.4),
-                  size: 18,
-                ),
-                tooltip: 'Redo (↪)',
-                onPressed: _redoStack.isNotEmpty ? _redo : null,
-              ),
-
-              // Delete Selected Image Sticker Button
-              if (_selectedImageId != null)
-                IconButton(
-                  padding: EdgeInsets.zero,
-                  constraints:
-                      const BoxConstraints(minWidth: 32, minHeight: 32),
-                  icon: Container(
-                    padding: const EdgeInsets.all(4),
-                    decoration: const BoxDecoration(
-                      color: Color(0xFFFEE2E2),
+              // Row 1: Back Button & Full Title View
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  // Back Button
+                  Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: AppTheme.primaryPurpleLight.withValues(alpha: 0.6),
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(
-                      CupertinoIcons.trash_fill,
-                      color: Color(0xFFEF4444),
-                      size: 15,
+                    child: IconButton(
+                      padding: EdgeInsets.zero,
+                      icon: const Icon(
+                        CupertinoIcons.chevron_back,
+                        color: AppTheme.primaryPurple,
+                        size: 18,
+                      ),
+                      onPressed: () => Navigator.of(context).pop(),
                     ),
                   ),
-                  tooltip: 'Delete Selected Image',
-                  onPressed: () {
-                    HapticFeedback.heavyImpact();
-                    _deleteImageAnnotation(_selectedImageId!);
-                  },
-                ),
+                  const SizedBox(width: 10),
 
-              // Clear Annotations Button
-              if (totalAnnotationsCount > 0 && _selectedImageId == null)
-                IconButton(
-                  padding: EdgeInsets.zero,
-                  constraints:
-                      const BoxConstraints(minWidth: 30, minHeight: 32),
-                  icon: const Icon(
-                    CupertinoIcons.trash,
-                    color: AppTheme.accentPink,
-                    size: 17,
+                  // Full Title
+                  Expanded(
+                    child: Text(
+                      title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.textPrimary,
+                        letterSpacing: -0.2,
+                        height: 1.25,
+                      ),
+                    ),
                   ),
-                  tooltip: 'Clear Annotations',
-                  onPressed: _clearAnnotations,
-                ),
+                ],
+              ),
 
-              // Smart Auto-Sync Status Badge / Manual Sync Trigger
-              _buildSyncStatusBadge(),
+              const SizedBox(height: 6),
+
+              // Row 2 / Next Space: Page Badge + Undo/Redo + Delete/Clear + Sync Status
+              Row(
+                children: [
+                  // Page Count Badge
+                  if (_pageCount > 1)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 3.5),
+                      decoration: BoxDecoration(
+                        color:
+                            AppTheme.primaryPurpleLight.withValues(alpha: 0.5),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        'Page $_currentPage of $_pageCount',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: AppTheme.primaryPurpleDark,
+                        ),
+                      ),
+                    )
+                  else
+                    const SizedBox.shrink(),
+
+                  const Spacer(),
+
+                  // Undo Button
+                  IconButton(
+                    padding: EdgeInsets.zero,
+                    constraints:
+                        const BoxConstraints(minWidth: 32, minHeight: 30),
+                    icon: Icon(
+                      CupertinoIcons.arrow_uturn_left,
+                      color: (_undoStack.isNotEmpty || _strokes.isNotEmpty)
+                          ? AppTheme.textPrimary
+                          : AppTheme.textMuted.withValues(alpha: 0.4),
+                      size: 17,
+                    ),
+                    tooltip: 'Undo (↩)',
+                    onPressed: (_undoStack.isNotEmpty || _strokes.isNotEmpty)
+                        ? _undo
+                        : null,
+                  ),
+
+                  // Redo Button
+                  IconButton(
+                    padding: EdgeInsets.zero,
+                    constraints:
+                        const BoxConstraints(minWidth: 32, minHeight: 30),
+                    icon: Icon(
+                      CupertinoIcons.arrow_uturn_right,
+                      color: _redoStack.isNotEmpty
+                          ? AppTheme.textPrimary
+                          : AppTheme.textMuted.withValues(alpha: 0.4),
+                      size: 17,
+                    ),
+                    tooltip: 'Redo (↪)',
+                    onPressed: _redoStack.isNotEmpty ? _redo : null,
+                  ),
+
+                  // Delete Selected Image Sticker Button
+                  if (_selectedImageId != null) ...[
+                    const SizedBox(width: 2),
+                    IconButton(
+                      padding: EdgeInsets.zero,
+                      constraints:
+                          const BoxConstraints(minWidth: 30, minHeight: 30),
+                      icon: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: const BoxDecoration(
+                          color: Color(0xFFFEE2E2),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          CupertinoIcons.trash_fill,
+                          color: Color(0xFFEF4444),
+                          size: 14,
+                        ),
+                      ),
+                      tooltip: 'Delete Selected Image',
+                      onPressed: () {
+                        HapticFeedback.heavyImpact();
+                        _deleteImageAnnotation(_selectedImageId!);
+                      },
+                    ),
+                  ],
+
+                  // Clear Annotations Button
+                  if (totalAnnotationsCount > 0 && _selectedImageId == null) ...[
+                    const SizedBox(width: 2),
+                    IconButton(
+                      padding: EdgeInsets.zero,
+                      constraints:
+                          const BoxConstraints(minWidth: 30, minHeight: 30),
+                      icon: const Icon(
+                        CupertinoIcons.trash,
+                        color: AppTheme.accentPink,
+                        size: 16,
+                      ),
+                      tooltip: 'Clear Annotations',
+                      onPressed: _clearAnnotations,
+                    ),
+                  ],
+
+                  const SizedBox(width: 4),
+
+                  // Smart Auto-Sync Status Badge / Manual Sync Trigger
+                  _buildSyncStatusBadge(),
+                ],
+              ),
             ],
           ),
         ),
