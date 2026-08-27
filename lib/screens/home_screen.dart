@@ -1976,63 +1976,62 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   const SizedBox(height: 4),
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        '${doc.annotationsCount} mark${doc.annotationsCount == 1 ? '' : 's'}',
-                        style: const TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: AppTheme.primaryPurple,
+                      Expanded(
+                        child: Text(
+                          '${doc.annotationsCount} mark${doc.annotationsCount == 1 ? '' : 's'}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w600,
+                            color: AppTheme.primaryPurple,
+                          ),
                         ),
                       ),
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            _formatTimestamp(doc.lastOpenedAt),
-                            style: const TextStyle(
-                              fontSize: 10.5,
-                              color: AppTheme.textMuted,
-                            ),
+                      const SizedBox(width: 4),
+                      Text(
+                        _formatTimestamp(doc.lastOpenedAt),
+                        style: const TextStyle(
+                          fontSize: 10,
+                          color: AppTheme.textMuted,
+                        ),
+                      ),
+                      if (!_isSelectionMode) ...[
+                        const SizedBox(width: 2),
+                        PopupMenuButton<String>(
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                          icon: const Icon(
+                            CupertinoIcons.ellipsis_vertical,
+                            size: 14,
+                            color: AppTheme.textSecondary,
                           ),
-                          if (!_isSelectionMode) ...[
-                            const SizedBox(width: 2),
-                            PopupMenuButton<String>(
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(),
-                              icon: const Icon(
-                                CupertinoIcons.ellipsis_vertical,
-                                size: 14,
-                                color: AppTheme.textSecondary,
+                          onSelected: (val) {
+                            if (val == 'delete') {
+                              _confirmSingleDocDelete(doc);
+                            }
+                          },
+                          itemBuilder: (context) => [
+                            const PopupMenuItem(
+                              value: 'delete',
+                              height: 36,
+                              child: Row(
+                                children: [
+                                  Icon(CupertinoIcons.trash,
+                                      size: 15, color: Color(0xFFEF4444)),
+                                  SizedBox(width: 8),
+                                  Text('Delete File',
+                                      style: TextStyle(
+                                          color: Color(0xFFEF4444),
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 13)),
+                                ],
                               ),
-                              onSelected: (val) {
-                                if (val == 'delete') {
-                                  _confirmSingleDocDelete(doc);
-                                }
-                              },
-                              itemBuilder: (context) => [
-                                const PopupMenuItem(
-                                  value: 'delete',
-                                  height: 36,
-                                  child: Row(
-                                    children: [
-                                      Icon(CupertinoIcons.trash,
-                                          size: 15, color: Color(0xFFEF4444)),
-                                      SizedBox(width: 8),
-                                      Text('Delete File',
-                                          style: TextStyle(
-                                              color: Color(0xFFEF4444),
-                                              fontWeight: FontWeight.w600,
-                                              fontSize: 13)),
-                                    ],
-                                  ),
-                                ),
-                              ],
                             ),
                           ],
-                        ],
-                      ),
+                        ),
+                      ],
                     ],
                   ),
                 ],
@@ -2112,6 +2111,27 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       ),
                     ),
+                    Positioned(
+                      top: 12,
+                      left: 12,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 5, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.65),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: const Text(
+                          'DRAW',
+                          style: TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.white,
+                            letterSpacing: 0.4,
+                          ),
+                        ),
+                      ),
+                    ),
                     if (_isSelectionMode)
                       Positioned(
                         top: 12,
@@ -2147,7 +2167,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
               Padding(
-                padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+                padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -2163,84 +2183,62 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     const SizedBox(height: 3),
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 5, vertical: 1.5),
-                              decoration: BoxDecoration(
-                                color: AppTheme.primaryPurpleLight,
-                                borderRadius: BorderRadius.circular(5),
-                              ),
-                              child: const Text(
-                                '2 Pages',
-                                style: TextStyle(
-                                  fontSize: 9.5,
-                                  fontWeight: FontWeight.w800,
-                                  color: AppTheme.primaryPurpleDark,
-                                ),
-                              ),
+                        Expanded(
+                          child: Text(
+                            '${strokes.length} mark${strokes.length == 1 ? '' : 's'}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w600,
+                              color: AppTheme.primaryPurple,
                             ),
-                            const SizedBox(width: 4),
-                            Text(
-                              '${strokes.length} stroke${strokes.length == 1 ? '' : 's'}',
-                              style: const TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w600,
-                                color: AppTheme.textSecondary,
-                              ),
-                            ),
-                          ],
+                          ),
                         ),
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              _formatTimestamp(note.updatedAt),
-                              style: const TextStyle(
-                                fontSize: 10,
-                                color: AppTheme.textMuted,
-                              ),
+                        const SizedBox(width: 4),
+                        Text(
+                          _formatTimestamp(note.updatedAt),
+                          style: const TextStyle(
+                            fontSize: 10,
+                            color: AppTheme.textMuted,
+                          ),
+                        ),
+                        if (!_isSelectionMode) ...[
+                          const SizedBox(width: 2),
+                          PopupMenuButton<String>(
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                            icon: const Icon(
+                              CupertinoIcons.ellipsis_vertical,
+                              size: 13,
+                              color: AppTheme.textSecondary,
                             ),
-                            if (!_isSelectionMode) ...[
-                              const SizedBox(width: 2),
-                              PopupMenuButton<String>(
-                                padding: EdgeInsets.zero,
-                                constraints: const BoxConstraints(),
-                                icon: const Icon(
-                                  CupertinoIcons.ellipsis_vertical,
-                                  size: 13,
-                                  color: AppTheme.textSecondary,
+                            onSelected: (val) {
+                              if (val == 'delete') {
+                                _confirmSingleNoteDelete(note);
+                              }
+                            },
+                            itemBuilder: (context) => [
+                              const PopupMenuItem(
+                                value: 'delete',
+                                height: 36,
+                                child: Row(
+                                  children: [
+                                    Icon(CupertinoIcons.trash,
+                                        size: 15, color: Color(0xFFEF4444)),
+                                    SizedBox(width: 8),
+                                    Text('Delete Note',
+                                        style: TextStyle(
+                                            color: Color(0xFFEF4444),
+                                            fontWeight: FontWeight.w600,
+                                            fontSize: 13)),
+                                  ],
                                 ),
-                                onSelected: (val) {
-                                  if (val == 'delete') {
-                                    _confirmSingleNoteDelete(note);
-                                  }
-                                },
-                                itemBuilder: (context) => [
-                                  const PopupMenuItem(
-                                    value: 'delete',
-                                    height: 36,
-                                    child: Row(
-                                      children: [
-                                        Icon(CupertinoIcons.trash,
-                                            size: 15, color: Color(0xFFEF4444)),
-                                        SizedBox(width: 8),
-                                        Text('Delete Note',
-                                            style: TextStyle(
-                                                color: Color(0xFFEF4444),
-                                                fontWeight: FontWeight.w600,
-                                                fontSize: 13)),
-                                      ],
-                                    ),
-                                  ),
-                                ],
                               ),
                             ],
-                          ],
-                        ),
+                          ),
+                        ],
                       ],
                     ),
                   ],
@@ -2323,19 +2321,26 @@ class _HomeScreenState extends State<HomeScreen> {
                         : null,
                   )
                 else
-                  Row(
-                    children: [
-                      Icon(CupertinoIcons.pin_fill, size: 13, color: accent),
-                      const SizedBox(width: 4),
-                      Text(
-                        _formatTimestamp(note.updatedAt),
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w600,
-                          color: accent.withValues(alpha: 0.8),
+                  Expanded(
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(CupertinoIcons.pin_fill, size: 12, color: accent),
+                        const SizedBox(width: 4),
+                        Flexible(
+                          child: Text(
+                            _formatTimestamp(note.updatedAt),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                              color: accent.withValues(alpha: 0.8),
+                            ),
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 if (!_isSelectionMode)
                   Row(
