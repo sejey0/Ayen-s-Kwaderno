@@ -343,52 +343,7 @@ class _HomeScreenState extends State<HomeScreen> {
       case SidebarNavItem.settings:
         _openProfileSettings();
         break;
-      case SidebarNavItem.aiOcr:
-        _launchHandwritingToText();
-        break;
-      case SidebarNavItem.archive:
-        _showArchiveInfoDialog();
-        break;
-      case SidebarNavItem.help:
-        _showHelpInfoDialog();
-        break;
     }
-  }
-
-  void _showArchiveInfoDialog() {
-    showCupertinoDialog(
-      context: context,
-      builder: (ctx) => CupertinoAlertDialog(
-        title: const Text('Archive & Trash'),
-        content: const Text(
-          'Archived items and notes are scoped per user profile. Cloud-backed notes are backed up safely with Supabase.',
-        ),
-        actions: [
-          CupertinoDialogAction(
-            child: const Text('Got it'),
-            onPressed: () => Navigator.pop(ctx),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showHelpInfoDialog() {
-    showCupertinoDialog(
-      context: context,
-      builder: (ctx) => CupertinoAlertDialog(
-        title: const Text("About Ayen's Kwaderno"),
-        content: const Text(
-          "Ayen's Kwaderno is your smart offline-first digital notebook with AI handwriting, PDF annotation, and real-time Supabase cloud sync.\n\nVersion: 1.2.0\nTheme: Digital Stationery",
-        ),
-        actions: [
-          CupertinoDialogAction(
-            child: const Text('Close'),
-            onPressed: () => Navigator.pop(ctx),
-          ),
-        ],
-      ),
-    );
   }
 
   /// Opens the Upload Document or Image modal with preview and title editor

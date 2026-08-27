@@ -11,9 +11,6 @@ enum SidebarNavItem {
   documents,
   notes,
   settings,
-  aiOcr,
-  archive,
-  help,
 }
 
 class AppSideNavigationPanel extends StatefulWidget {
@@ -156,39 +153,15 @@ class _AppSideNavigationPanelState extends State<AppSideNavigationPanel> {
 
                   const SizedBox(height: 14),
 
-                  // Section 2: Tools & Creation
-                  if (_isExpanded) _buildSectionHeader('TOOLS & CREATION'),
-                  _buildNavItem(
-                    item: SidebarNavItem.aiOcr,
-                    icon: CupertinoIcons.wand_rays_inverse,
-                    label: 'AI Handwriting OCR',
-                    badge: 'AI ✨',
-                    badgeColor: AppTheme.primaryPurple,
-                  ),
-
-                  const SizedBox(height: 14),
-
-                  // Section 3: Account & System (Sole Settings Entry Point)
+                  // Section 2: Account & System
                   if (_isExpanded) _buildSectionHeader('ACCOUNT & SYSTEM'),
                   _buildNavItem(
                     item: SidebarNavItem.settings,
                     icon: CupertinoIcons.gear_alt_fill,
-                    label: 'Profile & Accounts',
+                    label: 'Profile Settings & Accounts',
                     badge: 'Active',
                     badgeColor: const Color(0xFF10B981),
                     onOverrideTap: _openSettings,
-                  ),
-                  _buildNavItem(
-                    item: SidebarNavItem.archive,
-                    icon: CupertinoIcons.archivebox_fill,
-                    label: 'Archive & Trash',
-                    badge: null,
-                  ),
-                  _buildNavItem(
-                    item: SidebarNavItem.help,
-                    icon: CupertinoIcons.question_circle_fill,
-                    label: 'Help & About',
-                    badge: null,
                   ),
                 ],
               ),
@@ -225,41 +198,46 @@ class _AppSideNavigationPanelState extends State<AppSideNavigationPanel> {
             padding: const EdgeInsets.symmetric(horizontal: 12),
             child: Center(
               child: Tooltip(
-                message: '$displayName\n$emailText',
-                child: Stack(
-                  alignment: Alignment.bottomRight,
-                  children: [
-                    Container(
-                      width: 44,
-                      height: 44,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: const LinearGradient(
-                          colors: [
-                            AppTheme.primaryPurpleLight,
-                            AppTheme.accentPinkLight
-                          ],
+                message: '$displayName\n$emailText\n(Tap for Profile Settings)',
+                child: GestureDetector(
+                  onTap: _openSettings,
+                  behavior: HitTestBehavior.opaque,
+                  child: Stack(
+                    alignment: Alignment.bottomRight,
+                    children: [
+                      Container(
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: const LinearGradient(
+                            colors: [
+                              AppTheme.primaryPurpleLight,
+                              AppTheme.accentPinkLight
+                            ],
+                          ),
+                          border: Border.all(
+                            color: AppTheme.primaryPurple.withValues(alpha: 0.3),
+                          ),
                         ),
-                        border: Border.all(
-                          color: AppTheme.primaryPurple.withValues(alpha: 0.3),
+                        child: Center(
+                          child:
+                              Text(emoji, style: const TextStyle(fontSize: 22)),
                         ),
                       ),
-                      child: Center(
-                        child: Text(emoji, style: const TextStyle(fontSize: 22)),
+                      Container(
+                        width: 12,
+                        height: 12,
+                        decoration: BoxDecoration(
+                          color: isCloud
+                              ? const Color(0xFF10B981)
+                              : const Color(0xFF94A3B8),
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white, width: 2),
+                        ),
                       ),
-                    ),
-                    Container(
-                      width: 12,
-                      height: 12,
-                      decoration: BoxDecoration(
-                        color: isCloud
-                            ? const Color(0xFF10B981)
-                            : const Color(0xFF94A3B8),
-                        shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white, width: 2),
-                      ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -271,63 +249,78 @@ class _AppSideNavigationPanelState extends State<AppSideNavigationPanel> {
           padding: const EdgeInsets.fromLTRB(16, 14, 10, 14),
           child: Row(
             children: [
-              // Large Circular Avatar
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: const LinearGradient(
-                    colors: [AppTheme.primaryPurple, AppTheme.accentPink],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppTheme.primaryPurple.withValues(alpha: 0.25),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: Center(
-                  child: Text(
-                    emoji,
-                    style: const TextStyle(fontSize: 22),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-
-              // Name and Email
+              // Profile Card Info (Tapping opens Profile Settings)
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      displayName,
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w800,
-                        color: AppTheme.textPrimary,
-                        letterSpacing: -0.2,
+                child: GestureDetector(
+                  onTap: _openSettings,
+                  behavior: HitTestBehavior.opaque,
+                  child: Row(
+                    children: [
+                      // Large Circular Avatar
+                      Container(
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: const LinearGradient(
+                            colors: [
+                              AppTheme.primaryPurple,
+                              AppTheme.accentPink
+                            ],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: AppTheme.primaryPurple
+                                  .withValues(alpha: 0.25),
+                              blurRadius: 8,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: Center(
+                          child: Text(
+                            emoji,
+                            style: const TextStyle(fontSize: 22),
+                          ),
+                        ),
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      emailText,
-                      style: const TextStyle(
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w500,
-                        color: AppTheme.textSecondary,
+                      const SizedBox(width: 12),
+
+                      // Name and Email
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              displayName,
+                              style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w800,
+                                color: AppTheme.textPrimary,
+                                letterSpacing: -0.2,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              emailText,
+                              style: const TextStyle(
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w500,
+                                color: AppTheme.textSecondary,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
 
