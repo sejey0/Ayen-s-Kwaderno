@@ -75,10 +75,12 @@ class _EditorScreenState extends State<EditorScreen>
   final Map<int, List<TextAnnotation>> _perPageTextAnnotations = {};
   final Map<int, List<ImageAnnotation>> _perPageImageAnnotations = {};
 
-  // Active Page Drawing strokes state
+  // Active Page Drawing strokes state & Undo/Redo Snapshots
   final List<Stroke> _strokes = [];
-  final List<Stroke> _redoHistory = [];
+  final List<List<Stroke>> _undoStack = [];
+  final List<List<Stroke>> _redoStack = [];
   Stroke? _currentStroke;
+  Offset? _currentEraserPos;
 
   // Digital Text Annotations state (Saved notes)
   final List<TextAnnotation> _textAnnotations = [];
@@ -328,7 +330,8 @@ class _EditorScreenState extends State<EditorScreen>
       _textAnnotations.addAll(_perPageTextAnnotations[page] ?? []);
       _imageAnnotations.clear();
       _imageAnnotations.addAll(_perPageImageAnnotations[page] ?? []);
-      _redoHistory.clear();
+      _undoStack.clear();
+      _redoStack.clear();
       _currentStroke = null;
       _selectedTextId = null;
       _selectedImageId = null;
@@ -810,24 +813,73 @@ class _EditorScreenState extends State<EditorScreen>
     }
   }
 
-  /// Undoes the last stroke
+  /// Records a snapshot of the current strokes for full Undo/Redo capability
+  void _recordUndoSnapshot() {
+    _undoStack.add(_strokes.map((s) => s.copyWith()).toList());
+    if (_undoStack.length > 50) {
+      _undoStack.removeAt(0);
+    }
+    _redoStack.clear();
+  }
+
+  /// Dense interpolation of points along a sequence of vertices (every ~3.0px) for ultra-fine precision erasing
+  static List<Offset> _densifyPoints(List<Offset> points, {double step = 3.0}) {
+    if (points.length < 2) return List.from(points);
+    final List<Offset> dense = [points.first];
+
+    for (int i = 0; i < points.length - 1; i++) {
+      final p0 = points[i];
+      final p1 = points[i + 1];
+      final dist = (p1 - p0).distance;
+      if (dist > step) {
+        final int count = (dist / step).ceil();
+        for (int s = 1; s < count; s++) {
+          final t = s / count;
+          dense.add(Offset(
+            p0.dx + (p1.dx - p0.dx) * t,
+            p0.dy + (p1.dy - p0.dy) * t,
+          ));
+        }
+      }
+      dense.add(p1);
+    }
+    return dense;
+  }
+
+  /// Undoes the last stroke or eraser action
   void _undo() {
-    if (_strokes.isNotEmpty) {
+    if (_undoStack.isNotEmpty) {
+      setState(() {
+        _redoStack.add(_strokes.map((s) => s.copyWith()).toList());
+        final previous = _undoStack.removeLast();
+        _strokes.clear();
+        _strokes.addAll(previous.map((s) => s.copyWith()));
+        _perPageStrokes[_currentPage] = List.from(_strokes);
+      });
+      HapticFeedback.lightImpact();
+      _autoSaveAndSync();
+    } else if (_strokes.isNotEmpty) {
       setState(() {
         final removed = _strokes.removeLast();
-        _redoHistory.add(removed);
+        _redoStack.add([removed]);
+        _perPageStrokes[_currentPage] = List.from(_strokes);
       });
+      HapticFeedback.lightImpact();
       _autoSaveAndSync();
     }
   }
 
-  /// Redoes the last undone stroke
+  /// Redoes the last undone action
   void _redo() {
-    if (_redoHistory.isNotEmpty) {
+    if (_redoStack.isNotEmpty) {
       setState(() {
-        final restored = _redoHistory.removeLast();
-        _strokes.add(restored);
+        _undoStack.add(_strokes.map((s) => s.copyWith()).toList());
+        final next = _redoStack.removeLast();
+        _strokes.clear();
+        _strokes.addAll(next.map((s) => s.copyWith()));
+        _perPageStrokes[_currentPage] = List.from(_strokes);
       });
+      HapticFeedback.lightImpact();
       _autoSaveAndSync();
     }
   }
@@ -851,9 +903,9 @@ class _EditorScreenState extends State<EditorScreen>
             child: const Text('Clear All'),
             onPressed: () {
               Navigator.pop(context);
+              _recordUndoSnapshot();
               setState(() {
                 _strokes.clear();
-                _redoHistory.clear();
                 _textAnnotations.clear();
                 _imageAnnotations.clear();
                 _selectedImageId = null;
@@ -867,21 +919,59 @@ class _EditorScreenState extends State<EditorScreen>
     );
   }
 
-  /// Erases any strokes within radius of the given touch point
-  void _eraseStrokesNear(Offset point, double radius) {
-    bool removedAny = false;
-    setState(() {
-      _strokes.removeWhere((stroke) {
-        final hit = stroke.points.any((p) => (p - point).distance <= radius);
-        if (hit) removedAny = true;
-        return hit;
-      });
-      if (removedAny) {
-        _perPageStrokes[_currentPage] = List.from(_strokes);
+  /// Precision draw-to-erase: carves only the exact points within 10px radius
+  void _eraseStrokesNear(Offset eraserPos, double radius) {
+    bool modified = false;
+    final List<Stroke> updatedStrokes = [];
+
+    for (final stroke in _strokes) {
+      if (stroke.points.isEmpty) continue;
+
+      // Densify points along path to ensure high-resolution point-by-point erasing
+      final points = stroke.points.length < 5
+          ? _densifyPoints(stroke.points)
+          : stroke.points;
+
+      final List<List<Offset>> subSegments = [];
+      List<Offset> currentSegment = [];
+
+      for (final p in points) {
+        final dist = (p - eraserPos).distance;
+        if (dist > radius) {
+          currentSegment.add(p);
+        } else {
+          // Point erased! End current segment
+          if (currentSegment.isNotEmpty) {
+            subSegments.add(List.from(currentSegment));
+            currentSegment.clear();
+          }
+          modified = true;
+        }
       }
-    });
-    if (removedAny) {
-      HapticFeedback.lightImpact();
+
+      if (currentSegment.isNotEmpty) {
+        subSegments.add(List.from(currentSegment));
+      }
+
+      // Re-add remaining sub-segments
+      for (final seg in subSegments) {
+        if (seg.isNotEmpty) {
+          updatedStrokes.add(Stroke(
+            points: seg,
+            color: stroke.color,
+            strokeWidth: stroke.strokeWidth,
+            isStraightLine: stroke.isStraightLine,
+          ));
+        }
+      }
+    }
+
+    if (modified) {
+      setState(() {
+        _strokes.clear();
+        _strokes.addAll(updatedStrokes);
+        _perPageStrokes[_currentPage] = List.from(_strokes);
+      });
       _autoSaveAndSync();
     }
   }
@@ -1221,9 +1311,10 @@ class _EditorScreenState extends State<EditorScreen>
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Secondary Color/Stroke Palette
+                  // Secondary Color/Stroke Palette (stays open in highlighter, straightLine, and eraser modes)
                   if (_activeTool == AnnotationTool.highlighter ||
-                      _activeTool == AnnotationTool.straightLine)
+                      _activeTool == AnnotationTool.straightLine ||
+                      _activeTool == AnnotationTool.eraser)
                     _buildColorPickerSubBar(),
 
                   const SizedBox(height: 10),
@@ -1294,12 +1385,15 @@ class _EditorScreenState extends State<EditorScreen>
                       child: GestureDetector(
                         behavior: HitTestBehavior.opaque,
                         onPanStart: (DragStartDetails details) {
+                          _recordUndoSnapshot();
                           if (_activeTool == AnnotationTool.eraser) {
-                            _eraseStrokesNear(details.localPosition, 24.0);
+                            setState(() {
+                              _currentEraserPos = details.localPosition;
+                            });
+                            _eraseStrokesNear(details.localPosition, 10.0);
                           } else if (_activeTool == AnnotationTool.highlighter ||
                               _activeTool == AnnotationTool.straightLine) {
                             setState(() {
-                              _redoHistory.clear();
                               _currentStroke = Stroke(
                                 points: [details.localPosition],
                                 color: _strokeWidth <= 6.0
@@ -1314,7 +1408,10 @@ class _EditorScreenState extends State<EditorScreen>
                         },
                         onPanUpdate: (DragUpdateDetails details) {
                           if (_activeTool == AnnotationTool.eraser) {
-                            _eraseStrokesNear(details.localPosition, 24.0);
+                            setState(() {
+                              _currentEraserPos = details.localPosition;
+                            });
+                            _eraseStrokesNear(details.localPosition, 10.0);
                           } else if (_currentStroke != null) {
                             setState(() {
                               _currentStroke!.points
@@ -1323,9 +1420,27 @@ class _EditorScreenState extends State<EditorScreen>
                           }
                         },
                         onPanEnd: (DragEndDetails details) {
-                          if (_currentStroke != null) {
+                          if (_activeTool == AnnotationTool.eraser) {
                             setState(() {
-                              _strokes.add(_currentStroke!);
+                              _currentEraserPos = null;
+                            });
+                          } else if (_currentStroke != null) {
+                            setState(() {
+                              final densePoints = _currentStroke!.isStraightLine &&
+                                      _currentStroke!.points.length >= 2
+                                  ? _densifyPoints([
+                                      _currentStroke!.points.first,
+                                      _currentStroke!.points.last
+                                    ])
+                                  : _densifyPoints(_currentStroke!.points);
+
+                              _strokes.add(Stroke(
+                                points: densePoints,
+                                color: _currentStroke!.color,
+                                strokeWidth: _currentStroke!.strokeWidth,
+                                isStraightLine:
+                                    _currentStroke!.isStraightLine,
+                              ));
                               _perPageStrokes[_currentPage] =
                                   List.from(_strokes);
                               _currentStroke = null;
@@ -1334,7 +1449,11 @@ class _EditorScreenState extends State<EditorScreen>
                           }
                         },
                         onPanCancel: () {
-                          if (_currentStroke != null) {
+                          if (_activeTool == AnnotationTool.eraser) {
+                            setState(() {
+                              _currentEraserPos = null;
+                            });
+                          } else if (_currentStroke != null) {
                             setState(() {
                               _currentStroke = null;
                             });
@@ -1345,6 +1464,7 @@ class _EditorScreenState extends State<EditorScreen>
                             strokes: pageStrokes,
                             currentStroke: pageCurrentStroke,
                             activeTool: _activeTool,
+                            eraserPos: isCurrent ? _currentEraserPos : null,
                           ),
                           size: Size.infinite,
                         ),
@@ -1802,13 +1922,15 @@ class _EditorScreenState extends State<EditorScreen>
                 constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                 icon: Icon(
                   CupertinoIcons.arrow_uturn_left,
-                  color: _strokes.isNotEmpty
+                  color: (_undoStack.isNotEmpty || _strokes.isNotEmpty)
                       ? AppTheme.textPrimary
                       : AppTheme.textMuted.withValues(alpha: 0.4),
                   size: 18,
                 ),
-                tooltip: 'Undo stroke',
-                onPressed: _strokes.isNotEmpty ? _undo : null,
+                tooltip: 'Undo (↩)',
+                onPressed: (_undoStack.isNotEmpty || _strokes.isNotEmpty)
+                    ? _undo
+                    : null,
               ),
 
               // Redo Button
@@ -1817,13 +1939,13 @@ class _EditorScreenState extends State<EditorScreen>
                 constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                 icon: Icon(
                   CupertinoIcons.arrow_uturn_right,
-                  color: _redoHistory.isNotEmpty
+                  color: _redoStack.isNotEmpty
                       ? AppTheme.textPrimary
                       : AppTheme.textMuted.withValues(alpha: 0.4),
                   size: 18,
                 ),
-                tooltip: 'Redo stroke',
-                onPressed: _redoHistory.isNotEmpty ? _redo : null,
+                tooltip: 'Redo (↪)',
+                onPressed: _redoStack.isNotEmpty ? _redo : null,
               ),
 
               // Delete Selected Image Sticker Button
@@ -2070,7 +2192,9 @@ class _EditorScreenState extends State<EditorScreen>
     required String label,
     required String tooltip,
   }) {
-    final isSelected = _activeTool == tool;
+    final isSelected = _activeTool == tool ||
+        (tool == AnnotationTool.highlighter &&
+            _activeTool == AnnotationTool.eraser);
 
     return Tooltip(
       message: tooltip,
@@ -2292,16 +2416,18 @@ class _EditorScreenState extends State<EditorScreen>
   }
 }
 
-/// Annotation Painter rendering freehand highlighter curves and auto-straightened lines
+/// Annotation Painter rendering freehand highlighter curves, straight lines, and live eraser cursor
 class BaseAnnotationPainter extends CustomPainter {
   final List<Stroke> strokes;
   final Stroke? currentStroke;
   final AnnotationTool activeTool;
+  final Offset? eraserPos;
 
   BaseAnnotationPainter({
     required this.strokes,
     required this.currentStroke,
     required this.activeTool,
+    this.eraserPos,
   });
 
   @override
@@ -2314,6 +2440,21 @@ class BaseAnnotationPainter extends CustomPainter {
     // 2. Draw currently active drag stroke (with live preview)
     if (currentStroke != null) {
       _renderStroke(canvas, currentStroke!);
+    }
+
+    // 3. Draw live Eraser cursor indicator while actively erasing
+    if (activeTool == AnnotationTool.eraser && eraserPos != null) {
+      final eraserRingPaint = Paint()
+        ..color = const Color(0xFFEF4444).withValues(alpha: 0.85)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.5;
+
+      final eraserFillPaint = Paint()
+        ..color = const Color(0xFFFEE2E2).withValues(alpha: 0.55)
+        ..style = PaintingStyle.fill;
+
+      canvas.drawCircle(eraserPos!, 10.0, eraserFillPaint);
+      canvas.drawCircle(eraserPos!, 10.0, eraserRingPaint);
     }
   }
 
