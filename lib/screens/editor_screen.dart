@@ -870,6 +870,10 @@ class _EditorScreenState extends State<EditorScreen>
   void _deleteImageAnnotation(String id) {
     setState(() {
       _imageAnnotations.removeWhere((img) => img.id == id);
+      _perPageImageAnnotations[_currentPage]?.removeWhere((img) => img.id == id);
+      for (final list in _perPageImageAnnotations.values) {
+        list.removeWhere((img) => img.id == id);
+      }
       _selectedImageId = null;
     });
     _autoSaveAndSync();
@@ -1332,9 +1336,12 @@ class _EditorScreenState extends State<EditorScreen>
             // 3. Image Stickers (Photos)
             if (isCurrent)
               ...pageImages.map((annotation) {
+                final isSel = _selectedImageId == annotation.id;
                 return Positioned(
                   left: annotation.position.dx,
-                  top: annotation.position.dy,
+                  top: isSel
+                      ? annotation.position.dy - 34
+                      : annotation.position.dy,
                   child: _buildDraggableResizableImageWidget(annotation),
                 );
               })
@@ -1421,201 +1428,171 @@ class _EditorScreenState extends State<EditorScreen>
   Widget _buildDraggableResizableImageWidget(ImageAnnotation annotation) {
     final isSelected = _selectedImageId == annotation.id;
 
-    return GestureDetector(
-      onPanUpdate: (DragUpdateDetails details) {
-        setState(() {
-          annotation.position += details.delta;
-          _selectedImageId = annotation.id;
-          _selectedTextId = null;
-        });
-      },
-      onPanEnd: (_) => _autoSaveAndSync(),
-      onTap: () {
-        setState(() {
-          _selectedImageId = isSelected ? null : annotation.id;
-          _selectedTextId = null;
-        });
-      },
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          // Base Image Container
-          AnimatedContainer(
-            duration: const Duration(milliseconds: 80),
-            width: annotation.size.width.clamp(30.0, 1200.0),
-            height: annotation.size.height.clamp(30.0, 1200.0),
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        // 1. Top Action Floating Bar (within hit-test bounds)
+        if (isSelected)
+          Container(
+            margin: const EdgeInsets.only(bottom: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: isSelected
-                    ? AppTheme.primaryPurple
-                    : Colors.white.withValues(alpha: 0.9),
-                width: isSelected ? 2.5 : 1.5,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: isSelected
-                      ? AppTheme.primaryPurple.withValues(alpha: 0.35)
-                      : const Color(0xFF2D2640).withValues(alpha: 0.12),
-                  blurRadius: isSelected ? 16 : 8,
-                  offset: const Offset(0, 4),
+              color: AppTheme.surfaceWhite,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: AppTheme.dividerColor),
+              boxShadow: AppTheme.softShadow,
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  CupertinoIcons.move,
+                  size: 13,
+                  color: AppTheme.primaryPurple,
+                ),
+                const SizedBox(width: 4),
+                const Text(
+                  'Image',
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w700,
+                    color: AppTheme.primaryPurple,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () {
+                    HapticFeedback.heavyImpact();
+                    _deleteImageAnnotation(annotation.id);
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFFEE2E2),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      CupertinoIcons.trash_fill,
+                      size: 14,
+                      color: Color(0xFFEF4444),
+                    ),
+                  ),
                 ),
               ],
             ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(14),
-              child: Image.file(
-                File(annotation.imagePath),
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) => Container(
-                  color: AppTheme.primaryPurpleLight,
-                  child: const Center(
-                    child: Icon(
-                      Icons.broken_image_rounded,
-                      color: AppTheme.textMuted,
-                      size: 32,
-                    ),
-                  ),
-                ),
-              ),
-            ),
           ),
 
-          // Top Action Floating Bar (Drag badge + Delete button)
-          if (isSelected)
-            Positioned(
-              top: -38,
-              left: (annotation.size.width - 92) / 2,
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        // 2. Base Image Container with Pan + Resize
+        Stack(
+          clipBehavior: Clip.none,
+          children: [
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onPanUpdate: (DragUpdateDetails details) {
+                setState(() {
+                  annotation.position += details.delta;
+                  _selectedImageId = annotation.id;
+                  _selectedTextId = null;
+                });
+              },
+              onPanEnd: (_) => _autoSaveAndSync(),
+              onTap: () {
+                setState(() {
+                  _selectedImageId = isSelected ? null : annotation.id;
+                  _selectedTextId = null;
+                });
+              },
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 80),
+                width: annotation.size.width.clamp(30.0, 1200.0),
+                height: annotation.size.height.clamp(30.0, 1200.0),
                 decoration: BoxDecoration(
-                  color: AppTheme.surfaceWhite,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: AppTheme.dividerColor),
-                  boxShadow: AppTheme.softShadow,
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(
-                      CupertinoIcons.move,
-                      size: 13,
-                      color: AppTheme.primaryPurple,
-                    ),
-                    const SizedBox(width: 4),
-                    const Text(
-                      'Image',
-                      style: TextStyle(
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.w700,
-                        color: AppTheme.primaryPurple,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: () {
-                        HapticFeedback.mediumImpact();
-                        _deleteImageAnnotation(annotation.id);
-                      },
-                      child: const Padding(
-                        padding: EdgeInsets.all(2.0),
-                        child: Icon(
-                          CupertinoIcons.trash_fill,
-                          size: 14,
-                          color: Color(0xFFEF4444),
-                        ),
-                      ),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: isSelected
+                        ? AppTheme.primaryPurple
+                        : Colors.white.withValues(alpha: 0.9),
+                    width: isSelected ? 2.5 : 1.5,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: isSelected
+                          ? AppTheme.primaryPurple.withValues(alpha: 0.35)
+                          : const Color(0xFF2D2640).withValues(alpha: 0.12),
+                      blurRadius: isSelected ? 16 : 8,
+                      offset: const Offset(0, 4),
                     ),
                   ],
                 ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(14),
+                  child: Image.file(
+                    File(annotation.imagePath),
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) => Container(
+                      color: AppTheme.primaryPurpleLight,
+                      child: const Center(
+                        child: Icon(
+                          Icons.broken_image_rounded,
+                          color: AppTheme.textMuted,
+                          size: 32,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
               ),
             ),
 
-          // Top-Right Quick Delete Button on the image corner
-          if (isSelected)
-            Positioned(
-              top: -10,
-              right: -10,
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: () {
-                  HapticFeedback.mediumImpact();
-                  _deleteImageAnnotation(annotation.id);
-                },
-                child: Container(
-                  width: 26,
-                  height: 26,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFEF4444),
-                    shape: BoxShape.circle,
-                    border: Border.all(color: Colors.white, width: 2),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.25),
-                        blurRadius: 6,
-                        offset: const Offset(0, 2),
+            // Bottom-Right Corner Resize Grip Handle
+            if (isSelected)
+              Positioned(
+                right: -10,
+                bottom: -10,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onPanUpdate: (DragUpdateDetails details) {
+                    setState(() {
+                      final newWidth = (annotation.size.width + details.delta.dx)
+                          .clamp(40.0, 800.0);
+                      final newHeight = (annotation.size.height + details.delta.dy)
+                          .clamp(40.0, 800.0);
+                      annotation.size = Size(newWidth, newHeight);
+                    });
+                  },
+                  onPanEnd: (_) => _autoSaveAndSync(),
+                  child: Container(
+                    width: 30,
+                    height: 30,
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [AppTheme.primaryPurple, AppTheme.accentPink],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
                       ),
-                    ],
-                  ),
-                  child: const Center(
-                    child: Icon(
-                      CupertinoIcons.xmark,
-                      size: 12,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white, width: 2),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppTheme.primaryPurple.withValues(alpha: 0.45),
+                          blurRadius: 8,
+                          offset: const Offset(0, 3),
+                        ),
+                      ],
+                    ),
+                    child: const Icon(
+                      CupertinoIcons.arrow_down_right_arrow_up_left,
+                      size: 14,
                       color: Colors.white,
                     ),
                   ),
                 ),
               ),
-            ),
-
-          // Bottom-Right Corner Resize Grip Handle
-          if (isSelected)
-            Positioned(
-              right: -12,
-              bottom: -12,
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onPanUpdate: (DragUpdateDetails details) {
-                  setState(() {
-                    final newWidth = (annotation.size.width + details.delta.dx)
-                        .clamp(40.0, 800.0);
-                    final newHeight = (annotation.size.height + details.delta.dy)
-                        .clamp(40.0, 800.0);
-                    annotation.size = Size(newWidth, newHeight);
-                  });
-                },
-                onPanEnd: (_) => _autoSaveAndSync(),
-                child: Container(
-                  width: 30,
-                  height: 30,
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [AppTheme.primaryPurple, AppTheme.accentPink],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    shape: BoxShape.circle,
-                    border: Border.all(color: Colors.white, width: 2),
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppTheme.primaryPurple.withValues(alpha: 0.45),
-                        blurRadius: 8,
-                        offset: const Offset(0, 3),
-                      ),
-                    ],
-                  ),
-                  child: const Icon(
-                    CupertinoIcons.arrow_down_right_arrow_up_left,
-                    size: 14,
-                    color: Colors.white,
-                  ),
-                ),
-              ),
-            ),
-        ],
-      ),
+          ],
+        ),
+      ],
     );
   }
 
@@ -1822,8 +1799,33 @@ class _EditorScreenState extends State<EditorScreen>
                 onPressed: _redoHistory.isNotEmpty ? _redo : null,
               ),
 
+              // Delete Selected Image Sticker Button
+              if (_selectedImageId != null)
+                IconButton(
+                  padding: EdgeInsets.zero,
+                  constraints:
+                      const BoxConstraints(minWidth: 32, minHeight: 32),
+                  icon: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFFEE2E2),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      CupertinoIcons.trash_fill,
+                      color: Color(0xFFEF4444),
+                      size: 15,
+                    ),
+                  ),
+                  tooltip: 'Delete Selected Image',
+                  onPressed: () {
+                    HapticFeedback.heavyImpact();
+                    _deleteImageAnnotation(_selectedImageId!);
+                  },
+                ),
+
               // Clear Annotations Button
-              if (totalAnnotationsCount > 0)
+              if (totalAnnotationsCount > 0 && _selectedImageId == null)
                 IconButton(
                   padding: EdgeInsets.zero,
                   constraints:
