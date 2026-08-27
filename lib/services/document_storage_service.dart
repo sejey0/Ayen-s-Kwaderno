@@ -196,17 +196,21 @@ class DocumentStorageService {
     required List<Stroke> strokes,
     required List<TextAnnotation> texts,
     required List<ImageAnnotation> images,
+    Map<String, dynamic>? extraData,
     bool triggerCloudSync = true,
     String? userId,
   }) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final data = {
+      final Map<String, dynamic> data = {
         'strokes': strokes.map((s) => s.toJson()).toList(),
         'texts': texts.map((t) => t.toJson()).toList(),
         'images': images.map((i) => i.toJson()).toList(),
         'updated_at': DateTime.now().toUtc().toIso8601String(),
       };
+      if (extraData != null) {
+        data.addAll(extraData);
+      }
       await prefs.setString(
           _getScopedAnnotationsKey(documentName, userId), jsonEncode(data));
 
