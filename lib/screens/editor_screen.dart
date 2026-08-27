@@ -1485,45 +1485,86 @@ class _EditorScreenState extends State<EditorScreen>
           if (isSelected)
             Positioned(
               top: -38,
-              left: 0,
-              right: 0,
-              child: Center(
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: AppTheme.surfaceWhite,
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: AppTheme.dividerColor),
-                    boxShadow: AppTheme.softShadow,
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(
-                        CupertinoIcons.move,
-                        size: 13,
+              left: (annotation.size.width - 92) / 2,
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppTheme.surfaceWhite,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: AppTheme.dividerColor),
+                  boxShadow: AppTheme.softShadow,
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      CupertinoIcons.move,
+                      size: 13,
+                      color: AppTheme.primaryPurple,
+                    ),
+                    const SizedBox(width: 4),
+                    const Text(
+                      'Image',
+                      style: TextStyle(
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w700,
                         color: AppTheme.primaryPurple,
                       ),
-                      const SizedBox(width: 4),
-                      const Text(
-                        'Image',
-                        style: TextStyle(
-                          fontSize: 10.5,
-                          fontWeight: FontWeight.w700,
-                          color: AppTheme.primaryPurple,
+                    ),
+                    const SizedBox(width: 8),
+                    GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () {
+                        HapticFeedback.mediumImpact();
+                        _deleteImageAnnotation(annotation.id);
+                      },
+                      child: const Padding(
+                        padding: EdgeInsets.all(2.0),
+                        child: Icon(
+                          CupertinoIcons.trash_fill,
+                          size: 14,
+                          color: Color(0xFFEF4444),
                         ),
                       ),
-                      const SizedBox(width: 8),
-                      GestureDetector(
-                        onTap: () => _deleteImageAnnotation(annotation.id),
-                        child: const Icon(
-                          CupertinoIcons.trash,
-                          size: 14,
-                          color: AppTheme.accentPink,
-                        ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+          // Top-Right Quick Delete Button on the image corner
+          if (isSelected)
+            Positioned(
+              top: -10,
+              right: -10,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () {
+                  HapticFeedback.mediumImpact();
+                  _deleteImageAnnotation(annotation.id);
+                },
+                child: Container(
+                  width: 26,
+                  height: 26,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEF4444),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white, width: 2),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.25),
+                        blurRadius: 6,
+                        offset: const Offset(0, 2),
                       ),
                     ],
+                  ),
+                  child: const Center(
+                    child: Icon(
+                      CupertinoIcons.xmark,
+                      size: 12,
+                      color: Colors.white,
+                    ),
                   ),
                 ),
               ),

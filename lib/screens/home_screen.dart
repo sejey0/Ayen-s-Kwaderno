@@ -664,6 +664,88 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  void _confirmSingleDocDelete(DocumentItem doc) {
+    final messenger = ScaffoldMessenger.of(context);
+    showCupertinoDialog(
+      context: context,
+      builder: (dialogCtx) => CupertinoAlertDialog(
+        title: Text('Delete "${doc.fileName}"?'),
+        content: const Text(
+          'Are you sure you want to delete this file and all its annotations? This cannot be undone.',
+        ),
+        actions: [
+          CupertinoDialogAction(
+            child: const Text('Cancel'),
+            onPressed: () => Navigator.pop(dialogCtx),
+          ),
+          CupertinoDialogAction(
+            isDestructiveAction: true,
+            child: const Text('Delete File'),
+            onPressed: () async {
+              Navigator.pop(dialogCtx);
+              await DocumentStorageService.deleteDocument(doc.fileName);
+              if (mounted) {
+                setState(() {
+                  _documents.removeWhere((d) => d.fileName == doc.fileName);
+                });
+                messenger.showSnackBar(
+                  SnackBar(
+                    content: Text('Deleted "${doc.fileName}" 🗑️'),
+                    backgroundColor: AppTheme.primaryPurpleDark,
+                    behavior: SnackBarBehavior.floating,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                  ),
+                );
+              }
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmSingleNoteDelete(HandwritingNote note) {
+    final messenger = ScaffoldMessenger.of(context);
+    showCupertinoDialog(
+      context: context,
+      builder: (dialogCtx) => CupertinoAlertDialog(
+        title: Text('Delete "${note.title}"?'),
+        content: const Text(
+          'Are you sure you want to delete this note? This cannot be undone.',
+        ),
+        actions: [
+          CupertinoDialogAction(
+            child: const Text('Cancel'),
+            onPressed: () => Navigator.pop(dialogCtx),
+          ),
+          CupertinoDialogAction(
+            isDestructiveAction: true,
+            child: const Text('Delete Note'),
+            onPressed: () async {
+              Navigator.pop(dialogCtx);
+              await DocumentStorageService.deleteHandwritingNote(note.id);
+              if (mounted) {
+                setState(() {
+                  _handwritingNotes.removeWhere((n) => n.id == note.id);
+                });
+                messenger.showSnackBar(
+                  SnackBar(
+                    content: Text('Deleted "${note.title}" 🗑️'),
+                    backgroundColor: AppTheme.primaryPurpleDark,
+                    behavior: SnackBarBehavior.floating,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                  ),
+                );
+              }
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _executeBulkDelete() async {
     final count = _totalSelectedCount;
 
@@ -1904,12 +1986,52 @@ class _HomeScreenState extends State<HomeScreen> {
                           color: AppTheme.primaryPurple,
                         ),
                       ),
-                      Text(
-                        _formatTimestamp(doc.lastOpenedAt),
-                        style: const TextStyle(
-                          fontSize: 10.5,
-                          color: AppTheme.textMuted,
-                        ),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            _formatTimestamp(doc.lastOpenedAt),
+                            style: const TextStyle(
+                              fontSize: 10.5,
+                              color: AppTheme.textMuted,
+                            ),
+                          ),
+                          if (!_isSelectionMode) ...[
+                            const SizedBox(width: 2),
+                            PopupMenuButton<String>(
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                              icon: const Icon(
+                                CupertinoIcons.ellipsis_vertical,
+                                size: 14,
+                                color: AppTheme.textSecondary,
+                              ),
+                              onSelected: (val) {
+                                if (val == 'delete') {
+                                  _confirmSingleDocDelete(doc);
+                                }
+                              },
+                              itemBuilder: (context) => [
+                                const PopupMenuItem(
+                                  value: 'delete',
+                                  height: 36,
+                                  child: Row(
+                                    children: [
+                                      Icon(CupertinoIcons.trash,
+                                          size: 15, color: Color(0xFFEF4444)),
+                                      SizedBox(width: 8),
+                                      Text('Delete File',
+                                          style: TextStyle(
+                                              color: Color(0xFFEF4444),
+                                              fontWeight: FontWeight.w600,
+                                              fontSize: 13)),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ],
                       ),
                     ],
                   ),
@@ -2072,12 +2194,52 @@ class _HomeScreenState extends State<HomeScreen> {
                             ),
                           ],
                         ),
-                        Text(
-                          _formatTimestamp(note.updatedAt),
-                          style: const TextStyle(
-                            fontSize: 10,
-                            color: AppTheme.textMuted,
-                          ),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              _formatTimestamp(note.updatedAt),
+                              style: const TextStyle(
+                                fontSize: 10,
+                                color: AppTheme.textMuted,
+                              ),
+                            ),
+                            if (!_isSelectionMode) ...[
+                              const SizedBox(width: 2),
+                              PopupMenuButton<String>(
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(),
+                                icon: const Icon(
+                                  CupertinoIcons.ellipsis_vertical,
+                                  size: 13,
+                                  color: AppTheme.textSecondary,
+                                ),
+                                onSelected: (val) {
+                                  if (val == 'delete') {
+                                    _confirmSingleNoteDelete(note);
+                                  }
+                                },
+                                itemBuilder: (context) => [
+                                  const PopupMenuItem(
+                                    value: 'delete',
+                                    height: 36,
+                                    child: Row(
+                                      children: [
+                                        Icon(CupertinoIcons.trash,
+                                            size: 15, color: Color(0xFFEF4444)),
+                                        SizedBox(width: 8),
+                                        Text('Delete Note',
+                                            style: TextStyle(
+                                                color: Color(0xFFEF4444),
+                                                fontWeight: FontWeight.w600,
+                                                fontSize: 13)),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ],
                         ),
                       ],
                     ),
@@ -2135,7 +2297,7 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Top Bar: Note Pin / Selection Checkbox & Copy action
+            // Top Bar: Note Pin / Selection Checkbox & Copy / Delete actions
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -2176,22 +2338,60 @@ class _HomeScreenState extends State<HomeScreen> {
                     ],
                   ),
                 if (!_isSelectionMode)
-                  GestureDetector(
-                    onTap: () {
-                      Clipboard.setData(ClipboardData(text: note.content));
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('Copied "${note.title}"! 📋'),
-                          duration: const Duration(seconds: 1),
-                          behavior: SnackBarBehavior.floating,
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      GestureDetector(
+                        onTap: () {
+                          Clipboard.setData(ClipboardData(text: note.content));
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Copied "${note.title}"! 📋'),
+                              duration: const Duration(seconds: 1),
+                              behavior: SnackBarBehavior.floating,
+                            ),
+                          );
+                        },
+                        child: Icon(
+                          CupertinoIcons.doc_on_clipboard,
+                          size: 14,
+                          color: accent,
                         ),
-                      );
-                    },
-                    child: Icon(
-                      CupertinoIcons.doc_on_clipboard,
-                      size: 14,
-                      color: accent,
-                    ),
+                      ),
+                      const SizedBox(width: 6),
+                      PopupMenuButton<String>(
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                        icon: Icon(
+                          CupertinoIcons.ellipsis_vertical,
+                          size: 13,
+                          color: accent,
+                        ),
+                        onSelected: (val) {
+                          if (val == 'delete') {
+                            _confirmSingleNoteDelete(note);
+                          }
+                        },
+                        itemBuilder: (context) => [
+                          const PopupMenuItem(
+                            value: 'delete',
+                            height: 36,
+                            child: Row(
+                              children: [
+                                Icon(CupertinoIcons.trash,
+                                    size: 15, color: Color(0xFFEF4444)),
+                                SizedBox(width: 8),
+                                Text('Delete Note',
+                                    style: TextStyle(
+                                        color: Color(0xFFEF4444),
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 13)),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   )
                 else
                   Text(
