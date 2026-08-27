@@ -52,10 +52,13 @@ class EditorScreen extends StatefulWidget {
 }
 
 class _EditorScreenState extends State<EditorScreen>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   final TransformationController _transformationController =
       TransformationController();
   final ImagePicker _imagePicker = ImagePicker();
+
+  late final AnimationController _zoomAnimationController;
+  Animation<Matrix4>? _zoomAnimation;
 
   // Active annotation tool state
   AnnotationTool _activeTool = AnnotationTool.none;
@@ -113,6 +116,14 @@ class _EditorScreenState extends State<EditorScreen>
   @override
   void initState() {
     super.initState();
+    _zoomAnimationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 280),
+    )..addListener(() {
+        if (_zoomAnimation != null) {
+          _transformationController.value = _zoomAnimation!.value;
+        }
+      });
     _pageController = PageController(initialPage: _currentPage - 1);
     _documentId = 'doc_${DateTime.now().millisecondsSinceEpoch}';
     if (_isImageDocument) {
@@ -126,6 +137,7 @@ class _EditorScreenState extends State<EditorScreen>
   @override
   void dispose() {
     _cloudSyncDebounceTimer?.cancel();
+    _zoomAnimationController.dispose();
     _pageController.dispose();
     _transformationController.dispose();
     if (!_isImageDocument) {
@@ -634,8 +646,49 @@ class _EditorScreenState extends State<EditorScreen>
     }
   }
 
+  /// Smoothly animates zoom level between 1.0x (overview) and 2.2x (reading zoom)
+  void _toggleZoom([Offset? focalPoint]) {
+    final currentMatrix = _transformationController.value;
+    final currentScale = currentMatrix.getMaxScaleOnAxis();
+
+    final targetScale = currentScale > 1.3 ? 1.0 : 2.2;
+    Matrix4 targetMatrix;
+
+    if (targetScale == 1.0) {
+      targetMatrix = Matrix4.identity();
+    } else {
+      final pos = focalPoint ??
+          Offset((_pageWidth > 0 ? _pageWidth : 300) / 2,
+              (_pageHeight > 0 ? _pageHeight : 400) / 2);
+      final tx = -pos.dx * (targetScale - 1);
+      final ty = -pos.dy * (targetScale - 1);
+      targetMatrix = Matrix4.identity()
+        ..storage[0] = targetScale
+        ..storage[5] = targetScale
+        ..storage[12] = tx
+        ..storage[13] = ty;
+    }
+
+    _zoomAnimation = Matrix4Tween(
+      begin: currentMatrix,
+      end: targetMatrix,
+    ).animate(CurvedAnimation(
+      parent: _zoomAnimationController,
+      curve: Curves.easeOutCubic,
+    ));
+
+    HapticFeedback.selectionClick();
+    _zoomAnimationController.forward(from: 0.0);
+  }
+
   /// Changes the active annotation tool mode
   void _onToolSelected(AnnotationTool tool) {
+    if (tool == AnnotationTool.none && _activeTool == AnnotationTool.none) {
+      // Tapping Navigate button while already active smoothly toggles reading zoom / fit overview
+      _toggleZoom();
+      return;
+    }
+
     setState(() {
       _activeTool = tool;
       _selectedImageId = null;
@@ -843,10 +896,11 @@ class _EditorScreenState extends State<EditorScreen>
                   if (_pageCount <= 1) {
                     return InteractiveViewer(
                       transformationController: _transformationController,
-                      minScale: 1.0,
+                      minScale: 0.75,
                       maxScale: 6.0,
                       panEnabled: _activeTool == AnnotationTool.none,
                       scaleEnabled: _activeTool == AnnotationTool.none,
+                      boundaryMargin: const EdgeInsets.all(60.0),
                       clipBehavior: Clip.hardEdge,
                       child: _buildSinglePageView(1, displayW, displayH),
                     );
@@ -866,10 +920,14 @@ class _EditorScreenState extends State<EditorScreen>
                     itemBuilder: (context, index) {
                       final pageNum = index + 1;
                       return InteractiveViewer(
-                        minScale: 1.0,
-                        maxScale: 5.0,
+                        transformationController: pageNum == _currentPage
+                            ? _transformationController
+                            : null,
+                        minScale: 0.75,
+                        maxScale: 6.0,
                         panEnabled: _activeTool == AnnotationTool.none,
                         scaleEnabled: _activeTool == AnnotationTool.none,
+                        boundaryMargin: const EdgeInsets.all(60.0),
                         clipBehavior: Clip.none,
                         child:
                             _buildSinglePageView(pageNum, displayW, displayH),
@@ -1039,147 +1097,155 @@ class _EditorScreenState extends State<EditorScreen>
         isCurrent ? _textAnnotations : (_perPageTextAnnotations[pageNum] ?? []);
 
     return Center(
-      child: Container(
-        width: displayW,
-        height: displayH,
-        margin: EdgeInsets.symmetric(
-          horizontal:
-              _slideOrientation == PageSlideOrientation.horizontal ? 8 : 0,
-          vertical:
-              _slideOrientation == PageSlideOrientation.vertical ? 8 : 0,
-        ),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(4),
-          boxShadow: [
-            BoxShadow(
-              color: const Color(0xFF1E1B4B).withValues(alpha: 0.14),
-              blurRadius: 18,
-              offset: const Offset(0, 6),
-            ),
-          ],
-        ),
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            // 1. HD Rendered PDF Page Image
-            if (uiImage != null)
-              RawImage(
-                image: uiImage,
-                width: displayW,
-                height: displayH,
-                fit: BoxFit.fill,
-              )
-            else
-              const Center(
-                child: CircularProgressIndicator(
-                  color: AppTheme.primaryPurple,
+      child: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onDoubleTapDown: (details) {
+          if (_activeTool == AnnotationTool.none) {
+            _toggleZoom(details.localPosition);
+          }
+        },
+        child: Container(
+          width: displayW,
+          height: displayH,
+          margin: EdgeInsets.symmetric(
+            horizontal:
+                _slideOrientation == PageSlideOrientation.horizontal ? 8 : 0,
+            vertical:
+                _slideOrientation == PageSlideOrientation.vertical ? 8 : 0,
+          ),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(4),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF1E1B4B).withValues(alpha: 0.14),
+                blurRadius: 18,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              // 1. HD Rendered PDF Page Image
+              if (uiImage != null)
+                RawImage(
+                  image: uiImage,
+                  width: displayW,
+                  height: displayH,
+                  fit: BoxFit.fill,
+                )
+              else
+                const Center(
+                  child: CircularProgressIndicator(
+                    color: AppTheme.primaryPurple,
+                  ),
                 ),
+
+              // 2. Annotation & Drawing Canvas
+              Positioned.fill(
+                child: isCurrent
+                    ? IgnorePointer(
+                        ignoring: _activeTool == AnnotationTool.none,
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onPanStart: (DragStartDetails details) {
+                            if (_activeTool == AnnotationTool.highlighter ||
+                                _activeTool == AnnotationTool.straightLine) {
+                              setState(() {
+                                _redoHistory.clear();
+                                _currentStroke = Stroke(
+                                  points: [details.localPosition],
+                                  color: _selectedColor,
+                                  strokeWidth: _strokeWidth,
+                                  isStraightLine:
+                                      _activeTool == AnnotationTool.straightLine,
+                                );
+                              });
+                            }
+                          },
+                          onPanUpdate: (DragUpdateDetails details) {
+                            if (_currentStroke != null) {
+                              setState(() {
+                                _currentStroke!.points
+                                    .add(details.localPosition);
+                              });
+                            }
+                          },
+                          onPanEnd: (DragEndDetails details) {
+                            if (_currentStroke != null) {
+                              setState(() {
+                                _strokes.add(_currentStroke!);
+                                _perPageStrokes[_currentPage] =
+                                    List.from(_strokes);
+                                _currentStroke = null;
+                              });
+                              _autoSaveAndSync();
+                            }
+                          },
+                          onPanCancel: () {
+                            if (_currentStroke != null) {
+                              setState(() {
+                                _currentStroke = null;
+                              });
+                            }
+                          },
+                          child: CustomPaint(
+                            painter: BaseAnnotationPainter(
+                              strokes: pageStrokes,
+                              currentStroke: pageCurrentStroke,
+                              activeTool: _activeTool,
+                            ),
+                            size: Size.infinite,
+                          ),
+                        ),
+                      )
+                    : CustomPaint(
+                        painter: BaseAnnotationPainter(
+                          strokes: pageStrokes,
+                          currentStroke: null,
+                          activeTool: AnnotationTool.none,
+                        ),
+                        size: Size.infinite,
+                      ),
               ),
 
-            // 2. Annotation & Drawing Canvas
-            Positioned.fill(
-              child: isCurrent
-                  ? IgnorePointer(
-                      ignoring: _activeTool == AnnotationTool.none,
-                      child: GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onPanStart: (DragStartDetails details) {
-                          if (_activeTool == AnnotationTool.highlighter ||
-                              _activeTool == AnnotationTool.straightLine) {
-                            setState(() {
-                              _redoHistory.clear();
-                              _currentStroke = Stroke(
-                                points: [details.localPosition],
-                                color: _selectedColor,
-                                strokeWidth: _strokeWidth,
-                                isStraightLine:
-                                    _activeTool == AnnotationTool.straightLine,
-                              );
-                            });
-                          }
-                        },
-                        onPanUpdate: (DragUpdateDetails details) {
-                          if (_currentStroke != null) {
-                            setState(() {
-                              _currentStroke!.points
-                                  .add(details.localPosition);
-                            });
-                          }
-                        },
-                        onPanEnd: (DragEndDetails details) {
-                          if (_currentStroke != null) {
-                            setState(() {
-                              _strokes.add(_currentStroke!);
-                              _perPageStrokes[_currentPage] =
-                                  List.from(_strokes);
-                              _currentStroke = null;
-                            });
-                            _autoSaveAndSync();
-                          }
-                        },
-                        onPanCancel: () {
-                          if (_currentStroke != null) {
-                            setState(() {
-                              _currentStroke = null;
-                            });
-                          }
-                        },
-                        child: CustomPaint(
-                          painter: BaseAnnotationPainter(
-                            strokes: pageStrokes,
-                            currentStroke: pageCurrentStroke,
-                            activeTool: _activeTool,
-                          ),
-                          size: Size.infinite,
-                        ),
+              // 3. Image Stickers (Photos)
+              if (isCurrent)
+                ...pageImages.map((annotation) {
+                  return Positioned(
+                    left: annotation.position.dx,
+                    top: annotation.position.dy,
+                    child: _buildDraggableResizableImageWidget(annotation),
+                  );
+                })
+              else
+                ...pageImages.map((annotation) {
+                  return Positioned(
+                    left: annotation.position.dx,
+                    top: annotation.position.dy,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(14),
+                      child: Image.file(
+                        File(annotation.imagePath),
+                        width: annotation.size.width,
+                        height: annotation.size.height,
+                        fit: BoxFit.cover,
                       ),
-                    )
-                  : CustomPaint(
-                      painter: BaseAnnotationPainter(
-                        strokes: pageStrokes,
-                        currentStroke: null,
-                        activeTool: AnnotationTool.none,
-                      ),
-                      size: Size.infinite,
                     ),
-            ),
+                  );
+                }),
 
-            // 3. Image Stickers (Photos)
-            if (isCurrent)
-              ...pageImages.map((annotation) {
+              // 4. Digital Text Notes (Saved Notes)
+              ...pageTexts.map((annotation) {
                 return Positioned(
                   left: annotation.position.dx,
                   top: annotation.position.dy,
-                  child: _buildDraggableResizableImageWidget(annotation),
-                );
-              })
-            else
-              ...pageImages.map((annotation) {
-                return Positioned(
-                  left: annotation.position.dx,
-                  top: annotation.position.dy,
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(14),
-                    child: Image.file(
-                      File(annotation.imagePath),
-                      width: annotation.size.width,
-                      height: annotation.size.height,
-                      fit: BoxFit.cover,
-                    ),
-                  ),
+                  child: _buildDraggableTextWidget(annotation),
                 );
               }),
-
-            // 4. Digital Text Notes (Saved Notes)
-            ...pageTexts.map((annotation) {
-              return Positioned(
-                left: annotation.position.dx,
-                top: annotation.position.dy,
-                child: _buildDraggableTextWidget(annotation),
-              );
-            }),
-          ],
+            ],
+          ),
         ),
       ),
     );
