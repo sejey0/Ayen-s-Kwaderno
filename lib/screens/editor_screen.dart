@@ -90,6 +90,8 @@ class _EditorScreenState extends State<EditorScreen>
   double _pageWidth = 595.0;
   double _pageHeight = 842.0;
   ui.Image? _renderedPageUiImage;
+  final Map<int, ui.Image> _renderedPages = {};
+  late PageController _pageController;
   bool _isLoadingPage = false;
 
   // Auto-Save & Synchronization State
@@ -111,6 +113,7 @@ class _EditorScreenState extends State<EditorScreen>
   @override
   void initState() {
     super.initState();
+    _pageController = PageController(initialPage: _currentPage - 1);
     _documentId = 'doc_${DateTime.now().millisecondsSinceEpoch}';
     if (_isImageDocument) {
       _loadImageDocument();
@@ -123,6 +126,7 @@ class _EditorScreenState extends State<EditorScreen>
   @override
   void dispose() {
     _cloudSyncDebounceTimer?.cancel();
+    _pageController.dispose();
     _transformationController.dispose();
     if (!_isImageDocument) {
       PdfViewerPlatform.instance.closeDocument(_documentId);
@@ -158,6 +162,7 @@ class _EditorScreenState extends State<EditorScreen>
       if (!mounted) return;
       setState(() {
         _renderedPageUiImage = uiImage;
+        _renderedPages[1] = uiImage;
         _pageWidth = uiImage.width.toDouble();
         _pageHeight = uiImage.height.toDouble();
         _pageCount = 1;
@@ -192,7 +197,7 @@ class _EditorScreenState extends State<EditorScreen>
         _pageHeight = (heights[0] as num).toDouble();
       }
 
-      await _renderCurrentPage();
+      await _preloadAdjacentPages(_currentPage);
     } catch (e) {
       if (!mounted) return;
       setState(() => _isLoadingPage = false);
@@ -200,11 +205,12 @@ class _EditorScreenState extends State<EditorScreen>
     }
   }
 
-  /// Renders the active PDF page to high-definition bitmap bytes
-  Future<void> _renderCurrentPage() async {
-    try {
-      setState(() => _isLoadingPage = true);
+  /// Renders a specific PDF page to high-definition bitmap bytes
+  Future<void> _renderPage(int pageNum) async {
+    if (pageNum < 1 || pageNum > _pageCount) return;
+    if (_renderedPages.containsKey(pageNum)) return;
 
+    try {
       final platform = PdfViewerPlatform.instance;
       const int targetWidth = 1400;
       final int targetHeight = (_pageHeight > 0 && _pageWidth > 0)
@@ -212,29 +218,34 @@ class _EditorScreenState extends State<EditorScreen>
           : 1980;
 
       final bytes = await platform.getPage(
-        _currentPage,
+        pageNum,
         targetWidth,
         targetHeight,
         _documentId,
       );
 
+      if (!mounted || bytes == null) return;
+
+      final uiImage = await _createUiImage(bytes, targetWidth, targetHeight);
       if (!mounted) return;
 
-      if (bytes != null) {
-        final uiImage = await _createUiImage(bytes, targetWidth, targetHeight);
-        if (!mounted) return;
-        setState(() {
+      setState(() {
+        _renderedPages[pageNum] = uiImage;
+        if (pageNum == _currentPage) {
           _renderedPageUiImage = uiImage;
           _isLoadingPage = false;
-        });
-      } else {
-        setState(() => _isLoadingPage = false);
-      }
+        }
+      });
     } catch (e) {
-      if (!mounted) return;
-      setState(() => _isLoadingPage = false);
-      debugPrint('Error rendering page: $e');
+      debugPrint('Error rendering page $pageNum: $e');
     }
+  }
+
+  /// Preloads the current page and adjacent pages for instantaneous drag response
+  Future<void> _preloadAdjacentPages(int page) async {
+    await _renderPage(page);
+    if (page > 1) _renderPage(page - 1);
+    if (page < _pageCount) _renderPage(page + 1);
   }
 
   /// Toggles between Vertical Scroll (Default) and Horizontal Slide
@@ -244,12 +255,13 @@ class _EditorScreenState extends State<EditorScreen>
       _slideOrientation = _slideOrientation == PageSlideOrientation.vertical
           ? PageSlideOrientation.horizontal
           : PageSlideOrientation.vertical;
+      _pageController = PageController(initialPage: _currentPage - 1);
     });
   }
 
-  /// Changes the visible page and switches per-page annotations
-  Future<void> _goToPage(int page) async {
-    if (page < 1 || page > _pageCount || page == _currentPage) return;
+  /// Handles drag-to-page event from PageView
+  void _onPageChanged(int page) {
+    if (page == _currentPage) return;
 
     // Save current active page annotations
     _perPageStrokes[_currentPage] = List.from(_strokes);
@@ -268,9 +280,25 @@ class _EditorScreenState extends State<EditorScreen>
       _currentStroke = null;
       _selectedTextId = null;
       _selectedImageId = null;
+      _renderedPageUiImage = _renderedPages[page];
     });
 
-    await _renderCurrentPage();
+    _preloadAdjacentPages(page);
+  }
+
+  /// Changes the visible page with smooth animation
+  Future<void> _goToPage(int page) async {
+    if (page < 1 || page > _pageCount || page == _currentPage) return;
+
+    if (_pageController.hasClients) {
+      _pageController.animateToPage(
+        page - 1,
+        duration: const Duration(milliseconds: 320),
+        curve: Curves.easeOutCubic,
+      );
+    } else {
+      _onPageChanged(page);
+    }
   }
 
   /// Offline-first loading: Instantly loads from local storage, then syncs with Supabase in background
@@ -812,132 +840,43 @@ class _EditorScreenState extends State<EditorScreen>
                     displayW = displayH * pageAspect;
                   }
 
-                  return InteractiveViewer(
-                    transformationController: _transformationController,
-                    minScale: 1.0,
-                    maxScale: 6.0,
-                    panEnabled: _activeTool == AnnotationTool.none,
-                    scaleEnabled: _activeTool == AnnotationTool.none,
-                    clipBehavior: Clip.hardEdge,
-                    child: Center(
-                      child: Container(
-                        width: displayW,
-                        height: displayH,
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(4),
-                          boxShadow: [
-                            BoxShadow(
-                              color: const Color(0xFF1E1B4B)
-                                  .withValues(alpha: 0.14),
-                              blurRadius: 18,
-                              offset: const Offset(0, 6),
-                            ),
-                          ],
-                        ),
-                        child: Stack(
-                          fit: StackFit.expand,
-                          children: [
-                            // 1. HD Rendered PDF Page Image
-                            if (_renderedPageUiImage != null)
-                              RawImage(
-                                image: _renderedPageUiImage!,
-                                width: displayW,
-                                height: displayH,
-                                fit: BoxFit.fill,
-                              )
-                            else
-                              const Center(
-                                child: CircularProgressIndicator(
-                                  color: AppTheme.primaryPurple,
-                                ),
-                              ),
-
-                            // 2. Annotation & Drawing Canvas
-                            Positioned.fill(
-                              child: IgnorePointer(
-                                ignoring: _activeTool == AnnotationTool.none,
-                                child: GestureDetector(
-                                  behavior: HitTestBehavior.opaque,
-                                  onPanStart: (DragStartDetails details) {
-                                    if (_activeTool ==
-                                            AnnotationTool.highlighter ||
-                                        _activeTool ==
-                                            AnnotationTool.straightLine) {
-                                      setState(() {
-                                        _redoHistory.clear();
-                                        _currentStroke = Stroke(
-                                          points: [details.localPosition],
-                                          color: _selectedColor,
-                                          strokeWidth: _strokeWidth,
-                                          isStraightLine: _activeTool ==
-                                              AnnotationTool.straightLine,
-                                        );
-                                      });
-                                    }
-                                  },
-                                  onPanUpdate: (DragUpdateDetails details) {
-                                    if (_currentStroke != null) {
-                                      setState(() {
-                                        _currentStroke!.points
-                                            .add(details.localPosition);
-                                      });
-                                    }
-                                  },
-                                  onPanEnd: (DragEndDetails details) {
-                                    if (_currentStroke != null) {
-                                      setState(() {
-                                        _strokes.add(_currentStroke!);
-                                        _perPageStrokes[_currentPage] =
-                                            List.from(_strokes);
-                                        _currentStroke = null;
-                                      });
-                                      _autoSaveAndSync();
-                                    }
-                                  },
-                                  onPanCancel: () {
-                                    if (_currentStroke != null) {
-                                      setState(() {
-                                        _currentStroke = null;
-                                      });
-                                    }
-                                  },
-                                  child: CustomPaint(
-                                    painter: BaseAnnotationPainter(
-                                      strokes: _strokes,
-                                      currentStroke: _currentStroke,
-                                      activeTool: _activeTool,
-                                    ),
-                                    size: Size.infinite,
-                                  ),
-                                ),
-                              ),
-                            ),
-
-                              // 3. Image Stickers (Photos)
-                              ..._imageAnnotations.map((annotation) {
-                                return Positioned(
-                                  left: annotation.position.dx,
-                                  top: annotation.position.dy,
-                                  child: _buildDraggableResizableImageWidget(
-                                      annotation),
-                                );
-                              }),
-
-                              // 4. Digital Text Notes (Saved Notes)
-                              ..._textAnnotations.map((annotation) {
-                                return Positioned(
-                                  left: annotation.position.dx,
-                                  top: annotation.position.dy,
-                                  child: _buildDraggableTextWidget(annotation),
-                                );
-                              }),
-                            ],
-                          ),
-                        ),
-                      ),
+                  if (_pageCount <= 1) {
+                    return InteractiveViewer(
+                      transformationController: _transformationController,
+                      minScale: 1.0,
+                      maxScale: 6.0,
+                      panEnabled: _activeTool == AnnotationTool.none,
+                      scaleEnabled: _activeTool == AnnotationTool.none,
+                      clipBehavior: Clip.hardEdge,
+                      child: _buildSinglePageView(1, displayW, displayH),
                     );
-                  },
+                  }
+
+                  return PageView.builder(
+                    controller: _pageController,
+                    scrollDirection:
+                        _slideOrientation == PageSlideOrientation.vertical
+                            ? Axis.vertical
+                            : Axis.horizontal,
+                    physics: _activeTool == AnnotationTool.none
+                        ? const BouncingScrollPhysics()
+                        : const NeverScrollableScrollPhysics(),
+                    itemCount: _pageCount,
+                    onPageChanged: (index) => _onPageChanged(index + 1),
+                    itemBuilder: (context, index) {
+                      final pageNum = index + 1;
+                      return InteractiveViewer(
+                        minScale: 1.0,
+                        maxScale: 5.0,
+                        panEnabled: _activeTool == AnnotationTool.none,
+                        scaleEnabled: _activeTool == AnnotationTool.none,
+                        clipBehavior: Clip.none,
+                        child:
+                            _buildSinglePageView(pageNum, displayW, displayH),
+                      );
+                    },
+                  );
+                },
               ),
             ),
 
@@ -1079,6 +1018,167 @@ class _EditorScreenState extends State<EditorScreen>
                 ],
               ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Single Page Content View for PageView (renders page background + strokes + stickers + text notes)
+  Widget _buildSinglePageView(int pageNum, double displayW, double displayH) {
+    final isCurrent = pageNum == _currentPage;
+    final uiImage = _renderedPages[pageNum] ??
+        (isCurrent ? _renderedPageUiImage : null);
+
+    final pageStrokes =
+        isCurrent ? _strokes : (_perPageStrokes[pageNum] ?? []);
+    final pageCurrentStroke = isCurrent ? _currentStroke : null;
+    final pageImages =
+        isCurrent ? _imageAnnotations : (_perPageImageAnnotations[pageNum] ?? []);
+    final pageTexts =
+        isCurrent ? _textAnnotations : (_perPageTextAnnotations[pageNum] ?? []);
+
+    return Center(
+      child: Container(
+        width: displayW,
+        height: displayH,
+        margin: EdgeInsets.symmetric(
+          horizontal:
+              _slideOrientation == PageSlideOrientation.horizontal ? 8 : 0,
+          vertical:
+              _slideOrientation == PageSlideOrientation.vertical ? 8 : 0,
+        ),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(4),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF1E1B4B).withValues(alpha: 0.14),
+              blurRadius: 18,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            // 1. HD Rendered PDF Page Image
+            if (uiImage != null)
+              RawImage(
+                image: uiImage,
+                width: displayW,
+                height: displayH,
+                fit: BoxFit.fill,
+              )
+            else
+              const Center(
+                child: CircularProgressIndicator(
+                  color: AppTheme.primaryPurple,
+                ),
+              ),
+
+            // 2. Annotation & Drawing Canvas
+            Positioned.fill(
+              child: isCurrent
+                  ? IgnorePointer(
+                      ignoring: _activeTool == AnnotationTool.none,
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onPanStart: (DragStartDetails details) {
+                          if (_activeTool == AnnotationTool.highlighter ||
+                              _activeTool == AnnotationTool.straightLine) {
+                            setState(() {
+                              _redoHistory.clear();
+                              _currentStroke = Stroke(
+                                points: [details.localPosition],
+                                color: _selectedColor,
+                                strokeWidth: _strokeWidth,
+                                isStraightLine:
+                                    _activeTool == AnnotationTool.straightLine,
+                              );
+                            });
+                          }
+                        },
+                        onPanUpdate: (DragUpdateDetails details) {
+                          if (_currentStroke != null) {
+                            setState(() {
+                              _currentStroke!.points
+                                  .add(details.localPosition);
+                            });
+                          }
+                        },
+                        onPanEnd: (DragEndDetails details) {
+                          if (_currentStroke != null) {
+                            setState(() {
+                              _strokes.add(_currentStroke!);
+                              _perPageStrokes[_currentPage] =
+                                  List.from(_strokes);
+                              _currentStroke = null;
+                            });
+                            _autoSaveAndSync();
+                          }
+                        },
+                        onPanCancel: () {
+                          if (_currentStroke != null) {
+                            setState(() {
+                              _currentStroke = null;
+                            });
+                          }
+                        },
+                        child: CustomPaint(
+                          painter: BaseAnnotationPainter(
+                            strokes: pageStrokes,
+                            currentStroke: pageCurrentStroke,
+                            activeTool: _activeTool,
+                          ),
+                          size: Size.infinite,
+                        ),
+                      ),
+                    )
+                  : CustomPaint(
+                      painter: BaseAnnotationPainter(
+                        strokes: pageStrokes,
+                        currentStroke: null,
+                        activeTool: AnnotationTool.none,
+                      ),
+                      size: Size.infinite,
+                    ),
+            ),
+
+            // 3. Image Stickers (Photos)
+            if (isCurrent)
+              ...pageImages.map((annotation) {
+                return Positioned(
+                  left: annotation.position.dx,
+                  top: annotation.position.dy,
+                  child: _buildDraggableResizableImageWidget(annotation),
+                );
+              })
+            else
+              ...pageImages.map((annotation) {
+                return Positioned(
+                  left: annotation.position.dx,
+                  top: annotation.position.dy,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(14),
+                    child: Image.file(
+                      File(annotation.imagePath),
+                      width: annotation.size.width,
+                      height: annotation.size.height,
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                );
+              }),
+
+            // 4. Digital Text Notes (Saved Notes)
+            ...pageTexts.map((annotation) {
+              return Positioned(
+                left: annotation.position.dx,
+                top: annotation.position.dy,
+                child: _buildDraggableTextWidget(annotation),
+              );
+            }),
           ],
         ),
       ),
