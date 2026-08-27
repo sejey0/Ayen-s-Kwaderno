@@ -825,19 +825,20 @@ class _HomeScreenState extends State<HomeScreen> {
                       children: [
                         Row(
                           children: [
-                            const Icon(
-                              CupertinoIcons.doc_text_fill,
-                              color: AppTheme.primaryPurple,
-                              size: 18,
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              'Documents & Images ($totalDocsCount)',
-                              style: const TextStyle(
-                                fontSize: 17,
-                                fontWeight: FontWeight.w700,
-                                color: AppTheme.textPrimary,
-                                letterSpacing: -0.2,
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: AppTheme.primaryPurpleLight,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                '$totalDocsCount files',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppTheme.primaryPurpleDark,
+                                ),
                               ),
                             ),
                             if (_isLoadingCloudDocuments) ...[
@@ -976,24 +977,21 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Row(
-                          children: [
-                            const Icon(
-                              CupertinoIcons.pencil_ellipsis_rectangle,
-                              color: AppTheme.accentPink,
-                              size: 18,
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: AppTheme.accentPinkLight,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            '$totalNotesCount notes',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: AppTheme.accentPinkDark,
                             ),
-                            const SizedBox(width: 8),
-                            Text(
-                              'Written Notes ($totalNotesCount)',
-                              style: const TextStyle(
-                                fontSize: 17,
-                                fontWeight: FontWeight.w700,
-                                color: AppTheme.textPrimary,
-                                letterSpacing: -0.2,
-                              ),
-                            ),
-                          ],
+                          ),
                         ),
                         Row(
                           children: [
@@ -1200,8 +1198,39 @@ class _HomeScreenState extends State<HomeScreen> {
 
 
 
-  /// Top Profile & Greeting Row (Clean & Permanent Header)
+  /// Top Profile & Greeting Row (Dynamic Section Header)
   Widget _buildHeader() {
+    final String headerTitle;
+    final String headerEmoji;
+    final List<Color> headerGradient;
+
+    switch (_currentSection) {
+      case LibrarySection.dashboard:
+        headerTitle = "Ayen's Kwaderno";
+        headerEmoji = '📓';
+        headerGradient = const [
+          AppTheme.primaryPurple,
+          AppTheme.accentPink,
+        ];
+        break;
+      case LibrarySection.documents:
+        headerTitle = 'Documents & Images';
+        headerEmoji = '📄';
+        headerGradient = const [
+          Color(0xFF6366F1),
+          Color(0xFF8B5CF6),
+        ];
+        break;
+      case LibrarySection.notes:
+        headerTitle = 'Handwritten Notes';
+        headerEmoji = '✍️';
+        headerGradient = const [
+          Color(0xFFEC4899),
+          Color(0xFFF43F5E),
+        ];
+        break;
+    }
+
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -1241,7 +1270,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
 
-            // App Branding Title & Icon (Tapping directly opens Profile Settings)
+            // Header Title & Icon (Tapping opens Profile Settings)
             GestureDetector(
               onTap: _openProfileSettings,
               behavior: HitTestBehavior.opaque,
@@ -1251,31 +1280,29 @@ class _HomeScreenState extends State<HomeScreen> {
                     width: 40,
                     height: 40,
                     decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [
-                          AppTheme.primaryPurple,
-                          AppTheme.accentPink
-                        ],
+                      gradient: LinearGradient(
+                        colors: headerGradient,
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
                       ),
                       borderRadius: BorderRadius.circular(12),
                       boxShadow: [
                         BoxShadow(
-                          color: AppTheme.primaryPurple.withValues(alpha: 0.25),
+                          color: headerGradient.first.withValues(alpha: 0.25),
                           blurRadius: 8,
                           offset: const Offset(0, 2),
                         ),
                       ],
                     ),
-                    child: const Center(
-                      child: Text('📓', style: TextStyle(fontSize: 20)),
+                    child: Center(
+                      child: Text(headerEmoji,
+                          style: const TextStyle(fontSize: 20)),
                     ),
                   ),
                   const SizedBox(width: 10),
-                  const Text(
-                    "Ayen's Kwaderno",
-                    style: TextStyle(
+                  Text(
+                    headerTitle,
+                    style: const TextStyle(
                       fontSize: 19,
                       fontWeight: FontWeight.w900,
                       color: AppTheme.textPrimary,
