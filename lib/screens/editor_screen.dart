@@ -1391,95 +1391,104 @@ class _EditorScreenState extends State<EditorScreen>
               child: isCurrent
                   ? IgnorePointer(
                       ignoring: _activeTool == AnnotationTool.none,
-                      child: GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onPanStart: (DragStartDetails details) {
-                          _recordUndoSnapshot();
-                          if (_activeTool == AnnotationTool.eraser) {
-                            setState(() {
-                              _currentEraserPos = details.localPosition;
-                            });
-                            _eraseStrokesNear(details.localPosition, 10.0);
-                          } else if (_activeTool == AnnotationTool.highlighter ||
-                              _activeTool == AnnotationTool.straightLine) {
-                            final isPen = _penSubTool == PenSubTool.ballpen;
-                            final activeWidth =
-                                isPen ? _ballpenWidth : _highlighterWidth;
-                            setState(() {
-                              _currentStroke = Stroke(
-                                points: [details.localPosition],
-                                color: isPen
-                                    ? _selectedColor.withValues(alpha: 1.0)
-                                    : _selectedColor,
-                                strokeWidth: activeWidth,
-                                isStraightLine:
-                                    _activeTool == AnnotationTool.straightLine,
-                              );
-                            });
-                          }
-                        },
-                        onPanUpdate: (DragUpdateDetails details) {
-                          if (_activeTool == AnnotationTool.eraser) {
-                            setState(() {
-                              _currentEraserPos = details.localPosition;
-                            });
-                            _eraseStrokesNear(details.localPosition, 10.0);
-                          } else if (_currentStroke != null) {
-                            setState(() {
-                              _currentStroke!.points
-                                  .add(details.localPosition);
-                            });
-                          }
-                        },
-                        onPanEnd: (DragEndDetails details) {
-                          if (_activeTool == AnnotationTool.eraser) {
-                            setState(() {
-                              _currentEraserPos = null;
-                            });
-                          } else if (_currentStroke != null) {
-                            setState(() {
-                              final densePoints = _currentStroke!.isStraightLine &&
-                                      _currentStroke!.points.length >= 2
-                                  ? _densifyPoints([
-                                      _currentStroke!.points.first,
-                                      _currentStroke!.points.last
-                                    ])
-                                  : _densifyPoints(_currentStroke!.points);
+                      child: MouseRegion(
+                        cursor: _activeTool == AnnotationTool.highlighter ||
+                                _activeTool == AnnotationTool.straightLine
+                            ? SystemMouseCursors.precise
+                            : (_activeTool == AnnotationTool.eraser
+                                ? SystemMouseCursors.noDrop
+                                : SystemMouseCursors.basic),
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onPanStart: (DragStartDetails details) {
+                            _recordUndoSnapshot();
+                            if (_activeTool == AnnotationTool.eraser) {
+                              setState(() {
+                                _currentEraserPos = details.localPosition;
+                              });
+                              _eraseStrokesNear(details.localPosition, 10.0);
+                            } else if (_activeTool == AnnotationTool.highlighter ||
+                                _activeTool == AnnotationTool.straightLine) {
+                              final isPen = _penSubTool == PenSubTool.ballpen;
+                              final activeWidth =
+                                  isPen ? _ballpenWidth : _highlighterWidth;
+                              setState(() {
+                                _currentStroke = Stroke(
+                                  points: [details.localPosition],
+                                  color: isPen
+                                      ? _selectedColor.withValues(alpha: 1.0)
+                                      : _selectedColor,
+                                  strokeWidth: activeWidth,
+                                  isStraightLine:
+                                      _activeTool == AnnotationTool.straightLine,
+                                );
+                              });
+                            }
+                          },
+                          onPanUpdate: (DragUpdateDetails details) {
+                            if (_activeTool == AnnotationTool.eraser) {
+                              setState(() {
+                                _currentEraserPos = details.localPosition;
+                              });
+                              _eraseStrokesNear(details.localPosition, 10.0);
+                            } else if (_currentStroke != null) {
+                              setState(() {
+                                _currentStroke!.points
+                                    .add(details.localPosition);
+                              });
+                            }
+                          },
+                          onPanEnd: (DragEndDetails details) {
+                            if (_activeTool == AnnotationTool.eraser) {
+                              setState(() {
+                                _currentEraserPos = null;
+                              });
+                            } else if (_currentStroke != null) {
+                              setState(() {
+                                final densePoints = _currentStroke!.isStraightLine &&
+                                        _currentStroke!.points.length >= 2
+                                    ? _densifyPoints([
+                                        _currentStroke!.points.first,
+                                        _currentStroke!.points.last
+                                      ])
+                                    : _densifyPoints(_currentStroke!.points);
 
-                              _strokes.add(Stroke(
-                                points: densePoints,
-                                color: _currentStroke!.color,
-                                strokeWidth: _currentStroke!.strokeWidth,
-                                isStraightLine:
-                                    _currentStroke!.isStraightLine,
-                              ));
-                              _perPageStrokes[_currentPage] =
-                                  List.from(_strokes);
-                              _currentStroke = null;
-                            });
-                            _autoSaveAndSync();
-                          }
-                        },
-                        onPanCancel: () {
-                          if (_activeTool == AnnotationTool.eraser) {
-                            setState(() {
-                              _currentEraserPos = null;
-                            });
-                          } else if (_currentStroke != null) {
-                            setState(() {
-                              _currentStroke = null;
-                            });
-                          }
-                        },
-                        child: CustomPaint(
-                          painter: BaseAnnotationPainter(
-                            strokes: pageStrokes,
-                            currentStroke: pageCurrentStroke,
-                            activeTool: _activeTool,
-                            eraserPos: isCurrent ? _currentEraserPos : null,
-                            eraserMode: _eraserMode,
+                                _strokes.add(Stroke(
+                                  points: densePoints,
+                                  color: _currentStroke!.color,
+                                  strokeWidth: _currentStroke!.strokeWidth,
+                                  isStraightLine:
+                                      _currentStroke!.isStraightLine,
+                                ));
+                                _perPageStrokes[_currentPage] =
+                                    List.from(_strokes);
+                                _currentStroke = null;
+                              });
+                              _autoSaveAndSync();
+                            }
+                          },
+                          onPanCancel: () {
+                            if (_activeTool == AnnotationTool.eraser) {
+                              setState(() {
+                                _currentEraserPos = null;
+                              });
+                            } else if (_currentStroke != null) {
+                              setState(() {
+                                _currentStroke = null;
+                              });
+                            }
+                          },
+                          child: CustomPaint(
+                            painter: BaseAnnotationPainter(
+                              strokes: pageStrokes,
+                              currentStroke: pageCurrentStroke,
+                              activeTool: _activeTool,
+                              penSubTool: _penSubTool,
+                              eraserPos: isCurrent ? _currentEraserPos : null,
+                              eraserMode: _eraserMode,
+                            ),
+                            size: Size.infinite,
                           ),
-                          size: Size.infinite,
                         ),
                       ),
                     )
@@ -3030,11 +3039,12 @@ class _EditorScreenState extends State<EditorScreen>
   }
 }
 
-/// Annotation Painter rendering freehand highlighter curves, straight lines, and live eraser cursor
+/// Annotation Painter rendering freehand highlighter curves, straight lines, pen/marker nib indicator, and live eraser cursor
 class BaseAnnotationPainter extends CustomPainter {
   final List<Stroke> strokes;
   final Stroke? currentStroke;
   final AnnotationTool activeTool;
+  final PenSubTool? penSubTool;
   final Offset? eraserPos;
   final EraserMode? eraserMode;
 
@@ -3042,6 +3052,7 @@ class BaseAnnotationPainter extends CustomPainter {
     required this.strokes,
     required this.currentStroke,
     required this.activeTool,
+    this.penSubTool,
     this.eraserPos,
     this.eraserMode,
   });
@@ -3056,9 +3067,25 @@ class BaseAnnotationPainter extends CustomPainter {
     // 2. Draw currently active drag stroke (with live preview)
     if (currentStroke != null) {
       _renderStroke(canvas, currentStroke!);
+
+      // 3. Draw live Pen / Marker Stylus Tip Nib while actively writing
+      if (currentStroke!.points.isNotEmpty) {
+        final tipPos = currentStroke!.points.last;
+        final isPen = penSubTool == PenSubTool.ballpen;
+        final isStraightLine = activeTool == AnnotationTool.straightLine ||
+            currentStroke!.isStraightLine;
+        _renderStylusNib(
+          canvas,
+          tipPos,
+          currentStroke!.strokeWidth,
+          currentStroke!.color,
+          isPen,
+          isStraightLine,
+        );
+      }
     }
 
-    // 3. Draw live Eraser cursor indicator while actively erasing
+    // 4. Draw live Eraser cursor indicator while actively erasing
     if (activeTool == AnnotationTool.eraser && eraserPos != null) {
       final isWipe = eraserMode == EraserMode.wipeStroke;
       final double cursorRadius = isWipe ? 14.0 : 10.0;
@@ -3074,6 +3101,90 @@ class BaseAnnotationPainter extends CustomPainter {
 
       canvas.drawCircle(eraserPos!, cursorRadius, eraserFillPaint);
       canvas.drawCircle(eraserPos!, cursorRadius, eraserRingPaint);
+    }
+  }
+
+  /// Renders a dynamic stylus nib / pen marker indicator at the active writing tip
+  void _renderStylusNib(
+    Canvas canvas,
+    Offset tipPos,
+    double strokeWidth,
+    Color color,
+    bool isPen,
+    bool isStraightLine,
+  ) {
+    if (isStraightLine) {
+      // Precision Crosshair / Compass Stylus Tip for Straight Line
+      final crosshairPaint = Paint()
+        ..color = color.withValues(alpha: 1.0)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.5;
+
+      final centerDotPaint = Paint()
+        ..color = color.withValues(alpha: 1.0)
+        ..style = PaintingStyle.fill;
+
+      final double r = (strokeWidth / 2 + 4.0).clamp(6.0, 16.0);
+
+      // Outer Guide Ring
+      canvas.drawCircle(tipPos, r, crosshairPaint);
+      // Center Precision Dot
+      canvas.drawCircle(tipPos, 2.5, centerDotPaint);
+      // 4-Axis Crosshair ticks
+      canvas.drawLine(
+          Offset(tipPos.dx - r - 3, tipPos.dy), Offset(tipPos.dx - r + 1, tipPos.dy), crosshairPaint);
+      canvas.drawLine(
+          Offset(tipPos.dx + r - 1, tipPos.dy), Offset(tipPos.dx + r + 3, tipPos.dy), crosshairPaint);
+      canvas.drawLine(
+          Offset(tipPos.dx, tipPos.dy - r - 3), Offset(tipPos.dx, tipPos.dy - r + 1), crosshairPaint);
+      canvas.drawLine(
+          Offset(tipPos.dx, tipPos.dy + r - 1), Offset(tipPos.dx, tipPos.dy + r + 3), crosshairPaint);
+    } else if (isPen) {
+      // Precision Ballpen Stylus Nib (Fine pen point with glowing halo ring)
+      final haloPaint = Paint()
+        ..color = color.withValues(alpha: 0.25)
+        ..style = PaintingStyle.fill;
+
+      final ringPaint = Paint()
+        ..color = color.withValues(alpha: 0.9)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.5;
+
+      final centerPointPaint = Paint()
+        ..color = Colors.white
+        ..style = PaintingStyle.fill;
+
+      final tipRadius = (strokeWidth / 2 + 3.0).clamp(4.5, 9.0);
+
+      // Glowing outer halo
+      canvas.drawCircle(tipPos, tipRadius + 3.0, haloPaint);
+      // Stylus Ring
+      canvas.drawCircle(tipPos, tipRadius, ringPaint);
+      // Center fine point
+      canvas.drawCircle(tipPos, 1.8, centerPointPaint);
+    } else {
+      // Highlighter / Marker Chisel Nib (Translucent footprint with marker edge)
+      final markerFootprintPaint = Paint()
+        ..color = color.withValues(alpha: 0.35)
+        ..style = PaintingStyle.fill;
+
+      final markerRingPaint = Paint()
+        ..color = color.withValues(alpha: 0.85)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.8;
+
+      final markerCenterDotPaint = Paint()
+        ..color = color.withValues(alpha: 1.0)
+        ..style = PaintingStyle.fill;
+
+      final tipRadius = (strokeWidth / 2).clamp(5.0, 20.0);
+
+      // Live footprint preview
+      canvas.drawCircle(tipPos, tipRadius, markerFootprintPaint);
+      // Sharp marker outline
+      canvas.drawCircle(tipPos, tipRadius, markerRingPaint);
+      // Center guide dot
+      canvas.drawCircle(tipPos, 2.5, markerCenterDotPaint);
     }
   }
 
