@@ -25,6 +25,12 @@ enum AnnotationTool {
   addImage, // Draggable/resizable image overlay
 }
 
+/// Drawing Pen / Marker Sub-Tool modes
+enum PenSubTool {
+  ballpen, // Opaque fine pen drawing
+  highlighter, // Translucent marker highlighting
+}
+
 /// Eraser operating modes
 enum EraserMode {
   drawErase, // Precision point-by-point drawing eraser
@@ -70,8 +76,11 @@ class _EditorScreenState extends State<EditorScreen>
 
   // Active annotation tool state
   AnnotationTool _activeTool = AnnotationTool.none;
+  PenSubTool _penSubTool = PenSubTool.highlighter;
   Color _selectedColor = AppTheme.highlighterColors[0];
-  double _strokeWidth = 14.0;
+  double _ballpenWidth = 3.0;
+  double _highlighterWidth = 16.0;
+  AnnotationTool _previousDrawingTool = AnnotationTool.highlighter;
 
   // Slide Orientation State (Default: Vertical)
   PageSlideOrientation _slideOrientation = PageSlideOrientation.vertical;
@@ -89,6 +98,7 @@ class _EditorScreenState extends State<EditorScreen>
   Offset? _currentEraserPos;
   EraserMode _eraserMode = EraserMode.drawErase;
   bool _isEraserMenuExpanded = true;
+  bool _isThicknessMenuExpanded = true;
 
   // Digital Text Annotations state (Saved notes)
   final List<TextAnnotation> _textAnnotations = [];
@@ -775,10 +785,13 @@ class _EditorScreenState extends State<EditorScreen>
       return;
     }
 
-    if (tool == AnnotationTool.highlighter &&
-        _activeTool == AnnotationTool.eraser) {
+    if (_activeTool == AnnotationTool.eraser &&
+        (tool == AnnotationTool.highlighter ||
+            tool == AnnotationTool.straightLine)) {
       setState(() {
-        _activeTool = AnnotationTool.highlighter;
+        _activeTool = tool;
+        _previousDrawingTool = tool;
+        _isThicknessMenuExpanded = true;
       });
       return;
     }
@@ -790,6 +803,10 @@ class _EditorScreenState extends State<EditorScreen>
 
     setState(() {
       _activeTool = tool;
+      if (tool == AnnotationTool.highlighter ||
+          tool == AnnotationTool.straightLine) {
+        _previousDrawingTool = tool;
+      }
       _selectedImageId = null;
       _selectedTextId = null;
     });
@@ -1092,7 +1109,14 @@ class _EditorScreenState extends State<EditorScreen>
     final bool isPaletteOpen = _activeTool == AnnotationTool.highlighter ||
         _activeTool == AnnotationTool.straightLine ||
         _activeTool == AnnotationTool.eraser;
-    final double bottomVerticalArrowOffset = isPaletteOpen ? 180.0 : 96.0;
+    final bool isTopBubbleOpen =
+        (_activeTool == AnnotationTool.eraser && _isEraserMenuExpanded) ||
+            ((_activeTool == AnnotationTool.highlighter ||
+                    _activeTool == AnnotationTool.straightLine) &&
+                _isThicknessMenuExpanded);
+    final double bottomVerticalArrowOffset = isPaletteOpen
+        ? (isTopBubbleOpen ? 220.0 : 180.0)
+        : 96.0;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF3F4F6),
@@ -1360,7 +1384,15 @@ class _EditorScreenState extends State<EditorScreen>
                     const SizedBox(height: 8),
                   ],
 
-                  // 2. Secondary Color/Stroke Palette (with Ballpen, Highlighter, Eraser)
+                  // 2. Floating Thickness Options Bubble (Floats on top of Highlighter/Pen icons)
+                  if ((_activeTool == AnnotationTool.highlighter ||
+                          _activeTool == AnnotationTool.straightLine) &&
+                      _isThicknessMenuExpanded) ...[
+                    _buildFloatingThicknessOptionsBubble(),
+                    const SizedBox(height: 8),
+                  ],
+
+                  // 3. Secondary Color/Stroke Palette (with Ballpen, Highlighter, Eraser)
                   if (_activeTool == AnnotationTool.highlighter ||
                       _activeTool == AnnotationTool.straightLine ||
                       _activeTool == AnnotationTool.eraser)
@@ -1368,7 +1400,7 @@ class _EditorScreenState extends State<EditorScreen>
 
                   const SizedBox(height: 10),
 
-                  // 3. Main Floating Annotation Toolbar
+                  // 4. Main Floating Annotation Toolbar
                   _buildFloatingBottomToolbar(),
                 ],
               ),
@@ -1442,13 +1474,16 @@ class _EditorScreenState extends State<EditorScreen>
                             _eraseStrokesNear(details.localPosition, 10.0);
                           } else if (_activeTool == AnnotationTool.highlighter ||
                               _activeTool == AnnotationTool.straightLine) {
+                            final isPen = _penSubTool == PenSubTool.ballpen;
+                            final activeWidth =
+                                isPen ? _ballpenWidth : _highlighterWidth;
                             setState(() {
                               _currentStroke = Stroke(
                                 points: [details.localPosition],
-                                color: _strokeWidth <= 6.0
+                                color: isPen
                                     ? _selectedColor.withValues(alpha: 1.0)
                                     : _selectedColor,
-                                strokeWidth: _strokeWidth,
+                                strokeWidth: activeWidth,
                                 isStraightLine:
                                     _activeTool == AnnotationTool.straightLine,
                               );
@@ -2243,8 +2278,7 @@ class _EditorScreenState extends State<EditorScreen>
     required String tooltip,
   }) {
     final isSelected = _activeTool == tool ||
-        (tool == AnnotationTool.highlighter &&
-            _activeTool == AnnotationTool.eraser);
+        (_activeTool == AnnotationTool.eraser && tool == _previousDrawingTool);
 
     return Tooltip(
       message: tooltip,
@@ -2302,6 +2336,200 @@ class _EditorScreenState extends State<EditorScreen>
                 ],
               ],
             ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Floating options bubble that sits directly on top of the Highlighter/Pen icon (Stroke Thickness)
+  Widget _buildFloatingThicknessOptionsBubble() {
+    final isPen = _penSubTool == PenSubTool.ballpen;
+    final activeWidth = isPen ? _ballpenWidth : _highlighterWidth;
+
+    // Presets tailored specifically to each tool
+    final List<Map<String, dynamic>> thicknessPresets = isPen
+        ? [
+            {'label': 'Fine', 'width': 1.5},
+            {'label': 'Regular', 'width': 3.0},
+            {'label': 'Medium', 'width': 5.0},
+            {'label': 'Bold', 'width': 8.0},
+          ]
+        : [
+            {'label': 'Light', 'width': 10.0},
+            {'label': 'Medium', 'width': 16.0},
+            {'label': 'Broad', 'width': 24.0},
+            {'label': 'Chisel', 'width': 32.0},
+          ];
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(20),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: AppTheme.surfaceWhite.withValues(alpha: 0.96),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: AppTheme.primaryPurple.withValues(alpha: 0.3),
+              width: 1.2,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: AppTheme.primaryPurple.withValues(alpha: 0.14),
+                blurRadius: 14,
+                offset: const Offset(0, 4),
+              ),
+              BoxShadow(
+                color: const Color(0xFF1E1B4B).withValues(alpha: 0.08),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Tool Name & Current Thickness Live Badge
+              Padding(
+                padding: const EdgeInsets.only(left: 4, right: 6),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      isPen
+                          ? CupertinoIcons.pen
+                          : CupertinoIcons.pencil_outline,
+                      size: 13,
+                      color: AppTheme.primaryPurple,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      '${isPen ? 'Pen' : 'Marker'} ${activeWidth % 1 == 0 ? activeWidth.toInt() : activeWidth}px',
+                      style: const TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w800,
+                        color: AppTheme.primaryPurple,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              _buildVerticalDivider(),
+              const SizedBox(width: 4),
+
+              // Thickness Preset Pills
+              ...thicknessPresets.map((preset) {
+                final double width = preset['width'] as double;
+                final String label = preset['label'] as String;
+                final isSelected = (activeWidth - width).abs() < 1.0;
+
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 2.5),
+                  child: Tooltip(
+                    message:
+                        '$label (${width % 1 == 0 ? width.toInt() : width}px)',
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () {
+                        HapticFeedback.selectionClick();
+                        setState(() {
+                          if (isPen) {
+                            _ballpenWidth = width;
+                          } else {
+                            _highlighterWidth = width;
+                          }
+                        });
+                      },
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 180),
+                        curve: Curves.easeOutCubic,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 9, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: isSelected
+                              ? AppTheme.primaryPurple
+                              : const Color(0xFFF3F4F6),
+                          borderRadius: BorderRadius.circular(14),
+                          boxShadow: isSelected
+                              ? [
+                                  BoxShadow(
+                                    color: AppTheme.primaryPurple
+                                        .withValues(alpha: 0.35),
+                                    blurRadius: 6,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ]
+                              : null,
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            // Visual Dot
+                            Container(
+                              width: (width / (isPen ? 1.5 : 3.5))
+                                  .clamp(3.5, 9.0),
+                              height: (width / (isPen ? 1.5 : 3.5))
+                                  .clamp(3.5, 9.0),
+                              decoration: BoxDecoration(
+                                color: isSelected
+                                    ? Colors.white
+                                    : AppTheme.textPrimary,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                            const SizedBox(width: 4.5),
+                            Text(
+                              label,
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: isSelected
+                                    ? Colors.white
+                                    : AppTheme.textPrimary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              }),
+
+              const SizedBox(width: 4),
+              _buildVerticalDivider(),
+              const SizedBox(width: 3),
+
+              // Collapse / Close Button
+              Tooltip(
+                message: 'Collapse Thickness Options',
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(14),
+                    onTap: () {
+                      HapticFeedback.lightImpact();
+                      setState(() => _isThicknessMenuExpanded = false);
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.all(5),
+                      decoration: const BoxDecoration(
+                        color: Color(0xFFF3F4F6),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        CupertinoIcons.chevron_down,
+                        size: 13,
+                        color: AppTheme.textSecondary,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -2420,7 +2648,8 @@ class _EditorScreenState extends State<EditorScreen>
                     setState(() {
                       _selectedColor = color;
                       if (_activeTool == AnnotationTool.eraser) {
-                        _activeTool = AnnotationTool.highlighter;
+                        _activeTool = _previousDrawingTool;
+                        _isThicknessMenuExpanded = true;
                       }
                     });
                   },
@@ -2451,35 +2680,45 @@ class _EditorScreenState extends State<EditorScreen>
               _buildVerticalDivider(),
               const SizedBox(width: 6),
 
-              // 1. Ballpen Icon (replaces 'S')
+              // 1. Ballpen Icon (Independent Ballpen tool)
               _buildSubBarPresetIcon(
                 icon: CupertinoIcons.pen,
                 tooltip: 'Ballpen (Fine Pen Stroke)',
                 isSelected: _activeTool != AnnotationTool.eraser &&
-                    _strokeWidth <= 6.0,
+                    _penSubTool == PenSubTool.ballpen,
                 onTap: () {
                   setState(() {
-                    _strokeWidth =
-                        _activeTool == AnnotationTool.straightLine ? 3.0 : 4.0;
                     if (_activeTool == AnnotationTool.eraser) {
-                      _activeTool = AnnotationTool.highlighter;
+                      _activeTool = _previousDrawingTool;
+                      _penSubTool = PenSubTool.ballpen;
+                      _isThicknessMenuExpanded = true;
+                    } else if (_penSubTool == PenSubTool.ballpen) {
+                      _isThicknessMenuExpanded = !_isThicknessMenuExpanded;
+                    } else {
+                      _penSubTool = PenSubTool.ballpen;
+                      _isThicknessMenuExpanded = true;
                     }
                   });
                 },
               ),
 
-              // 2. Highlighter Icon (replaces 'M')
+              // 2. Highlighter Icon (Independent Highlighter tool)
               _buildSubBarPresetIcon(
                 icon: CupertinoIcons.pencil_outline,
                 tooltip: 'Highlighter (Marker Stroke)',
                 isSelected: _activeTool != AnnotationTool.eraser &&
-                    _strokeWidth > 6.0,
+                    _penSubTool == PenSubTool.highlighter,
                 onTap: () {
                   setState(() {
-                    _strokeWidth =
-                        _activeTool == AnnotationTool.straightLine ? 6.0 : 16.0;
                     if (_activeTool == AnnotationTool.eraser) {
-                      _activeTool = AnnotationTool.highlighter;
+                      _activeTool = _previousDrawingTool;
+                      _penSubTool = PenSubTool.highlighter;
+                      _isThicknessMenuExpanded = true;
+                    } else if (_penSubTool == PenSubTool.highlighter) {
+                      _isThicknessMenuExpanded = !_isThicknessMenuExpanded;
+                    } else {
+                      _penSubTool = PenSubTool.highlighter;
+                      _isThicknessMenuExpanded = true;
                     }
                   });
                 },
@@ -2500,6 +2739,10 @@ class _EditorScreenState extends State<EditorScreen>
                     if (_activeTool == AnnotationTool.eraser) {
                       _isEraserMenuExpanded = !_isEraserMenuExpanded;
                     } else {
+                      if (_activeTool == AnnotationTool.highlighter ||
+                          _activeTool == AnnotationTool.straightLine) {
+                        _previousDrawingTool = _activeTool;
+                      }
                       _activeTool = AnnotationTool.eraser;
                       _isEraserMenuExpanded = true;
                     }
