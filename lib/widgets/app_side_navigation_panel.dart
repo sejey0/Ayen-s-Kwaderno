@@ -6,6 +6,7 @@ import '../services/auto_sync_service.dart';
 import '../services/document_storage_service.dart';
 import '../services/user_service.dart';
 import '../theme/app_theme.dart';
+import 'user_avatar_widget.dart';
 
 enum SidebarNavItem {
   dashboard,
@@ -201,7 +202,6 @@ class _AppSideNavigationPanelState extends State<AppSideNavigationPanel> {
         final emailText = isCloud
             ? (user?.email ?? 'Cloud Synced')
             : 'Offline Local Storage';
-        final emoji = user?.avatarEmoji ?? '📓';
 
         if (!_isExpanded && !widget.isDrawerMode) {
           // Collapsed Top View
@@ -217,26 +217,9 @@ class _AppSideNavigationPanelState extends State<AppSideNavigationPanel> {
                   child: Stack(
                     alignment: Alignment.bottomRight,
                     children: [
-                      Container(
-                        width: 44,
-                        height: 44,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          gradient: const LinearGradient(
-                            colors: [
-                              AppTheme.primaryPurpleLight,
-                              AppTheme.accentPinkLight
-                            ],
-                          ),
-                          border: Border.all(
-                            color:
-                                AppTheme.primaryPurple.withValues(alpha: 0.3),
-                          ),
-                        ),
-                        child: Center(
-                          child:
-                              Text(emoji, style: const TextStyle(fontSize: 22)),
-                        ),
+                      UserAvatarWidget(
+                        user: user,
+                        size: 44,
                       ),
                       Container(
                         width: 12,
@@ -270,34 +253,9 @@ class _AppSideNavigationPanelState extends State<AppSideNavigationPanel> {
                   child: Row(
                     children: [
                       // Large Circular Avatar
-                      Container(
-                        width: 44,
-                        height: 44,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          gradient: const LinearGradient(
-                            colors: [
-                              AppTheme.primaryPurple,
-                              AppTheme.accentPink
-                            ],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: AppTheme.primaryPurple
-                                  .withValues(alpha: 0.25),
-                              blurRadius: 8,
-                              offset: const Offset(0, 2),
-                            ),
-                          ],
-                        ),
-                        child: Center(
-                          child: Text(
-                            emoji,
-                            style: const TextStyle(fontSize: 22),
-                          ),
-                        ),
+                      UserAvatarWidget(
+                        user: user,
+                        size: 44,
                       ),
                       const SizedBox(width: 12),
 
@@ -719,17 +677,9 @@ class SwitchAccountBottomSheet extends StatelessWidget {
         SnackBar(
           content: Row(
             children: [
-              Container(
-                width: 28,
-                height: 28,
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.2),
-                  shape: BoxShape.circle,
-                ),
-                child: Center(
-                  child: Text(target.avatarEmoji,
-                      style: const TextStyle(fontSize: 15)),
-                ),
+              UserAvatarWidget(
+                user: target,
+                size: 28,
               ),
               const SizedBox(width: 10),
               Expanded(
@@ -1030,23 +980,10 @@ class SwitchAccountBottomSheet extends StatelessWidget {
                                       horizontal: 14, vertical: 12),
                                   child: Row(
                                     children: [
-                                      // Avatar
-                                      Container(
-                                        width: 42,
-                                        height: 42,
-                                        decoration: BoxDecoration(
-                                          color: isActive
-                                              ? AppTheme.primaryPurple
-                                                  .withValues(alpha: 0.12)
-                                              : AppTheme.background,
-                                          borderRadius:
-                                              BorderRadius.circular(12),
-                                        ),
-                                        child: Center(
-                                          child: Text(profile.avatarEmoji,
-                                              style: const TextStyle(
-                                                  fontSize: 20)),
-                                        ),
+                                      // Avatar (photo & emoji)
+                                      UserAvatarWidget(
+                                        user: profile,
+                                        size: 42,
                                       ),
                                       const SizedBox(width: 12),
 

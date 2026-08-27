@@ -6,6 +6,8 @@ class UserProfile {
   final String id;
   final String name;
   final String avatarEmoji;
+  final String? avatarImagePath;
+  final String? avatarUrl;
   final int avatarColorIndex;
   final String? email;
   final bool isCloudLinked;
@@ -17,6 +19,8 @@ class UserProfile {
     required this.id,
     required this.name,
     this.avatarEmoji = '📓',
+    this.avatarImagePath,
+    this.avatarUrl,
     this.avatarColorIndex = 0,
     this.email,
     this.isCloudLinked = false,
@@ -29,10 +33,17 @@ class UserProfile {
   String get initial =>
       name.trim().isNotEmpty ? name.trim()[0].toUpperCase() : 'A';
 
+  bool get hasCustomImage =>
+      (avatarImagePath != null && avatarImagePath!.trim().isNotEmpty) ||
+      (avatarUrl != null && avatarUrl!.trim().isNotEmpty);
+
   UserProfile copyWith({
     String? id,
     String? name,
     String? avatarEmoji,
+    String? avatarImagePath,
+    String? avatarUrl,
+    bool clearCustomImage = false,
     int? avatarColorIndex,
     String? email,
     bool? isCloudLinked,
@@ -44,6 +55,11 @@ class UserProfile {
       id: id ?? this.id,
       name: name ?? this.name,
       avatarEmoji: avatarEmoji ?? this.avatarEmoji,
+      avatarImagePath: clearCustomImage
+          ? null
+          : (avatarImagePath ?? this.avatarImagePath),
+      avatarUrl:
+          clearCustomImage ? null : (avatarUrl ?? this.avatarUrl),
       avatarColorIndex: avatarColorIndex ?? this.avatarColorIndex,
       email: email ?? this.email,
       isCloudLinked: isCloudLinked ?? this.isCloudLinked,
@@ -58,6 +74,8 @@ class UserProfile {
       'id': id,
       'name': name,
       'avatar_emoji': avatarEmoji,
+      'avatar_image_path': avatarImagePath,
+      'avatar_url': avatarUrl ?? avatarImagePath,
       'avatar_color_index': avatarColorIndex,
       'email': email,
       'is_cloud_linked': isCloudLinked,
@@ -68,10 +86,17 @@ class UserProfile {
   }
 
   factory UserProfile.fromJson(Map<String, dynamic> json) {
+    final imagePath = json['avatar_image_path'] as String? ??
+        json['avatar_url'] as String?;
+    final url = json['avatar_url'] as String? ??
+        json['avatar_image_path'] as String?;
+
     return UserProfile(
       id: json['id'] as String,
       name: json['name'] as String? ?? 'Student',
       avatarEmoji: json['avatar_emoji'] as String? ?? '📓',
+      avatarImagePath: imagePath,
+      avatarUrl: url,
       avatarColorIndex: json['avatar_color_index'] as int? ?? 0,
       email: json['email'] as String?,
       isCloudLinked: json['is_cloud_linked'] as bool? ?? false,

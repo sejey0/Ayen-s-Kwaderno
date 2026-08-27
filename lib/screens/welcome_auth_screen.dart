@@ -1,9 +1,11 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/auto_sync_service.dart';
 import '../services/user_service.dart';
 import '../theme/app_theme.dart';
+import '../widgets/user_avatar_widget.dart';
 import 'home_screen.dart';
 
 enum AuthMode {
@@ -27,10 +29,11 @@ class WelcomeAuthScreen extends StatefulWidget {
 class _WelcomeAuthScreenState extends State<WelcomeAuthScreen> {
   AuthMode _mode = AuthMode.cloudSignIn;
 
-  // Offline form controllers
+  // Form controllers & avatar state
   final TextEditingController _nameController =
       TextEditingController(text: '');
   String _selectedEmoji = '📓';
+  String? _selectedImagePath;
   int _selectedColorIndex = 0;
 
   // Cloud auth form controllers
@@ -72,6 +75,92 @@ class _WelcomeAuthScreenState extends State<WelcomeAuthScreen> {
     _passwordController.dispose();
     _cloudNameController.dispose();
     super.dispose();
+  }
+
+  /// Lets user pick a real image from the gallery or camera
+  Future<void> _pickAvatarImage(ImageSource source) async {
+    try {
+      final picker = ImagePicker();
+      final picked = await picker.pickImage(
+        source: source,
+        maxWidth: 512,
+        maxHeight: 512,
+        imageQuality: 85,
+      );
+      if (picked != null) {
+        setState(() {
+          _selectedImagePath = picked.path;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error picking avatar image: $e');
+    }
+  }
+
+  /// Displays interactive bottom sheet to choose between Gallery, Camera, or Remove Photo
+  void _showImageSourceDialog() {
+    showCupertinoModalPopup<void>(
+      context: context,
+      builder: (ctx) => CupertinoActionSheet(
+        title: const Text(
+          'Choose Avatar Photo',
+          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+        ),
+        message: const Text('Pick a photo from your gallery or take a new one'),
+        actions: [
+          CupertinoActionSheetAction(
+            child: const Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(CupertinoIcons.photo_on_rectangle, size: 20),
+                SizedBox(width: 8),
+                Text('Choose from Gallery'),
+              ],
+            ),
+            onPressed: () {
+              Navigator.pop(ctx);
+              _pickAvatarImage(ImageSource.gallery);
+            },
+          ),
+          CupertinoActionSheetAction(
+            child: const Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(CupertinoIcons.camera, size: 20),
+                SizedBox(width: 8),
+                Text('Take a Photo'),
+              ],
+            ),
+            onPressed: () {
+              Navigator.pop(ctx);
+              _pickAvatarImage(ImageSource.camera);
+            },
+          ),
+          if (_selectedImagePath != null)
+            CupertinoActionSheetAction(
+              isDestructiveAction: true,
+              child: const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(CupertinoIcons.trash, size: 18),
+                  SizedBox(width: 8),
+                  Text('Remove Photo (Use Emoji)'),
+                ],
+              ),
+              onPressed: () {
+                Navigator.pop(ctx);
+                setState(() {
+                  _selectedImagePath = null;
+                });
+              },
+            ),
+        ],
+        cancelButton: CupertinoActionSheetAction(
+          child: const Text('Cancel'),
+          onPressed: () => Navigator.pop(ctx),
+        ),
+      ),
+    );
   }
 
   void _onSuccessNavigate(String successMessage) {
@@ -122,6 +211,7 @@ class _WelcomeAuthScreenState extends State<WelcomeAuthScreen> {
       await UserService.instance.createOfflineProfile(
         name: name,
         avatarEmoji: _selectedEmoji,
+        avatarImagePath: _selectedImagePath,
         avatarColorIndex: _selectedColorIndex,
       );
 
@@ -162,6 +252,8 @@ class _WelcomeAuthScreenState extends State<WelcomeAuthScreen> {
         password: password,
         isSignUp: _mode == AuthMode.cloudSignUp,
         optionalName: name.isNotEmpty ? name : null,
+        optionalAvatarEmoji: _selectedEmoji,
+        optionalAvatarImagePath: _selectedImagePath,
       );
 
       _onSuccessNavigate('Signed in! Notes synced with cloud ☁️✨');
@@ -248,31 +340,13 @@ class _WelcomeAuthScreenState extends State<WelcomeAuthScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // App Logo / Avatar Badge
-                Container(
-                  width: 72,
-                  height: 72,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: const LinearGradient(
-                      colors: [AppTheme.primaryPurple, AppTheme.accentPink],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppTheme.primaryPurple.withValues(alpha: 0.3),
-                        blurRadius: 18,
-                        offset: const Offset(0, 6),
-                      ),
-                    ],
-                  ),
-                  child: Center(
-                    child: Text(
-                      isOffline ? _selectedEmoji : '☁️',
-                      style: const TextStyle(fontSize: 34),
-                    ),
-                  ),
+                // Top Interactive Avatar Badge
+                UserAvatarWidget(
+                  emoji: (isOffline || isSignUp) ? _selectedEmoji : '☁️',
+                  imagePath: (isOffline || isSignUp) ? _selectedImagePath : null,
+                  size: 76,
+                  showEditBadge: isOffline || isSignUp,
+                  onEditTap: _showImageSourceDialog,
                 ),
                 const SizedBox(height: 14),
 
@@ -474,6 +548,103 @@ class _WelcomeAuthScreenState extends State<WelcomeAuthScreen> {
     );
   }
 
+  /// Avatar selection section (Gallery Image + Emojis)
+  Widget _buildAvatarSelectionSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text(
+              "Choose Avatar & Photo",
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: AppTheme.textSecondary,
+              ),
+            ),
+            GestureDetector(
+              onTap: _showImageSourceDialog,
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: AppTheme.primaryPurpleLight,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(CupertinoIcons.camera_fill,
+                        size: 11, color: AppTheme.primaryPurpleDark),
+                    const SizedBox(width: 4),
+                    Text(
+                      _selectedImagePath != null ? 'Change Photo' : 'Upload Photo',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.primaryPurpleDark,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+
+        // Horizontal list of emojis (Tapping an emoji sets it and clears custom image)
+        SizedBox(
+          height: 48,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            physics: const BouncingScrollPhysics(),
+            itemCount: _avatarEmojis.length,
+            separatorBuilder: (_, index) => const SizedBox(width: 8),
+            itemBuilder: (context, idx) {
+              final emoji = _avatarEmojis[idx];
+              final isSelected =
+                  _selectedImagePath == null && emoji == _selectedEmoji;
+              return GestureDetector(
+                onTap: () {
+                  setState(() {
+                    _selectedEmoji = emoji;
+                    _selectedImagePath = null;
+                  });
+                },
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 150),
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: isSelected
+                        ? AppTheme.primaryPurpleLight
+                        : AppTheme.background,
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: isSelected
+                          ? AppTheme.primaryPurple
+                          : AppTheme.dividerColor,
+                      width: isSelected ? 2.0 : 1.0,
+                    ),
+                  ),
+                  child: Center(
+                    child: Text(
+                      emoji,
+                      style: const TextStyle(fontSize: 21),
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
   /// Instant Offline Profile Setup Form
   Widget _buildOfflineForm() {
     return Column(
@@ -533,55 +704,9 @@ class _WelcomeAuthScreenState extends State<WelcomeAuthScreen> {
         ),
         const SizedBox(height: 16),
 
-        // Emoji avatar selection
-        const Text(
-          "Choose Avatar Emoji",
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w700,
-            color: AppTheme.textSecondary,
-          ),
-        ),
-        const SizedBox(height: 8),
-        SizedBox(
-          height: 48,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            physics: const BouncingScrollPhysics(),
-            itemCount: _avatarEmojis.length,
-            separatorBuilder: (_, index) => const SizedBox(width: 8),
-            itemBuilder: (context, idx) {
-              final emoji = _avatarEmojis[idx];
-              final isSelected = emoji == _selectedEmoji;
-              return GestureDetector(
-                onTap: () => setState(() => _selectedEmoji = emoji),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 150),
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    color: isSelected
-                        ? AppTheme.primaryPurpleLight
-                        : AppTheme.background,
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: isSelected
-                          ? AppTheme.primaryPurple
-                          : AppTheme.dividerColor,
-                      width: isSelected ? 2.0 : 1.0,
-                    ),
-                  ),
-                  child: Center(
-                    child: Text(
-                      emoji,
-                      style: const TextStyle(fontSize: 21),
-                    ),
-                  ),
-                ),
-              );
-            },
-          ),
-        ),
+        // Avatar selector (Emoji + Photo Upload)
+        _buildAvatarSelectionSection(),
+
         const SizedBox(height: 16),
 
         // Color theme selection
@@ -718,7 +843,7 @@ class _WelcomeAuthScreenState extends State<WelcomeAuthScreen> {
         ),
         const SizedBox(height: 16),
 
-        // Optional Name if Sign Up
+        // Display Name (if Sign Up)
         if (isSignUp) ...[
           const Text(
             "Display Name",
@@ -756,6 +881,10 @@ class _WelcomeAuthScreenState extends State<WelcomeAuthScreen> {
                   const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             ),
           ),
+          const SizedBox(height: 14),
+
+          // Avatar Picker for Sign Up
+          _buildAvatarSelectionSection(),
           const SizedBox(height: 14),
         ],
 
@@ -812,7 +941,7 @@ class _WelcomeAuthScreenState extends State<WelcomeAuthScreen> {
           controller: _passwordController,
           obscureText: _obscurePassword,
           decoration: InputDecoration(
-            hintText: "••••••••",
+            hintText: "At least 6 characters",
             hintStyle: const TextStyle(color: AppTheme.textMuted),
             prefixIcon: const Icon(CupertinoIcons.lock_fill,
                 color: AppTheme.primaryPurple, size: 18),
@@ -821,7 +950,7 @@ class _WelcomeAuthScreenState extends State<WelcomeAuthScreen> {
                 _obscurePassword
                     ? CupertinoIcons.eye_slash_fill
                     : CupertinoIcons.eye_fill,
-                color: AppTheme.textMuted,
+                color: AppTheme.textSecondary,
                 size: 18,
               ),
               onPressed: () =>
@@ -848,7 +977,7 @@ class _WelcomeAuthScreenState extends State<WelcomeAuthScreen> {
         ),
         const SizedBox(height: 20),
 
-        // Cloud Action Button
+        // Action Button
         SizedBox(
           width: double.infinity,
           height: 48,
@@ -871,83 +1000,86 @@ class _WelcomeAuthScreenState extends State<WelcomeAuthScreen> {
                       color: Colors.white,
                     ),
                   )
-                : Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        isSignUp
-                            ? CupertinoIcons.sparkles
-                            : CupertinoIcons.cloud_upload_fill,
-                        size: 17,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        isSignUp
-                            ? "Create Cloud Account"
-                            : "Sign In & Sync Notebook",
-                        style: const TextStyle(
-                          fontSize: 14.5,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 0.2,
-                        ),
-                      ),
-                    ],
+                : Text(
+                    isSignUp
+                        ? "Register & Sync Account"
+                        : "Sign In with Email",
+                    style: const TextStyle(
+                      fontSize: 14.5,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.2,
+                    ),
                   ),
           ),
         ),
+        const SizedBox(height: 16),
 
-        const SizedBox(height: 14),
-
-        // Divider with text
+        // Divider
         Row(
           children: [
-            Expanded(
-                child: Container(height: 1, color: AppTheme.dividerColor)),
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 10),
-              child: Text('OR',
-                  style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      color: AppTheme.textMuted)),
+            const Expanded(
+                child: Divider(color: AppTheme.dividerColor, height: 1)),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Text(
+                "OR",
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: AppTheme.textMuted.withValues(alpha: 0.8),
+                ),
+              ),
             ),
-            Expanded(
-                child: Container(height: 1, color: AppTheme.dividerColor)),
+            const Expanded(
+                child: Divider(color: AppTheme.dividerColor, height: 1)),
           ],
         ),
-
-        const SizedBox(height: 14),
+        const SizedBox(height: 16),
 
         // Google Sign In Button
         SizedBox(
           width: double.infinity,
           height: 46,
-          child: OutlinedButton.icon(
+          child: OutlinedButton(
             onPressed: _isLoading ? null : _handleGoogleSignIn,
-            icon: Container(
-              width: 20,
-              height: 20,
-              alignment: Alignment.center,
-              child: const Text('G',
-                  style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w900,
-                      color: Color(0xFF4285F4))),
-            ),
-            label: const Text(
-              'Continue with Google',
-              style: TextStyle(
-                fontSize: 13.5,
-                fontWeight: FontWeight.w700,
-                color: AppTheme.textPrimary,
-              ),
-            ),
             style: OutlinedButton.styleFrom(
               side: const BorderSide(color: AppTheme.dividerColor),
-              backgroundColor: AppTheme.background,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(14),
               ),
+              backgroundColor: AppTheme.surfaceWhite,
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  width: 20,
+                  height: 20,
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Center(
+                    child: Text(
+                      'G',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w900,
+                        color: Color(0xFF4285F4),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                const Text(
+                  "Continue with Google",
+                  style: TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w700,
+                    color: AppTheme.textPrimary,
+                  ),
+                ),
+              ],
             ),
           ),
         ),

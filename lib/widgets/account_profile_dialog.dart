@@ -1,10 +1,12 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import '../models/user_profile_model.dart';
 import '../screens/welcome_auth_screen.dart';
 import '../services/auto_sync_service.dart';
 import '../services/user_service.dart';
 import '../theme/app_theme.dart';
+import 'user_avatar_widget.dart';
 
 /// Opens the dedicated full-screen [ProfileSettingsScreen].
 /// Returns the [UserProfile] if the user edited profile, or null otherwise.
@@ -40,6 +42,8 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
 
   late TextEditingController _nameController;
   late String _currentEmoji;
+  String? _currentImagePath;
+  bool _clearedCustomImage = false;
 
   static const List<String> _avatarEmojis = [
     '📓',
@@ -62,12 +66,104 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
     final user = UserService.instance.currentUser;
     _nameController = TextEditingController(text: user?.name ?? 'Student');
     _currentEmoji = user?.avatarEmoji ?? '📓';
+    _currentImagePath = user?.avatarImagePath ?? user?.avatarUrl;
+    _clearedCustomImage = false;
   }
 
   @override
   void dispose() {
     _nameController.dispose();
     super.dispose();
+  }
+
+  // ===========================================================================
+  // AVATAR PHOTO PICKER
+  // ===========================================================================
+
+  Future<void> _pickAvatarImage(ImageSource source) async {
+    try {
+      final picker = ImagePicker();
+      final picked = await picker.pickImage(
+        source: source,
+        maxWidth: 512,
+        maxHeight: 512,
+        imageQuality: 85,
+      );
+      if (picked != null) {
+        setState(() {
+          _currentImagePath = picked.path;
+          _clearedCustomImage = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error picking profile avatar: $e');
+    }
+  }
+
+  void _showImageSourceDialog() {
+    showCupertinoModalPopup<void>(
+      context: context,
+      builder: (ctx) => CupertinoActionSheet(
+        title: const Text(
+          'Choose Avatar Photo',
+          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+        ),
+        message: const Text('Pick a photo from your gallery or take a new one'),
+        actions: [
+          CupertinoActionSheetAction(
+            child: const Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(CupertinoIcons.photo_on_rectangle, size: 20),
+                SizedBox(width: 8),
+                Text('Choose from Gallery'),
+              ],
+            ),
+            onPressed: () {
+              Navigator.pop(ctx);
+              _pickAvatarImage(ImageSource.gallery);
+            },
+          ),
+          CupertinoActionSheetAction(
+            child: const Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(CupertinoIcons.camera, size: 20),
+                SizedBox(width: 8),
+                Text('Take a Photo'),
+              ],
+            ),
+            onPressed: () {
+              Navigator.pop(ctx);
+              _pickAvatarImage(ImageSource.camera);
+            },
+          ),
+          if (_currentImagePath != null)
+            CupertinoActionSheetAction(
+              isDestructiveAction: true,
+              child: const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(CupertinoIcons.trash, size: 18),
+                  SizedBox(width: 8),
+                  Text('Remove Photo (Use Emoji)'),
+                ],
+              ),
+              onPressed: () {
+                Navigator.pop(ctx);
+                setState(() {
+                  _currentImagePath = null;
+                  _clearedCustomImage = true;
+                });
+              },
+            ),
+        ],
+        cancelButton: CupertinoActionSheetAction(
+          child: const Text('Cancel'),
+          onPressed: () => Navigator.pop(ctx),
+        ),
+      ),
+    );
   }
 
   // ===========================================================================
@@ -81,6 +177,9 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
     await UserService.instance.updateProfile(
       name: name,
       avatarEmoji: _currentEmoji,
+      avatarImagePath: _currentImagePath,
+      avatarUrl: _currentImagePath,
+      clearCustomImage: _clearedCustomImage,
     );
 
     if (mounted) {
@@ -288,31 +387,12 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
       ),
       child: Row(
         children: [
-          // Circular Gradient Avatar
-          Container(
-            width: 64,
-            height: 64,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: const LinearGradient(
-                colors: [AppTheme.primaryPurple, AppTheme.accentPink],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: AppTheme.primaryPurple.withValues(alpha: 0.3),
-                  blurRadius: 12,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: Center(
-              child: Text(
-                user.avatarEmoji,
-                style: const TextStyle(fontSize: 30),
-              ),
-            ),
+          // Circular Avatar (supports custom photo & emoji)
+          UserAvatarWidget(
+            user: user,
+            size: 64,
+            showEditBadge: _isEditingProfile,
+            onEditTap: _showImageSourceDialog,
           ),
           const SizedBox(width: 16),
 
@@ -367,6 +447,8 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
                 if (_isEditingProfile) {
                   _nameController.text = user.name;
                   _currentEmoji = user.avatarEmoji;
+                  _currentImagePath = user.avatarImagePath ?? user.avatarUrl;
+                  _clearedCustomImage = false;
                 }
               });
             },
@@ -400,6 +482,80 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Avatar Preview & Upload Action
+          Row(
+            children: [
+              UserAvatarWidget(
+                emoji: _currentEmoji,
+                imagePath: _currentImagePath,
+                size: 58,
+                showEditBadge: true,
+                onEditTap: _showImageSourceDialog,
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Profile Photo / Avatar',
+                      style: TextStyle(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w800,
+                        color: AppTheme.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Wrap(
+                      spacing: 8,
+                      children: [
+                        OutlinedButton.icon(
+                          onPressed: _showImageSourceDialog,
+                          icon: const Icon(CupertinoIcons.camera_fill, size: 12),
+                          label: Text(
+                            _currentImagePath != null ? 'Change' : 'Upload Photo',
+                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            foregroundColor: AppTheme.primaryPurple,
+                            side: const BorderSide(color: AppTheme.primaryPurple),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                        ),
+                        if (_currentImagePath != null)
+                          TextButton.icon(
+                            onPressed: () {
+                              setState(() {
+                                _currentImagePath = null;
+                                _clearedCustomImage = true;
+                              });
+                            },
+                            icon: const Icon(CupertinoIcons.trash, size: 11, color: Color(0xFFEF4444)),
+                            label: const Text(
+                              'Use Emoji',
+                              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFFEF4444)),
+                            ),
+                            style: TextButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              minimumSize: Size.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 16),
+          const Divider(height: 1, color: AppTheme.dividerColor),
+          const SizedBox(height: 14),
+
           const Text(
             'Display Name',
             style: TextStyle(
@@ -438,6 +594,7 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
             ),
           ),
           const SizedBox(height: 14),
+
           const Text(
             'Choose Avatar Emoji',
             style: TextStyle(
@@ -451,9 +608,13 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
             scrollDirection: Axis.horizontal,
             child: Row(
               children: _avatarEmojis.map((emoji) {
-                final isSel = emoji == _currentEmoji;
+                final isSel = _currentImagePath == null && emoji == _currentEmoji;
                 return GestureDetector(
-                  onTap: () => setState(() => _currentEmoji = emoji),
+                  onTap: () => setState(() {
+                    _currentEmoji = emoji;
+                    _currentImagePath = null;
+                    _clearedCustomImage = true;
+                  }),
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 160),
                     width: 44,

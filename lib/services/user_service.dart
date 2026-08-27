@@ -99,6 +99,7 @@ class UserService {
   Future<UserProfile> createOfflineProfile({
     required String name,
     String avatarEmoji = '📓',
+    String? avatarImagePath,
     int avatarColorIndex = 0,
   }) async {
     final now = DateTime.now();
@@ -106,6 +107,7 @@ class UserService {
       id: generateUuid(),
       name: name.trim().isEmpty ? 'Student' : name.trim(),
       avatarEmoji: avatarEmoji,
+      avatarImagePath: avatarImagePath,
       avatarColorIndex: avatarColorIndex,
       isCloudLinked: false,
       createdAt: now,
@@ -120,10 +122,13 @@ class UserService {
     return profile;
   }
 
-  /// Updates profile details (name, avatar, color)
+  /// Updates profile details (name, avatar emoji, avatar photo, color)
   Future<void> updateProfile({
     String? name,
     String? avatarEmoji,
+    String? avatarImagePath,
+    String? avatarUrl,
+    bool clearCustomImage = false,
     int? avatarColorIndex,
   }) async {
     final current = currentUser;
@@ -132,6 +137,9 @@ class UserService {
     final updated = current.copyWith(
       name: name != null && name.trim().isNotEmpty ? name.trim() : current.name,
       avatarEmoji: avatarEmoji ?? current.avatarEmoji,
+      avatarImagePath: avatarImagePath,
+      avatarUrl: avatarUrl,
+      clearCustomImage: clearCustomImage,
       avatarColorIndex: avatarColorIndex ?? current.avatarColorIndex,
       lastActiveAt: DateTime.now(),
     );
@@ -142,7 +150,7 @@ class UserService {
       try {
         final client = Supabase.instance.client;
         final targetId = updated.supabaseUserId ?? client.auth.currentUser?.id ?? updated.id;
-        final profilePayload = {
+        final profilePayload = <String, dynamic>{
           'id': targetId,
           'name': updated.name,
           'avatar_emoji': updated.avatarEmoji,
@@ -152,9 +160,21 @@ class UserService {
           'created_at': updated.createdAt.toUtc().toIso8601String(),
           'last_active_at': DateTime.now().toUtc().toIso8601String(),
         };
-        await client
-            .from('user_profiles')
-            .upsert(profilePayload, onConflict: 'id');
+        if (updated.avatarUrl != null) {
+          profilePayload['avatar_url'] = updated.avatarUrl;
+        }
+
+        try {
+          await client
+              .from('user_profiles')
+              .upsert(profilePayload, onConflict: 'id');
+        } catch (_) {
+          // If avatar_url column is not yet present in Supabase table, retry without it
+          profilePayload.remove('avatar_url');
+          await client
+              .from('user_profiles')
+              .upsert(profilePayload, onConflict: 'id');
+        }
       } catch (e) {
         debugPrint('Notice updating user profile to cloud: $e');
       }
@@ -167,6 +187,8 @@ class UserService {
     required String password,
     required bool isSignUp,
     String? optionalName,
+    String? optionalAvatarEmoji,
+    String? optionalAvatarImagePath,
   }) async {
     final client = Supabase.instance.client;
 
@@ -195,7 +217,8 @@ class UserService {
     String displayName = optionalName?.trim().isNotEmpty == true
         ? optionalName!.trim()
         : (currentUser?.name ?? user.email?.split('@').first ?? 'Student');
-    String avatarEmoji = currentUser?.avatarEmoji ?? '📓';
+    String avatarEmoji = optionalAvatarEmoji ?? currentUser?.avatarEmoji ?? '📓';
+    String? avatarImagePath = optionalAvatarImagePath ?? currentUser?.avatarImagePath;
     int avatarColorIndex = currentUser?.avatarColorIndex ?? 0;
 
     try {
@@ -212,6 +235,9 @@ class UserService {
         if (remoteProfileRes['avatar_emoji'] != null) {
           avatarEmoji = remoteProfileRes['avatar_emoji'] as String;
         }
+        if (remoteProfileRes['avatar_url'] != null) {
+          avatarImagePath = remoteProfileRes['avatar_url'] as String;
+        }
         if (remoteProfileRes['avatar_color_index'] != null) {
           avatarColorIndex = remoteProfileRes['avatar_color_index'] as int;
         }
@@ -223,6 +249,8 @@ class UserService {
       id: user.id,
       name: displayName,
       avatarEmoji: avatarEmoji,
+      avatarImagePath: avatarImagePath,
+      avatarUrl: avatarImagePath,
       avatarColorIndex: avatarColorIndex,
       email: user.email ?? email.trim(),
       isCloudLinked: true,
@@ -235,7 +263,7 @@ class UserService {
 
     // Direct immediate upsert to user_profiles table in Supabase
     try {
-      final profilePayload = {
+      final profilePayload = <String, dynamic>{
         'id': user.id,
         'name': linkedProfile.name,
         'avatar_emoji': linkedProfile.avatarEmoji,
@@ -245,9 +273,20 @@ class UserService {
         'created_at': linkedProfile.createdAt.toUtc().toIso8601String(),
         'last_active_at': DateTime.now().toUtc().toIso8601String(),
       };
-      await client
-          .from('user_profiles')
-          .upsert(profilePayload, onConflict: 'id');
+      if (linkedProfile.avatarUrl != null) {
+        profilePayload['avatar_url'] = linkedProfile.avatarUrl;
+      }
+
+      try {
+        await client
+            .from('user_profiles')
+            .upsert(profilePayload, onConflict: 'id');
+      } catch (_) {
+        profilePayload.remove('avatar_url');
+        await client
+            .from('user_profiles')
+            .upsert(profilePayload, onConflict: 'id');
+      }
     } catch (e) {
       debugPrint('Notice saving user profile to cloud: $e');
     }

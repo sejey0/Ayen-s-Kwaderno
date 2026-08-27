@@ -17,6 +17,7 @@ import '../widgets/handwriting_canvas.dart';
 import '../widgets/pdf_thumbnail_widget.dart';
 import '../widgets/type_note_dialog.dart';
 import '../widgets/upload_document_dialog.dart';
+import '../widgets/user_avatar_widget.dart';
 import '../widgets/write_note_choice_dialog.dart';
 import 'editor_screen.dart';
 
@@ -192,30 +193,9 @@ class _HomeScreenState extends State<HomeScreen> {
               Stack(
                 alignment: Alignment.bottomRight,
                 children: [
-                  Container(
-                    width: 72,
-                    height: 72,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      gradient: const LinearGradient(
-                        colors: [AppTheme.primaryPurple, AppTheme.accentPink],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: AppTheme.primaryPurple.withValues(alpha: 0.3),
-                          blurRadius: 16,
-                          offset: const Offset(0, 6),
-                        ),
-                      ],
-                    ),
-                    child: Center(
-                      child: Text(
-                        user.avatarEmoji,
-                        style: const TextStyle(fontSize: 34),
-                      ),
-                    ),
+                  UserAvatarWidget(
+                    user: user,
+                    size: 72,
                   ),
                   Container(
                     width: 26,
