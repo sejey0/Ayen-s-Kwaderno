@@ -92,9 +92,16 @@ class _EditorScreenState extends State<EditorScreen>
   int _pageCount = 1;
   double _pageWidth = 595.0;
   double _pageHeight = 842.0;
+  double _displayPageWidth = 595.0;
+  double _displayPageHeight = 842.0;
+  bool _isCurrentlyZoomed = false;
+  Offset? _swipeStartPos;
+  int _activePointerCount = 0;
+  bool _hadMultiTouch = false;
   ui.Image? _renderedPageUiImage;
   final Map<int, ui.Image> _renderedPages = {};
   late PageController _pageController;
+  late final ScrollController _scrollController;
   bool _isLoadingPage = false;
 
   // Auto-Save & Synchronization State
@@ -124,7 +131,27 @@ class _EditorScreenState extends State<EditorScreen>
           _transformationController.value = _zoomAnimation!.value;
         }
       });
+    _transformationController.addListener(() {
+      final isZoomed =
+          _transformationController.value.getMaxScaleOnAxis() > 1.05;
+      if (isZoomed != _isCurrentlyZoomed && mounted) {
+        setState(() {
+          _isCurrentlyZoomed = isZoomed;
+        });
+      }
+    });
     _pageController = PageController(initialPage: _currentPage - 1);
+    _scrollController = ScrollController();
+    _scrollController.addListener(() {
+      final double totalItemH = _displayPageHeight + 16.0;
+      if (totalItemH > 0) {
+        final page = (_scrollController.offset / totalItemH).round() + 1;
+        final clamped = page.clamp(1, _pageCount);
+        if (clamped != _currentPage) {
+          _onPageChanged(clamped);
+        }
+      }
+    });
     _documentId = 'doc_${DateTime.now().millisecondsSinceEpoch}';
     if (_isImageDocument) {
       _loadImageDocument();
@@ -139,6 +166,7 @@ class _EditorScreenState extends State<EditorScreen>
     _cloudSyncDebounceTimer?.cancel();
     _zoomAnimationController.dispose();
     _pageController.dispose();
+    _scrollController.dispose();
     _transformationController.dispose();
     if (!_isImageDocument) {
       PdfViewerPlatform.instance.closeDocument(_documentId);
@@ -269,6 +297,16 @@ class _EditorScreenState extends State<EditorScreen>
           : PageSlideOrientation.vertical;
       _pageController = PageController(initialPage: _currentPage - 1);
     });
+
+    if (_slideOrientation == PageSlideOrientation.vertical) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (_scrollController.hasClients) {
+          final targetOffset =
+              (_currentPage - 1) * (_displayPageHeight + 16.0);
+          _scrollController.jumpTo(targetOffset);
+        }
+      });
+    }
   }
 
   /// Handles drag-to-page event from PageView
@@ -298,18 +336,37 @@ class _EditorScreenState extends State<EditorScreen>
     _preloadAdjacentPages(page);
   }
 
-  /// Changes the visible page with smooth animation
+  /// Changes the visible page with smooth transition
   Future<void> _goToPage(int page) async {
-    if (page < 1 || page > _pageCount || page == _currentPage) return;
+    if (page < 1 || page > _pageCount) return;
 
-    if (_pageController.hasClients) {
-      _pageController.animateToPage(
-        page - 1,
-        duration: const Duration(milliseconds: 320),
-        curve: Curves.easeOutCubic,
-      );
+    if (_transformationController.value != Matrix4.identity()) {
+      _transformationController.value = Matrix4.identity();
+    }
+
+    HapticFeedback.selectionClick();
+
+    if (_slideOrientation == PageSlideOrientation.vertical) {
+      if (_scrollController.hasClients) {
+        final targetOffset = (page - 1) * (_displayPageHeight + 16.0);
+        _scrollController.animateTo(
+          targetOffset,
+          duration: const Duration(milliseconds: 320),
+          curve: Curves.easeOutCubic,
+        );
+      } else {
+        _onPageChanged(page);
+      }
     } else {
-      _onPageChanged(page);
+      if (_pageController.hasClients) {
+        _pageController.animateToPage(
+          page - 1,
+          duration: const Duration(milliseconds: 320),
+          curve: Curves.easeOutCubic,
+        );
+      } else {
+        _onPageChanged(page);
+      }
     }
   }
 
@@ -658,8 +715,7 @@ class _EditorScreenState extends State<EditorScreen>
       targetMatrix = Matrix4.identity();
     } else {
       final pos = focalPoint ??
-          Offset((_pageWidth > 0 ? _pageWidth : 300) / 2,
-              (_pageHeight > 0 ? _pageHeight : 400) / 2);
+          Offset(_displayPageWidth / 2, _displayPageHeight / 2);
       final tx = -pos.dx * (targetScale - 1);
       final ty = -pos.dy * (targetScale - 1);
       targetMatrix = Matrix4.identity()
@@ -887,52 +943,110 @@ class _EditorScreenState extends State<EditorScreen>
                   double displayW = screenW;
                   double displayH = screenW / pageAspect;
 
-                  // If height is smaller than available viewport, fit nicely
-                  if (displayH > screenH * 0.95 && screenH > 200) {
-                    displayH = screenH * 0.95;
+                  if (displayH > screenH * 0.90 && screenH > 200) {
+                    displayH = screenH * 0.90;
                     displayW = displayH * pageAspect;
                   }
 
-                  if (_pageCount <= 1) {
-                    return InteractiveViewer(
-                      transformationController: _transformationController,
-                      minScale: 0.75,
-                      maxScale: 6.0,
-                      panEnabled: _activeTool == AnnotationTool.none,
-                      scaleEnabled: _activeTool == AnnotationTool.none,
-                      boundaryMargin: const EdgeInsets.all(60.0),
-                      clipBehavior: Clip.hardEdge,
-                      child: _buildSinglePageView(1, displayW, displayH),
-                    );
-                  }
+                  _displayPageWidth = displayW;
+                  _displayPageHeight = displayH;
 
-                  return PageView.builder(
-                    controller: _pageController,
-                    scrollDirection:
-                        _slideOrientation == PageSlideOrientation.vertical
-                            ? Axis.vertical
-                            : Axis.horizontal,
-                    physics: _activeTool == AnnotationTool.none
-                        ? const BouncingScrollPhysics()
-                        : const NeverScrollableScrollPhysics(),
-                    itemCount: _pageCount,
-                    onPageChanged: (index) => _onPageChanged(index + 1),
-                    itemBuilder: (context, index) {
-                      final pageNum = index + 1;
-                      return InteractiveViewer(
-                        transformationController: pageNum == _currentPage
-                            ? _transformationController
-                            : null,
-                        minScale: 0.75,
-                        maxScale: 6.0,
-                        panEnabled: _activeTool == AnnotationTool.none,
-                        scaleEnabled: _activeTool == AnnotationTool.none,
-                        boundaryMargin: const EdgeInsets.all(60.0),
-                        clipBehavior: Clip.none,
-                        child:
-                            _buildSinglePageView(pageNum, displayW, displayH),
-                      );
-                    },
+                  return InteractiveViewer(
+                    transformationController: _transformationController,
+                    minScale: 1.0,
+                    maxScale: 6.0,
+                    panEnabled: _activeTool == AnnotationTool.none,
+                    scaleEnabled: _activeTool == AnnotationTool.none,
+                    boundaryMargin: EdgeInsets.zero,
+                    clipBehavior: Clip.hardEdge,
+                    child: Center(
+                      child: Listener(
+                        onPointerDown: (PointerDownEvent event) {
+                          _activePointerCount++;
+                          if (_activePointerCount == 1) {
+                            _swipeStartPos = event.position;
+                            _hadMultiTouch = false;
+                          } else if (_activePointerCount > 1) {
+                            _hadMultiTouch = true;
+                          }
+                        },
+                        onPointerUp: (PointerUpEvent event) {
+                          _activePointerCount =
+                              (_activePointerCount - 1).clamp(0, 10);
+                          if (_activePointerCount == 0 &&
+                              !_hadMultiTouch &&
+                              !_isCurrentlyZoomed &&
+                              _activeTool == AnnotationTool.none &&
+                              _swipeStartPos != null) {
+                            final double dx =
+                                event.position.dx - _swipeStartPos!.dx;
+                            final double dy =
+                                event.position.dy - _swipeStartPos!.dy;
+
+                            if (_slideOrientation ==
+                                PageSlideOrientation.horizontal) {
+                              if (dx < -45 && _currentPage < _pageCount) {
+                                _goToPage(_currentPage + 1);
+                              } else if (dx > 45 && _currentPage > 1) {
+                                _goToPage(_currentPage - 1);
+                              }
+                            } else {
+                              if (dy < -45 && _currentPage < _pageCount) {
+                                _goToPage(_currentPage + 1);
+                              } else if (dy > 45 && _currentPage > 1) {
+                                _goToPage(_currentPage - 1);
+                              }
+                            }
+                          }
+                          if (_activePointerCount == 0) {
+                            _swipeStartPos = null;
+                            _hadMultiTouch = false;
+                          }
+                        },
+                        onPointerCancel: (PointerCancelEvent event) {
+                          _activePointerCount =
+                              (_activePointerCount - 1).clamp(0, 10);
+                          if (_activePointerCount == 0) {
+                            _swipeStartPos = null;
+                            _hadMultiTouch = false;
+                          }
+                        },
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.translucent,
+                          onDoubleTapDown: (details) {
+                            if (_activeTool == AnnotationTool.none) {
+                              _toggleZoom(details.localPosition);
+                            }
+                          },
+                          child: AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 240),
+                            switchInCurve: Curves.easeOutCubic,
+                            switchOutCurve: Curves.easeInCubic,
+                            transitionBuilder: (child, animation) {
+                              final isVertical = _slideOrientation ==
+                                  PageSlideOrientation.vertical;
+                              return SlideTransition(
+                                position: Tween<Offset>(
+                                  begin: isVertical
+                                      ? const Offset(0.0, 0.04)
+                                      : const Offset(0.04, 0.0),
+                                  end: Offset.zero,
+                                ).animate(animation),
+                                child: FadeTransition(
+                                  opacity: animation,
+                                  child: child,
+                                ),
+                              );
+                            },
+                            child: KeyedSubtree(
+                              key: ValueKey<int>(_currentPage),
+                              child: _buildSinglePageView(
+                                  _currentPage, displayW, displayH),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
                   );
                 },
               ),
@@ -1097,155 +1211,141 @@ class _EditorScreenState extends State<EditorScreen>
         isCurrent ? _textAnnotations : (_perPageTextAnnotations[pageNum] ?? []);
 
     return Center(
-      child: GestureDetector(
-        behavior: HitTestBehavior.translucent,
-        onDoubleTapDown: (details) {
-          if (_activeTool == AnnotationTool.none) {
-            _toggleZoom(details.localPosition);
-          }
-        },
-        child: Container(
-          width: displayW,
-          height: displayH,
-          margin: EdgeInsets.symmetric(
-            horizontal:
-                _slideOrientation == PageSlideOrientation.horizontal ? 8 : 0,
-            vertical:
-                _slideOrientation == PageSlideOrientation.vertical ? 8 : 0,
-          ),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(4),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFF1E1B4B).withValues(alpha: 0.14),
-                blurRadius: 18,
-                offset: const Offset(0, 6),
-              ),
-            ],
-          ),
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              // 1. HD Rendered PDF Page Image
-              if (uiImage != null)
-                RawImage(
-                  image: uiImage,
-                  width: displayW,
-                  height: displayH,
-                  fit: BoxFit.fill,
-                )
-              else
-                const Center(
-                  child: CircularProgressIndicator(
-                    color: AppTheme.primaryPurple,
-                  ),
+      child: Container(
+        width: displayW,
+        height: displayH,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(4),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF1E1B4B).withValues(alpha: 0.14),
+              blurRadius: 18,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            // 1. HD Rendered PDF Page Image
+            if (uiImage != null)
+              RawImage(
+                image: uiImage,
+                width: displayW,
+                height: displayH,
+                fit: BoxFit.fill,
+              )
+            else
+              const Center(
+                child: CircularProgressIndicator(
+                  color: AppTheme.primaryPurple,
                 ),
-
-              // 2. Annotation & Drawing Canvas
-              Positioned.fill(
-                child: isCurrent
-                    ? IgnorePointer(
-                        ignoring: _activeTool == AnnotationTool.none,
-                        child: GestureDetector(
-                          behavior: HitTestBehavior.opaque,
-                          onPanStart: (DragStartDetails details) {
-                            if (_activeTool == AnnotationTool.highlighter ||
-                                _activeTool == AnnotationTool.straightLine) {
-                              setState(() {
-                                _redoHistory.clear();
-                                _currentStroke = Stroke(
-                                  points: [details.localPosition],
-                                  color: _selectedColor,
-                                  strokeWidth: _strokeWidth,
-                                  isStraightLine:
-                                      _activeTool == AnnotationTool.straightLine,
-                                );
-                              });
-                            }
-                          },
-                          onPanUpdate: (DragUpdateDetails details) {
-                            if (_currentStroke != null) {
-                              setState(() {
-                                _currentStroke!.points
-                                    .add(details.localPosition);
-                              });
-                            }
-                          },
-                          onPanEnd: (DragEndDetails details) {
-                            if (_currentStroke != null) {
-                              setState(() {
-                                _strokes.add(_currentStroke!);
-                                _perPageStrokes[_currentPage] =
-                                    List.from(_strokes);
-                                _currentStroke = null;
-                              });
-                              _autoSaveAndSync();
-                            }
-                          },
-                          onPanCancel: () {
-                            if (_currentStroke != null) {
-                              setState(() {
-                                _currentStroke = null;
-                              });
-                            }
-                          },
-                          child: CustomPaint(
-                            painter: BaseAnnotationPainter(
-                              strokes: pageStrokes,
-                              currentStroke: pageCurrentStroke,
-                              activeTool: _activeTool,
-                            ),
-                            size: Size.infinite,
-                          ),
-                        ),
-                      )
-                    : CustomPaint(
-                        painter: BaseAnnotationPainter(
-                          strokes: pageStrokes,
-                          currentStroke: null,
-                          activeTool: AnnotationTool.none,
-                        ),
-                        size: Size.infinite,
-                      ),
               ),
 
-              // 3. Image Stickers (Photos)
-              if (isCurrent)
-                ...pageImages.map((annotation) {
-                  return Positioned(
-                    left: annotation.position.dx,
-                    top: annotation.position.dy,
-                    child: _buildDraggableResizableImageWidget(annotation),
-                  );
-                })
-              else
-                ...pageImages.map((annotation) {
-                  return Positioned(
-                    left: annotation.position.dx,
-                    top: annotation.position.dy,
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(14),
-                      child: Image.file(
-                        File(annotation.imagePath),
-                        width: annotation.size.width,
-                        height: annotation.size.height,
-                        fit: BoxFit.cover,
+            // 2. Annotation & Drawing Canvas
+            Positioned.fill(
+              child: isCurrent
+                  ? IgnorePointer(
+                      ignoring: _activeTool == AnnotationTool.none,
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onPanStart: (DragStartDetails details) {
+                          if (_activeTool == AnnotationTool.highlighter ||
+                              _activeTool == AnnotationTool.straightLine) {
+                            setState(() {
+                              _redoHistory.clear();
+                              _currentStroke = Stroke(
+                                points: [details.localPosition],
+                                color: _selectedColor,
+                                strokeWidth: _strokeWidth,
+                                isStraightLine:
+                                    _activeTool == AnnotationTool.straightLine,
+                              );
+                            });
+                          }
+                        },
+                        onPanUpdate: (DragUpdateDetails details) {
+                          if (_currentStroke != null) {
+                            setState(() {
+                              _currentStroke!.points
+                                  .add(details.localPosition);
+                            });
+                          }
+                        },
+                        onPanEnd: (DragEndDetails details) {
+                          if (_currentStroke != null) {
+                            setState(() {
+                              _strokes.add(_currentStroke!);
+                              _perPageStrokes[_currentPage] =
+                                  List.from(_strokes);
+                              _currentStroke = null;
+                            });
+                            _autoSaveAndSync();
+                          }
+                        },
+                        onPanCancel: () {
+                          if (_currentStroke != null) {
+                            setState(() {
+                              _currentStroke = null;
+                            });
+                          }
+                        },
+                        child: CustomPaint(
+                          painter: BaseAnnotationPainter(
+                            strokes: pageStrokes,
+                            currentStroke: pageCurrentStroke,
+                            activeTool: _activeTool,
+                          ),
+                          size: Size.infinite,
+                        ),
                       ),
+                    )
+                  : CustomPaint(
+                      painter: BaseAnnotationPainter(
+                        strokes: pageStrokes,
+                        currentStroke: null,
+                        activeTool: AnnotationTool.none,
+                      ),
+                      size: Size.infinite,
                     ),
-                  );
-                }),
+            ),
 
-              // 4. Digital Text Notes (Saved Notes)
-              ...pageTexts.map((annotation) {
+            // 3. Image Stickers (Photos)
+            if (isCurrent)
+              ...pageImages.map((annotation) {
                 return Positioned(
                   left: annotation.position.dx,
                   top: annotation.position.dy,
-                  child: _buildDraggableTextWidget(annotation),
+                  child: _buildDraggableResizableImageWidget(annotation),
+                );
+              })
+            else
+              ...pageImages.map((annotation) {
+                return Positioned(
+                  left: annotation.position.dx,
+                  top: annotation.position.dy,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(14),
+                    child: Image.file(
+                      File(annotation.imagePath),
+                      width: annotation.size.width,
+                      height: annotation.size.height,
+                      fit: BoxFit.cover,
+                    ),
+                  ),
                 );
               }),
-            ],
-          ),
+
+            // 4. Digital Text Notes (Saved Notes)
+            ...pageTexts.map((annotation) {
+              return Positioned(
+                left: annotation.position.dx,
+                top: annotation.position.dy,
+                child: _buildDraggableTextWidget(annotation),
+              );
+            }),
+          ],
         ),
       ),
     );
