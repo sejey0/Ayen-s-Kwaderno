@@ -161,14 +161,14 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
     }
   }
 
-  /// Dynamic Logout Routing Logic
+  /// Non-Destructive Logout: Signs out active session without removing profile card from switcher list
   Future<void> _handleLogout() async {
     final confirmed = await showCupertinoDialog<bool>(
       context: context,
       builder: (context) => CupertinoAlertDialog(
         title: const Text('Log Out of Account?'),
         content: const Text(
-          'Are you sure you want to log out? Your notes and documents remain safely stored in your cloud account.',
+          'Your profile and notes remain safely saved on this device. You can easily switch back or re-authenticate anytime.',
         ),
         actions: [
           CupertinoDialogAction(
@@ -188,18 +188,19 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
       if (Navigator.of(context).canPop()) {
         Navigator.of(context).pop();
       }
-      // Ends active session for this profile and dynamically routes
-      await UserService.instance.logoutCurrentProfile();
+      // Non-destructive: keeps all profile cards saved on device
+      await UserService.instance.logout();
     }
   }
 
+  /// Explicit Profile Removal: Triggers confirmation before deleting profile data from device
   Future<void> _handleDeleteProfile(UserProfile targetProfile) async {
     final confirmed = await showCupertinoDialog<bool>(
       context: context,
       builder: (context) => CupertinoAlertDialog(
-        title: Text('Remove Profile "${targetProfile.name}"?'),
+        title: Text('Remove "${targetProfile.name}"?'),
         content: const Text(
-          'This will remove this profile from this device. Cloud-synced data remains safe in your cloud account.',
+          'Are you sure you want to remove this profile from this device? Cloud-synced data will remain safe in your cloud account.',
         ),
         actions: [
           CupertinoDialogAction(
@@ -208,7 +209,7 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
           ),
           CupertinoDialogAction(
             isDestructiveAction: true,
-            child: const Text('Remove'),
+            child: const Text('Remove Profile'),
             onPressed: () => Navigator.pop(context, true),
           ),
         ],
@@ -225,6 +226,16 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
       } else {
         setState(() {});
       }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Profile "${targetProfile.name}" removed from device.'),
+          backgroundColor: AppTheme.primaryPurpleDark,
+          behavior: SnackBarBehavior.floating,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          duration: const Duration(seconds: 2),
+        ),
+      );
     }
   }
 
@@ -848,7 +859,7 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
             ),
             const SizedBox(height: 12),
 
-            // Profile List Cards
+            // Profile List Cards (Tappable cards to switch, active with checkmark, dedicated trash icon)
             ...profiles.map((p) {
               final isActive = p.id == activeUser.id;
               return _buildProfileItemCard(p, isActive);
@@ -860,94 +871,134 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
   }
 
   Widget _buildProfileItemCard(UserProfile profile, bool isActive) {
-    return GestureDetector(
-      onTap: isActive ? null : () => _handleSwitchProfile(profile.id),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        margin: const EdgeInsets.only(bottom: 8),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        decoration: BoxDecoration(
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: isActive
+            ? AppTheme.primaryPurpleLight.withValues(alpha: 0.5)
+            : AppTheme.surfaceWhite,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
           color: isActive
-              ? AppTheme.primaryPurpleLight.withValues(alpha: 0.5)
-              : AppTheme.surfaceWhite,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: isActive
-                ? AppTheme.primaryPurple.withValues(alpha: 0.35)
-                : AppTheme.dividerColor,
-          ),
+              ? AppTheme.primaryPurple.withValues(alpha: 0.35)
+              : AppTheme.dividerColor,
         ),
-        child: Row(
-          children: [
-            // Emoji Avatar Container
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: isActive
-                    ? AppTheme.primaryPurple.withValues(alpha: 0.12)
-                    : AppTheme.background,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Center(
-                child: Text(profile.avatarEmoji,
-                    style: const TextStyle(fontSize: 20)),
-              ),
-            ),
-            const SizedBox(width: 12),
-            // Profile Name & Status
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    profile.name,
-                    style: TextStyle(
-                      fontWeight: isActive ? FontWeight.w800 : FontWeight.w600,
-                      fontSize: 14,
-                      color: AppTheme.textPrimary,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    profile.isCloudLinked
-                        ? (profile.email ?? '☁️ Cloud Linked')
-                        : '📱 Local · Offline',
-                    style: const TextStyle(
-                      fontSize: 11,
-                      color: AppTheme.textMuted,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            // Active Checkmark or Delete Icon
-            if (isActive)
-              Container(
-                width: 26,
-                height: 26,
-                decoration: BoxDecoration(
-                  color: AppTheme.primaryPurple,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Icon(CupertinoIcons.checkmark,
-                    size: 14, color: Colors.white),
-              )
-            else
-              GestureDetector(
-                onTap: () => _handleDeleteProfile(profile),
-                child: Container(
-                  width: 28,
-                  height: 28,
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: isActive ? null : () => _handleSwitchProfile(profile.id),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            child: Row(
+              children: [
+                // Emoji Avatar Container
+                Container(
+                  width: 42,
+                  height: 42,
                   decoration: BoxDecoration(
-                    color: const Color(0xFFFEE2E2),
-                    borderRadius: BorderRadius.circular(8),
+                    color: isActive
+                        ? AppTheme.primaryPurple.withValues(alpha: 0.12)
+                        : AppTheme.background,
+                    borderRadius: BorderRadius.circular(12),
                   ),
-                  child: const Icon(CupertinoIcons.trash,
-                      size: 13, color: Color(0xFFEF4444)),
+                  child: Center(
+                    child: Text(profile.avatarEmoji,
+                        style: const TextStyle(fontSize: 20)),
+                  ),
                 ),
-              ),
-          ],
+                const SizedBox(width: 12),
+                // Profile Name & Status
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              profile.name,
+                              style: TextStyle(
+                                fontWeight: isActive
+                                    ? FontWeight.w800
+                                    : FontWeight.w600,
+                                fontSize: 14,
+                                color: AppTheme.textPrimary,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          if (isActive) ...[
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: AppTheme.primaryPurple,
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: const Text(
+                                'ACTIVE',
+                                style: TextStyle(
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w800,
+                                  color: Colors.white,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        profile.isCloudLinked
+                            ? (profile.email ?? '☁️ Cloud Linked')
+                            : '📱 Local · Offline',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: AppTheme.textMuted,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+                // Active Checkmark Indicator
+                if (isActive)
+                  Container(
+                    width: 24,
+                    height: 24,
+                    margin: const EdgeInsets.only(right: 6),
+                    decoration: BoxDecoration(
+                      color: AppTheme.primaryPurple.withValues(alpha: 0.15),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      CupertinoIcons.checkmark,
+                      size: 13,
+                      color: AppTheme.primaryPurple,
+                    ),
+                  ),
+                // Dedicated Trash / Remove Icon Button
+                IconButton(
+                  icon: const Icon(
+                    CupertinoIcons.trash,
+                    size: 16,
+                    color: Color(0xFFEF4444),
+                  ),
+                  tooltip: 'Remove Profile',
+                  padding: const EdgeInsets.all(6),
+                  constraints: const BoxConstraints(),
+                  splashRadius: 18,
+                  onPressed: () => _handleDeleteProfile(profile),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -997,7 +1048,7 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
           const SizedBox(height: 10),
         ],
 
-        // "Log Out Account": Primary red action button
+        // "Log Out Account": Primary red action button (Non-destructive)
         SizedBox(
           width: double.infinity,
           height: 46,
