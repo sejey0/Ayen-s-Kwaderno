@@ -1663,69 +1663,29 @@ class _EditorScreenState extends State<EditorScreen>
                   tooltip: 'Pan & Pinch Zoom Document',
                 ),
 
-                // Multi-page Slide Direction Switcher (Vertical / Horizontal)
+                // Multi-page Slide Direction Switcher (Icon-only matching toolbar style)
                 if (_pageCount > 1) ...[
-                  const SizedBox(width: 4),
+                  const SizedBox(width: 2),
                   Tooltip(
                     message: _slideOrientation == PageSlideOrientation.vertical
-                        ? 'Mode: Vertical Scroll ↕ (Tap for Horizontal ↔)'
-                        : 'Mode: Horizontal Slide ↔ (Tap for Vertical ↕)',
+                        ? 'Vertical Scroll Mode (Tap for Horizontal ↔)'
+                        : 'Horizontal Slide Mode (Tap for Vertical ↕)',
                     child: Material(
                       color: Colors.transparent,
                       child: InkWell(
                         borderRadius: BorderRadius.circular(28),
                         onTap: _toggleSlideOrientation,
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 220),
-                          curve: Curves.easeOutCubic,
+                        child: Padding(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 10,
                             vertical: 8,
                           ),
-                          decoration: BoxDecoration(
-                            color: _slideOrientation ==
-                                    PageSlideOrientation.vertical
-                                ? const Color(0xFFE0F2FE)
-                                : AppTheme.primaryPurpleLight,
-                            borderRadius: BorderRadius.circular(28),
-                            border: Border.all(
-                              color: _slideOrientation ==
-                                      PageSlideOrientation.vertical
-                                  ? const Color(0xFF0284C7).withValues(alpha: 0.4)
-                                  : AppTheme.primaryPurple.withValues(alpha: 0.4),
-                              width: 1.2,
-                            ),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                _slideOrientation ==
-                                        PageSlideOrientation.vertical
-                                    ? CupertinoIcons.arrow_up_down
-                                    : CupertinoIcons.arrow_left_right,
-                                size: 15,
-                                color: _slideOrientation ==
-                                        PageSlideOrientation.vertical
-                                    ? const Color(0xFF0284C7)
-                                    : AppTheme.primaryPurple,
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                _slideOrientation ==
-                                        PageSlideOrientation.vertical
-                                    ? 'Vertical ↕'
-                                    : 'Horizontal ↔',
-                                style: TextStyle(
-                                  fontSize: 11.5,
-                                  fontWeight: FontWeight.w700,
-                                  color: _slideOrientation ==
-                                          PageSlideOrientation.vertical
-                                      ? const Color(0xFF0369A1)
-                                      : AppTheme.primaryPurpleDark,
-                                ),
-                              ),
-                            ],
+                          child: Icon(
+                            _slideOrientation == PageSlideOrientation.vertical
+                                ? CupertinoIcons.arrow_up_down
+                                : CupertinoIcons.arrow_left_right,
+                            size: 20,
+                            color: AppTheme.textSecondary,
                           ),
                         ),
                       ),
