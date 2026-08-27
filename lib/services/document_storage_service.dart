@@ -35,47 +35,23 @@ class DocumentStorageService {
   static Future<void> migrateLegacyDataToUser(String userId) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final allKeys = prefs.getKeys();
-
-      // 1. Migrate documents
       final userDocsKey = _getScopedDocumentsKey(userId);
-      final currentDocs = prefs.getString(userDocsKey);
-      if (currentDocs == null || currentDocs.isEmpty || currentDocs == '[]') {
-        String? foundDocs = prefs.getString(_legacyDocumentsKey);
-        if (foundDocs == null || foundDocs.isEmpty || foundDocs == '[]') {
-          for (final k in allKeys) {
-            if (k.startsWith('ayens_kwaderno_docs_u_') && k != userDocsKey) {
-              final val = prefs.getString(k);
-              if (val != null && val.isNotEmpty && val != '[]') {
-                foundDocs = val;
-                break;
-              }
-            }
-          }
-        }
-        if (foundDocs != null && foundDocs.isNotEmpty && foundDocs != '[]') {
-          await prefs.setString(userDocsKey, foundDocs);
+      if (!prefs.containsKey(userDocsKey)) {
+        final legacyDocs = prefs.getString(_legacyDocumentsKey);
+        if (legacyDocs != null && legacyDocs.isNotEmpty && legacyDocs != '[]') {
+          await prefs.setString(userDocsKey, legacyDocs);
+          await prefs.remove(_legacyDocumentsKey);
         }
       }
 
-      // 2. Migrate notes
       final userNotesKey = _getScopedNotesKey(userId);
-      final currentNotes = prefs.getString(userNotesKey);
-      if (currentNotes == null || currentNotes.isEmpty || currentNotes == '[]') {
-        String? foundNotes = prefs.getString(_legacyHandwritingNotesKey);
-        if (foundNotes == null || foundNotes.isEmpty || foundNotes == '[]') {
-          for (final k in allKeys) {
-            if (k.startsWith('ayens_kwaderno_notes_u_') && k != userNotesKey) {
-              final val = prefs.getString(k);
-              if (val != null && val.isNotEmpty && val != '[]') {
-                foundNotes = val;
-                break;
-              }
-            }
-          }
-        }
-        if (foundNotes != null && foundNotes.isNotEmpty && foundNotes != '[]') {
-          await prefs.setString(userNotesKey, foundNotes);
+      if (!prefs.containsKey(userNotesKey)) {
+        final legacyNotes = prefs.getString(_legacyHandwritingNotesKey);
+        if (legacyNotes != null &&
+            legacyNotes.isNotEmpty &&
+            legacyNotes != '[]') {
+          await prefs.setString(userNotesKey, legacyNotes);
+          await prefs.remove(_legacyHandwritingNotesKey);
         }
       }
     } catch (_) {}
@@ -106,12 +82,7 @@ class DocumentStorageService {
       final targetUserId = userId ?? UserService.instance.activeUserId;
       final prefs = await SharedPreferences.getInstance();
       final scopedKey = _getScopedDocumentsKey(targetUserId);
-      String? jsonString = prefs.getString(scopedKey);
-
-      if (jsonString == null || jsonString.isEmpty || jsonString == '[]') {
-        await migrateLegacyDataToUser(targetUserId);
-        jsonString = prefs.getString(scopedKey);
-      }
+      final String? jsonString = prefs.getString(scopedKey);
 
       if (jsonString == null || jsonString.isEmpty) {
         return [];
@@ -173,8 +144,7 @@ class DocumentStorageService {
             await loadLocalAnnotations(doc.fileName, targetUserId);
         if (annotationsData != null) {
           final payload = {
-            'user_id': targetUserId,
-            'document_name': doc.fileName,
+            'document_name': 'u_${targetUserId}___${doc.fileName}',
             'strokes_data': annotationsData['strokes'] ?? [],
             'texts_data': annotationsData['texts'] ?? [],
             'images_data': annotationsData['images'] ?? [],
@@ -210,8 +180,7 @@ class DocumentStorageService {
         await client
             .from('document_annotations')
             .delete()
-            .eq('document_name', fileName)
-            .eq('user_id', targetUserId);
+            .eq('document_name', 'u_${targetUserId}___$fileName');
       } catch (_) {}
 
       AutoSyncService.instance.triggerSync(immediate: true);
@@ -247,8 +216,7 @@ class DocumentStorageService {
       try {
         final client = Supabase.instance.client;
         final payload = {
-          'user_id': targetUserId,
-          'document_name': documentName,
+          'document_name': 'u_${targetUserId}___$documentName',
           'strokes_data': strokes.map((s) => s.toJson()).toList(),
           'texts_data': texts.map((t) => t.toJson()).toList(),
           'images_data': images.map((i) => i.toJson()).toList(),
@@ -314,12 +282,7 @@ class DocumentStorageService {
       final targetUserId = userId ?? UserService.instance.activeUserId;
       final prefs = await SharedPreferences.getInstance();
       final scopedKey = _getScopedNotesKey(targetUserId);
-      String? jsonString = prefs.getString(scopedKey);
-
-      if (jsonString == null || jsonString.isEmpty || jsonString == '[]') {
-        await migrateLegacyDataToUser(targetUserId);
-        jsonString = prefs.getString(scopedKey);
-      }
+      final String? jsonString = prefs.getString(scopedKey);
 
       if (jsonString == null || jsonString.isEmpty) {
         return [];
@@ -368,21 +331,26 @@ class DocumentStorageService {
       try {
         final client = Supabase.instance.client;
         final payload = {
-          'id': note.id,
-          'user_id': targetUserId,
+          'id': 'u_${targetUserId}___${note.id}',
           'title': note.title,
           'content': note.content,
           'palette_index': note.paletteIndex,
           'updated_at': note.updatedAt.toUtc().toIso8601String(),
           'created_at': note.createdAt.toUtc().toIso8601String(),
-          if (note.strokesJson != null) 'strokes_json': note.strokesJson,
-          'is_handwritten': note.isHandwritten,
         };
         client
             .from('handwriting_notes')
             .upsert(payload, onConflict: 'id')
             .then((_) {})
             .catchError((_) {});
+
+        if (note.strokesJson != null && note.strokesJson!.isNotEmpty) {
+          client.from('document_annotations').upsert({
+            'document_name': 'u_${targetUserId}___note_${note.id}',
+            'strokes_data': note.strokesJson,
+            'updated_at': note.updatedAt.toUtc().toIso8601String(),
+          }, onConflict: 'document_name').then((_) {}).catchError((_) {});
+        }
       } catch (_) {}
 
       if (triggerCloudSync) {
@@ -405,8 +373,11 @@ class DocumentStorageService {
         await client
             .from('handwriting_notes')
             .delete()
-            .eq('id', id)
-            .eq('user_id', targetUserId);
+            .eq('id', 'u_${targetUserId}___$id');
+        await client
+            .from('document_annotations')
+            .delete()
+            .eq('document_name', 'u_${targetUserId}___note_$id');
       } catch (_) {}
 
       AutoSyncService.instance.triggerSync(immediate: true);

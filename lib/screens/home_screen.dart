@@ -3,6 +3,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:path_provider/path_provider.dart';
 import '../models/document_item_model.dart';
 import '../models/handwriting_note_model.dart';
 import '../models/user_profile_model.dart';
@@ -211,77 +212,90 @@ class _HomeScreenState extends State<HomeScreen> {
 
   /// Opens a saved document card
   Future<void> _openDocument(DocumentItem doc) async {
-    final path = doc.filePath;
+    String? validPath = doc.filePath;
 
-    if (path != null && File(path).existsSync()) {
-      final updated = doc.copyWith(lastOpenedAt: DateTime.now());
+    // 1. Check if stored path exists
+    if (validPath != null && File(validPath).existsSync()) {
+      // Path exists!
+    } else {
+      // 2. Check saved_documents directory
+      try {
+        final appDir = await getApplicationDocumentsDirectory();
+        final savedDocsDir = Directory('${appDir.path}/saved_documents');
+        if (savedDocsDir.existsSync()) {
+          final candidates = [
+            File('${savedDocsDir.path}/${doc.fileName}'),
+            File('${savedDocsDir.path}/${doc.fileName}.pdf'),
+          ];
+          for (final f in candidates) {
+            if (f.existsSync()) {
+              validPath = f.path;
+              break;
+            }
+          }
+        }
+      } catch (_) {}
+    }
+
+    if (validPath != null && File(validPath).existsSync()) {
+      final updated = doc.copyWith(
+        filePath: validPath,
+        lastOpenedAt: DateTime.now(),
+      );
       await DocumentStorageService.saveOrUpdateDocument(updated);
 
       if (!mounted) return;
       await Navigator.of(context).push(
         MaterialPageRoute(
           builder: (context) => EditorScreen(
-            pdfPath: path,
+            pdfPath: validPath!,
             fileName: doc.fileName,
           ),
         ),
       );
 
       _loadInitialData();
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              const Icon(CupertinoIcons.folder_badge_plus,
-                  color: Colors.white, size: 18),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  'Select "${doc.fileName}" from device to load and sync annotations.',
-                  style: const TextStyle(fontSize: 13),
-                ),
-              ),
-            ],
-          ),
-          action: SnackBarAction(
-            label: 'Select PDF',
-            textColor: AppTheme.accentPinkLight,
-            onPressed: () async {
-              final picked = await FilePicker.pickFile(
-                type: FileType.custom,
-                allowedExtensions: ['pdf', 'png', 'jpg', 'jpeg', 'webp', 'bmp'],
-              );
-              if (picked != null && picked.path != null) {
-                final selectedPath = picked.path!;
-                final updatedDoc = doc.copyWith(
-                  filePath: selectedPath,
-                  lastOpenedAt: DateTime.now(),
-                );
-                await DocumentStorageService.saveOrUpdateDocument(updatedDoc);
+      return;
+    }
 
-                if (!mounted) return;
-                await Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (context) => EditorScreen(
-                      pdfPath: selectedPath,
-                      fileName: doc.fileName,
-                    ),
-                  ),
-                );
-                _loadInitialData();
-              }
-            },
+    // 3. Prompt user directly to pick the document file to open with cloud annotations
+    final picked = await FilePicker.pickFile(
+      type: FileType.custom,
+      allowedExtensions: ['pdf', 'png', 'jpg', 'jpeg', 'webp', 'bmp'],
+      dialogTitle: 'Select "${doc.fileName}" to view and edit',
+    );
+
+    if (picked != null && picked.path != null) {
+      String persistentPath = picked.path!;
+      try {
+        final appDir = await getApplicationDocumentsDirectory();
+        final savedDocsDir = Directory('${appDir.path}/saved_documents');
+        if (!savedDocsDir.existsSync()) {
+          savedDocsDir.createSync(recursive: true);
+        }
+        final permanentFile = File('${savedDocsDir.path}/${doc.fileName}');
+        if (permanentFile.path != persistentPath) {
+          await File(persistentPath).copy(permanentFile.path);
+          persistentPath = permanentFile.path;
+        }
+      } catch (_) {}
+
+      final updatedDoc = doc.copyWith(
+        filePath: persistentPath,
+        lastOpenedAt: DateTime.now(),
+      );
+      await DocumentStorageService.saveOrUpdateDocument(updatedDoc);
+
+      if (!mounted) return;
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => EditorScreen(
+            pdfPath: persistentPath,
+            fileName: doc.fileName,
           ),
-          backgroundColor: AppTheme.primaryPurpleDark,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          margin: const EdgeInsets.all(16),
-          duration: const Duration(seconds: 4),
         ),
       );
+      _loadInitialData();
     }
   }
 

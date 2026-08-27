@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/document_item_model.dart';
 import '../models/handwriting_note_model.dart';
@@ -125,8 +127,6 @@ class AutoSyncService {
     try {
       final client = Supabase.instance.client;
       final activeUserId = UserService.instance.activeUserId;
-      final authUserId =
-          client.auth.currentUser?.id ?? user?.supabaseUserId ?? activeUserId;
 
       // -------------------------------------------------------------
       // 0. AUTO-UPLOAD USER PROFILE TO SUPABASE
@@ -153,215 +153,189 @@ class AutoSyncService {
         }
       }
 
-      // -------------------------------------------------------------
-      // 1. AUTO-UPLOAD ALL SAVED HANDWRITTEN & TYPED NOTES TO SUPABASE
-      // -------------------------------------------------------------
-      final localNotes =
-          await DocumentStorageService.loadHandwritingNotes(activeUserId);
-      for (final note in localNotes) {
-        try {
-          final payload = {
-            'id': note.id,
-            'user_id': authUserId,
-            'title': note.title,
-            'content': note.content,
-            'palette_index': note.paletteIndex,
-            'updated_at': note.updatedAt.toUtc().toIso8601String(),
-            'created_at': note.createdAt.toUtc().toIso8601String(),
-            if (note.strokesJson != null) 'strokes_json': note.strokesJson,
-            'is_handwritten': note.isHandwritten,
-          };
-          await client
-              .from('handwriting_notes')
-              .upsert(payload, onConflict: 'id');
-        } catch (e) {
-          debugPrint('Notice syncing note ${note.id}: $e');
-        }
-      }
+      final userPrefix = 'u_${activeUserId}___';
 
       // -------------------------------------------------------------
-      // 2. AUTO-UPLOAD ALL DOCUMENT ANNOTATIONS TO SUPABASE
+      // 1. FETCH REMOTE HANDWRITTEN NOTES FROM SUPABASE
       // -------------------------------------------------------------
-      final localDocs =
-          await DocumentStorageService.loadSavedDocuments(activeUserId);
-      for (final doc in localDocs) {
-        try {
-          final annotationsData =
-              await DocumentStorageService.loadLocalAnnotations(
-                  doc.fileName, activeUserId);
-          if (annotationsData != null) {
-            final payload = {
-              'user_id': authUserId,
-              'document_name': doc.fileName,
-              'strokes_data': annotationsData['strokes'] ?? [],
-              'texts_data': annotationsData['texts'] ?? [],
-              'images_data': annotationsData['images'] ?? [],
-              'updated_at': annotationsData['updated_at'] ??
-                  DateTime.now().toUtc().toIso8601String(),
-            };
-            await client
-                .from('document_annotations')
-                .upsert(payload, onConflict: 'document_name');
-          }
-        } catch (e) {
-          debugPrint('Notice syncing annotations for ${doc.fileName}: $e');
-        }
-      }
-
-      // -------------------------------------------------------------
-      // 3. FETCH & MERGE ANY REMOTE HANDWRITTEN NOTES FROM SUPABASE
-      // -------------------------------------------------------------
+      final List<HandwritingNote> cloudNotes = [];
       try {
         final notesResponse = await client
             .from('handwriting_notes')
             .select()
             .order('updated_at', ascending: false);
 
-        final Map<String, HandwritingNote> noteMap = {
-          for (var n in localNotes) n.id: n
-        };
-
         for (final row in notesResponse) {
-          final rowUserId = row['user_id'] as String?;
-            if (rowUserId != null &&
-                rowUserId.isNotEmpty &&
-                rowUserId != authUserId) {
-              continue; // Strictly skip other authenticated users' notes
-            }
-
-            // If note had no user_id set, link it to this authenticated user in Supabase
-            if (rowUserId == null || rowUserId.isEmpty) {
-              client
-                  .from('handwriting_notes')
-                  .update({'user_id': authUserId})
-                  .eq('id', row['id'])
-                  .then((_) {})
-                  .catchError((_) {});
-            }
-
-            final cloudNote =
-                HandwritingNote.fromJson(Map<String, dynamic>.from(row))
-                    .copyWith(isCloudSynced: true);
-
-            final localNote = noteMap[cloudNote.id];
-            if (localNote != null) {
-              noteMap[cloudNote.id] = cloudNote.copyWith(
-                isHandwritten:
-                    cloudNote.isHandwritten || localNote.isHandwritten,
-                strokesJson: cloudNote.strokesJson ?? localNote.strokesJson,
-              );
-            } else {
-              noteMap[cloudNote.id] = cloudNote;
-            }
-          }
-
-          final mergedNotes = noteMap.values.toList()
-            ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
-
-          for (final note in mergedNotes) {
-            await DocumentStorageService.saveOrUpdateHandwritingNote(
-              note,
-              userId: activeUserId,
-              triggerCloudSync: false,
-            );
-          }
+          final rawId = row['id'] as String? ?? '';
+          if (!rawId.startsWith(userPrefix)) continue;
+          final cleanId = rawId.substring(userPrefix.length);
+          final map = Map<String, dynamic>.from(row);
+          map['id'] = cleanId;
+          cloudNotes.add(
+            HandwritingNote.fromJson(map).copyWith(isCloudSynced: true),
+          );
+        }
       } catch (e) {
         debugPrint('Notice fetching remote notes: $e');
       }
 
       // -------------------------------------------------------------
-      // 4. FETCH & MERGE ANY REMOTE ANNOTATIONS FROM SUPABASE
+      // 2. RESOLVE NOTES & UPLOAD ONLY NEW OFFLINE ITEMS
       // -------------------------------------------------------------
+      final localNotes =
+          await DocumentStorageService.loadHandwritingNotes(activeUserId);
+      final Set<String> cloudNoteIds = cloudNotes.map((n) => n.id).toSet();
+      final List<HandwritingNote> finalNotes = List.from(cloudNotes);
+
+      for (final local in localNotes) {
+        if (!cloudNoteIds.contains(local.id) && !local.isCloudSynced) {
+          // Newly created offline note: upload to Supabase
+          try {
+            final remoteNoteId = '$userPrefix${local.id}';
+            final payload = {
+              'id': remoteNoteId,
+              'title': local.title,
+              'content': local.content,
+              'palette_index': local.paletteIndex,
+              'updated_at': local.updatedAt.toUtc().toIso8601String(),
+              'created_at': local.createdAt.toUtc().toIso8601String(),
+            };
+            await client
+                .from('handwriting_notes')
+                .upsert(payload, onConflict: 'id');
+
+            if (local.strokesJson != null && local.strokesJson!.isNotEmpty) {
+              try {
+                await client.from('document_annotations').upsert({
+                  'document_name': '${userPrefix}note_${local.id}',
+                  'strokes_data': local.strokesJson,
+                  'updated_at': local.updatedAt.toUtc().toIso8601String(),
+                }, onConflict: 'document_name');
+              } catch (_) {}
+            }
+            finalNotes.add(local.copyWith(isCloudSynced: true));
+          } catch (e) {
+            debugPrint('Notice uploading offline note ${local.id}: $e');
+            finalNotes.add(local);
+          }
+        }
+      }
+      finalNotes.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+        'ayens_kwaderno_notes_u_$activeUserId',
+        jsonEncode(finalNotes.map((n) => n.toJson()).toList()),
+      );
+
+      // -------------------------------------------------------------
+      // 3. FETCH REMOTE DOCUMENT ANNOTATIONS FROM SUPABASE
+      // -------------------------------------------------------------
+      final List<DocumentItem> cloudDocs = [];
+      final localDocs =
+          await DocumentStorageService.loadSavedDocuments(activeUserId);
       try {
         final annotationsResponse =
             await client.from('document_annotations').select();
 
-        final Map<String, DocumentItem> docMap = {
-          for (var d in localDocs) d.fileName: d
-        };
-
         for (final row in annotationsResponse) {
-          final rowUserId = row['user_id'] as String?;
-            if (rowUserId != null &&
-                rowUserId.isNotEmpty &&
-                rowUserId != authUserId) {
-              continue; // Strictly skip other authenticated users' documents
-            }
+          final rawDocName = row['document_name'] as String?;
+          if (rawDocName == null || !rawDocName.startsWith(userPrefix)) continue;
 
-            final docName = row['document_name'] as String?;
-            if (docName == null || docName.isEmpty) continue;
+          final docName = rawDocName.substring(userPrefix.length);
+          if (docName.isEmpty || docName.startsWith('note_')) continue;
 
-            // If document annotation had no user_id set, link it to this authenticated user in Supabase
-            if (rowUserId == null || rowUserId.isEmpty) {
-              client
-                  .from('document_annotations')
-                  .update({'user_id': authUserId})
-                  .eq('document_name', docName)
-                  .then((_) {})
-                  .catchError((_) {});
-            }
+          final strokes = (row['strokes_data'] is List)
+              ? (row['strokes_data'] as List<dynamic>)
+              : (row['strokes_data'] is Map
+                  ? (row['strokes_data'] as Map)
+                      .values
+                      .expand((e) => e is List ? e : [])
+                      .toList()
+                  : []);
+          final texts = (row['texts_data'] is List)
+              ? (row['texts_data'] as List<dynamic>)
+              : (row['texts_data'] is Map
+                  ? (row['texts_data'] as Map)
+                      .values
+                      .expand((e) => e is List ? e : [])
+                      .toList()
+                  : []);
+          final images = (row['images_data'] is List)
+              ? (row['images_data'] as List<dynamic>)
+              : (row['images_data'] is Map
+                  ? (row['images_data'] as Map)
+                      .values
+                      .expand((e) => e is List ? e : [])
+                      .toList()
+                  : []);
+          final totalAnnotations =
+              strokes.length + texts.length + images.length;
+          final cloudUpdatedAt = row['updated_at'] != null
+              ? DateTime.tryParse(row['updated_at'] as String)?.toLocal() ??
+                  DateTime.now()
+              : DateTime.now();
 
-            final strokes = (row['strokes_data'] is List)
-                ? (row['strokes_data'] as List<dynamic>)
-                : (row['strokes_data'] is Map
-                    ? (row['strokes_data'] as Map)
-                        .values
-                        .expand((e) => e is List ? e : [])
-                        .toList()
-                    : []);
-            final texts = (row['texts_data'] is List)
-                ? (row['texts_data'] as List<dynamic>)
-                : (row['texts_data'] is Map
-                    ? (row['texts_data'] as Map)
-                        .values
-                        .expand((e) => e is List ? e : [])
-                        .toList()
-                    : []);
-            final images = (row['images_data'] is List)
-                ? (row['images_data'] as List<dynamic>)
-                : (row['images_data'] is Map
-                    ? (row['images_data'] as Map)
-                        .values
-                        .expand((e) => e is List ? e : [])
-                        .toList()
-                    : []);
-            final totalAnnotations =
-                strokes.length + texts.length + images.length;
-            final cloudUpdatedAt = row['updated_at'] != null
-                ? DateTime.tryParse(row['updated_at'] as String)?.toLocal() ??
-                    DateTime.now()
-                : DateTime.now();
+          // Check if localDoc had a local file path
+          final localDocIndex =
+              localDocs.indexWhere((d) => d.fileName == docName);
+          final localFilePath = localDocIndex >= 0
+              ? localDocs[localDocIndex].filePath
+              : null;
 
-            if (docMap.containsKey(docName)) {
-              final existing = docMap[docName]!;
-              docMap[docName] = existing.copyWith(
-                annotationsCount: totalAnnotations > 0
-                    ? totalAnnotations
-                    : existing.annotationsCount,
-                lastOpenedAt: cloudUpdatedAt.isAfter(existing.lastOpenedAt)
-                    ? cloudUpdatedAt
-                    : existing.lastOpenedAt,
-                isCloudSynced: true,
-              );
-            } else {
-              docMap[docName] = DocumentItem(
-                fileName: docName,
-                lastOpenedAt: cloudUpdatedAt,
-                annotationsCount: totalAnnotations,
-                isCloudSynced: true,
-                paletteIndex: 0,
-              );
-            }
-
-            await DocumentStorageService.saveOrUpdateDocument(
-              docMap[docName]!,
-              userId: activeUserId,
-              triggerCloudSync: false,
-            );
-          }
+          cloudDocs.add(DocumentItem(
+            fileName: docName,
+            filePath: localFilePath,
+            lastOpenedAt: cloudUpdatedAt,
+            annotationsCount: totalAnnotations,
+            isCloudSynced: true,
+            paletteIndex: 0,
+          ));
+        }
       } catch (e) {
         debugPrint('Notice fetching remote annotations: $e');
       }
+
+      // -------------------------------------------------------------
+      // 4. RESOLVE DOCUMENTS & UPLOAD ONLY NEW OFFLINE ITEMS
+      // -------------------------------------------------------------
+      final Set<String> cloudDocNames = cloudDocs.map((d) => d.fileName).toSet();
+      final List<DocumentItem> finalDocs = List.from(cloudDocs);
+
+      for (final local in localDocs) {
+        if (!cloudDocNames.contains(local.fileName) && !local.isCloudSynced) {
+          // Newly created offline doc: upload annotations to Supabase
+          try {
+            final annotationsData =
+                await DocumentStorageService.loadLocalAnnotations(
+                    local.fileName, activeUserId);
+            if (annotationsData != null) {
+              final remoteDocName = '$userPrefix${local.fileName}';
+              final payload = {
+                'document_name': remoteDocName,
+                'strokes_data': annotationsData['strokes'] ?? [],
+                'texts_data': annotationsData['texts'] ?? [],
+                'images_data': annotationsData['images'] ?? [],
+                'updated_at': annotationsData['updated_at'] ??
+                    DateTime.now().toUtc().toIso8601String(),
+              };
+              await client
+                  .from('document_annotations')
+                  .upsert(payload, onConflict: 'document_name');
+            }
+            finalDocs.add(local.copyWith(isCloudSynced: true));
+          } catch (e) {
+            debugPrint('Notice uploading offline doc ${local.fileName}: $e');
+            finalDocs.add(local);
+          }
+        }
+      }
+      finalDocs.sort((a, b) => b.lastOpenedAt.compareTo(a.lastOpenedAt));
+
+      await prefs.setString(
+        'ayens_kwaderno_docs_u_$activeUserId',
+        jsonEncode(finalDocs.map((d) => d.toJson()).toList()),
+      );
 
       statusNotifier.value = AutoSyncStatus.synced;
       lastSyncTimeNotifier.value = DateTime.now();

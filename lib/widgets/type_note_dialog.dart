@@ -161,13 +161,54 @@ class _TypeNoteDialogState extends State<TypeNoteDialog> {
                           ),
                         ],
                       ),
-                      IconButton(
-                        icon: const Icon(
-                          CupertinoIcons.xmark_circle_fill,
-                          color: AppTheme.textMuted,
-                          size: 24,
-                        ),
-                        onPressed: () => Navigator.pop(context),
+                      Row(
+                        children: [
+                          if (widget.existingNote != null)
+                            IconButton(
+                              icon: const Icon(
+                                CupertinoIcons.trash,
+                                color: Colors.redAccent,
+                                size: 20,
+                              ),
+                              tooltip: 'Delete Note',
+                              onPressed: () async {
+                                final confirmed = await showCupertinoDialog<bool>(
+                                  context: context,
+                                  builder: (ctx) => CupertinoAlertDialog(
+                                    title: const Text('Delete Note?'),
+                                    content: const Text(
+                                        'This note will be permanently deleted from device and cloud.'),
+                                    actions: [
+                                      CupertinoDialogAction(
+                                        child: const Text('Cancel'),
+                                        onPressed: () => Navigator.pop(ctx, false),
+                                      ),
+                                      CupertinoDialogAction(
+                                        isDestructiveAction: true,
+                                        child: const Text('Delete'),
+                                        onPressed: () => Navigator.pop(ctx, true),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                                if (confirmed == true) {
+                                  await DocumentStorageService.deleteHandwritingNote(
+                                      widget.existingNote!.id);
+                                  if (context.mounted) {
+                                    Navigator.pop(context);
+                                  }
+                                }
+                              },
+                            ),
+                          IconButton(
+                            icon: const Icon(
+                              CupertinoIcons.xmark_circle_fill,
+                              color: AppTheme.textMuted,
+                              size: 24,
+                            ),
+                            onPressed: () => Navigator.pop(context),
+                          ),
+                        ],
                       ),
                     ],
                   ),

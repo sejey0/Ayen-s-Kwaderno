@@ -5,6 +5,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:syncfusion_pdfviewer_platform_interface/pdfviewer_platform_interface.dart';
 import '../models/document_item_model.dart';
 import '../services/document_storage_service.dart';
@@ -145,7 +146,22 @@ class _UploadDocumentDialogState extends State<UploadDocumentDialog> {
   Future<void> _uploadAndOpenDocument() async {
     if (_selectedFilePath == null) return;
 
-    final filePath = _selectedFilePath!;
+    String persistentPath = _selectedFilePath!;
+    try {
+      final appDir = await getApplicationDocumentsDirectory();
+      final savedDocsDir = Directory('${appDir.path}/saved_documents');
+      if (!savedDocsDir.existsSync()) {
+        savedDocsDir.createSync(recursive: true);
+      }
+      final baseName = _selectedFileName ??
+          'document_${DateTime.now().millisecondsSinceEpoch}.pdf';
+      final permanentFile = File('${savedDocsDir.path}/$baseName');
+      if (permanentFile.path != _selectedFilePath) {
+        await File(_selectedFilePath!).copy(permanentFile.path);
+        persistentPath = permanentFile.path;
+      }
+    } catch (_) {}
+
     // Use custom title if entered, otherwise fallback to filename
     final customTitle = _titleController.text.trim().isNotEmpty
         ? _titleController.text.trim()
@@ -154,7 +170,7 @@ class _UploadDocumentDialogState extends State<UploadDocumentDialog> {
     // Create & persist DocumentItem with the custom title
     final newDoc = DocumentItem(
       fileName: customTitle,
-      filePath: filePath,
+      filePath: persistentPath,
       lastOpenedAt: DateTime.now(),
       annotationsCount: 0,
       paletteIndex: DateTime.now().millisecond % 6,
@@ -170,7 +186,7 @@ class _UploadDocumentDialogState extends State<UploadDocumentDialog> {
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (context) => EditorScreen(
-          pdfPath: filePath,
+          pdfPath: persistentPath,
           fileName: customTitle,
         ),
       ),

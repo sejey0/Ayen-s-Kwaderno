@@ -49,7 +49,7 @@ class UserService {
                 UserProfile.fromJson(Map<String, dynamic>.from(item as Map)))
             .toList();
 
-        // Clean up and deduplicate profiles by email or unique ID
+        // Deduplicate profiles cleanly without merging document data
         final Map<String, UserProfile> uniqueMap = {};
         for (final p in rawProfiles) {
           final key = p.email != null && p.email!.trim().isNotEmpty
@@ -58,11 +58,12 @@ class UserService {
           if (!uniqueMap.containsKey(key)) {
             uniqueMap[key] = p;
           } else {
-            if (p.isCloudLinked) {
-              uniqueMap[key] = p;
-            }
+            final existing = uniqueMap[key]!;
+            final primary = p.isCloudLinked ? p : existing;
+            uniqueMap[key] = primary;
           }
         }
+
         profiles = uniqueMap.values.toList();
         await prefs.setString(
           _profilesKey,
@@ -356,9 +357,9 @@ class UserService {
       if (!uniqueMap.containsKey(key)) {
         uniqueMap[key] = p;
       } else {
-        if (p.id == profile.id || p.isCloudLinked) {
-          uniqueMap[key] = p;
-        }
+        final existing = uniqueMap[key]!;
+        final primary = p.id == profile.id || p.isCloudLinked ? p : existing;
+        uniqueMap[key] = primary;
       }
     }
     final cleanedList = uniqueMap.values.toList();

@@ -460,22 +460,25 @@ class _EditorScreenState extends State<EditorScreen>
     try {
       final client = Supabase.instance.client;
       final activeUserId = UserService.instance.activeUserId;
-      final authUserId = client.auth.currentUser?.id ?? activeUserId;
 
+      final scopedDocName = 'u_${activeUserId}___$_documentIdentifier';
       dynamic response;
       try {
         response = await client
             .from('document_annotations')
             .select()
-            .eq('document_name', _documentIdentifier)
-            .eq('user_id', authUserId)
+            .eq('document_name', scopedDocName)
             .maybeSingle();
-      } catch (_) {
-        response = await client
-            .from('document_annotations')
-            .select()
-            .eq('document_name', _documentIdentifier)
-            .maybeSingle();
+      } catch (_) {}
+
+      if (response == null) {
+        try {
+          response = await client
+              .from('document_annotations')
+              .select()
+              .eq('document_name', _documentIdentifier)
+              .maybeSingle();
+        } catch (_) {}
       }
 
       if (!mounted) return;
@@ -668,11 +671,8 @@ class _EditorScreenState extends State<EditorScreen>
     try {
       final client = Supabase.instance.client;
       final activeUserId = UserService.instance.activeUserId;
-      final authUserId = client.auth.currentUser?.id ?? activeUserId;
-
       final payload = {
-        'user_id': authUserId,
-        'document_name': _documentIdentifier,
+        'document_name': 'u_${activeUserId}___$_documentIdentifier',
         'strokes_data': {
           for (var entry in _perPageStrokes.entries)
             entry.key.toString(): entry.value.map((s) => s.toJson()).toList(),

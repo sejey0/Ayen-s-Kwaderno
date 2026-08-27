@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/user_profile_model.dart';
 import '../services/auto_sync_service.dart';
+import '../services/document_storage_service.dart';
 import '../services/user_service.dart';
 import '../theme/app_theme.dart';
 
@@ -220,6 +221,48 @@ class _AccountProfileDialogState extends State<AccountProfileDialog> {
       } else {
         setState(() {});
       }
+    }
+  }
+
+  Future<void> _handleResetLocalCache() async {
+    final user = UserService.instance.currentUser;
+    if (user == null) return;
+
+    final confirmed = await showCupertinoDialog<bool>(
+      context: context,
+      builder: (context) => CupertinoAlertDialog(
+        title: const Text('Reset Local Cache?'),
+        content: const Text(
+          'This will clear local device files for this profile and re-download fresh data from the cloud.',
+        ),
+        actions: [
+          CupertinoDialogAction(
+            child: const Text('Cancel'),
+            onPressed: () => Navigator.pop(context, false),
+          ),
+          CupertinoDialogAction(
+            isDestructiveAction: true,
+            child: const Text('Reset Cache'),
+            onPressed: () => Navigator.pop(context, true),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      await DocumentStorageService.deleteAllUserData(user.id);
+      await AutoSyncService.instance.syncAllToCloud();
+      UserService.instance.currentUserNotifier.value = user;
+      if (!mounted) return;
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content:
+              Text('Local cache reset for ${user.name}. Fresh cloud sync complete.'),
+          backgroundColor: const Color(0xFF2E7D32),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
     }
   }
 
@@ -1000,6 +1043,36 @@ class _AccountProfileDialogState extends State<AccountProfileDialog> {
                         ),
                       ),
                       const SizedBox(height: 12),
+                      if (isCloud) ...[
+                        SizedBox(
+                          width: double.infinity,
+                          height: 38,
+                          child: OutlinedButton.icon(
+                            onPressed: _handleResetLocalCache,
+                            icon: const Icon(
+                              Icons.refresh_rounded,
+                              size: 15,
+                              color: Color(0xFF6B7280),
+                            ),
+                            label: const Text(
+                              'Reset Local Cache & Re-sync',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 12,
+                                color: Color(0xFF374151),
+                              ),
+                            ),
+                            style: OutlinedButton.styleFrom(
+                              side: const BorderSide(color: Color(0xFFD1D5DB)),
+                              backgroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                      ],
                       SizedBox(
                         width: double.infinity,
                         height: 42,
