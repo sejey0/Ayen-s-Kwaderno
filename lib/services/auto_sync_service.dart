@@ -212,31 +212,31 @@ class AutoSyncService {
       // 3. FETCH & MERGE ANY REMOTE HANDWRITTEN NOTES FROM SUPABASE
       // -------------------------------------------------------------
       try {
-        dynamic notesResponse;
-        try {
-          notesResponse = await client
-              .from('handwriting_notes')
-              .select()
-              .eq('user_id', authUserId)
-              .order('updated_at', ascending: false);
-        } catch (_) {
-          notesResponse = await client
-              .from('handwriting_notes')
-              .select()
-              .order('updated_at', ascending: false);
-        }
+        final notesResponse = await client
+            .from('handwriting_notes')
+            .select()
+            .order('updated_at', ascending: false);
 
         final Map<String, HandwritingNote> noteMap = {
           for (var n in localNotes) n.id: n
         };
 
-        if (notesResponse is List) {
-          for (final row in notesResponse) {
-            final rowUserId = row['user_id'] as String?;
+        for (final row in notesResponse) {
+          final rowUserId = row['user_id'] as String?;
             if (rowUserId != null &&
                 rowUserId.isNotEmpty &&
                 rowUserId != authUserId) {
-              continue; // Strictly skip other users' notes
+              continue; // Strictly skip other authenticated users' notes
+            }
+
+            // If note had no user_id set, link it to this authenticated user in Supabase
+            if (rowUserId == null || rowUserId.isEmpty) {
+              client
+                  .from('handwriting_notes')
+                  .update({'user_id': authUserId})
+                  .eq('id', row['id'])
+                  .then((_) {})
+                  .catchError((_) {});
             }
 
             final cloudNote =
@@ -265,7 +265,6 @@ class AutoSyncService {
               triggerCloudSync: false,
             );
           }
-        }
       } catch (e) {
         debugPrint('Notice fetching remote notes: $e');
       }
@@ -274,36 +273,58 @@ class AutoSyncService {
       // 4. FETCH & MERGE ANY REMOTE ANNOTATIONS FROM SUPABASE
       // -------------------------------------------------------------
       try {
-        dynamic annotationsResponse;
-        try {
-          annotationsResponse = await client
-              .from('document_annotations')
-              .select()
-              .eq('user_id', authUserId);
-        } catch (_) {
-          annotationsResponse =
-              await client.from('document_annotations').select();
-        }
+        final annotationsResponse =
+            await client.from('document_annotations').select();
 
         final Map<String, DocumentItem> docMap = {
           for (var d in localDocs) d.fileName: d
         };
 
-        if (annotationsResponse is List) {
-          for (final row in annotationsResponse) {
-            final rowUserId = row['user_id'] as String?;
+        for (final row in annotationsResponse) {
+          final rowUserId = row['user_id'] as String?;
             if (rowUserId != null &&
                 rowUserId.isNotEmpty &&
                 rowUserId != authUserId) {
-              continue; // Strictly skip other users' documents
+              continue; // Strictly skip other authenticated users' documents
             }
 
             final docName = row['document_name'] as String?;
             if (docName == null || docName.isEmpty) continue;
 
-            final strokes = (row['strokes_data'] as List<dynamic>?) ?? [];
-            final texts = (row['texts_data'] as List<dynamic>?) ?? [];
-            final images = (row['images_data'] as List<dynamic>?) ?? [];
+            // If document annotation had no user_id set, link it to this authenticated user in Supabase
+            if (rowUserId == null || rowUserId.isEmpty) {
+              client
+                  .from('document_annotations')
+                  .update({'user_id': authUserId})
+                  .eq('document_name', docName)
+                  .then((_) {})
+                  .catchError((_) {});
+            }
+
+            final strokes = (row['strokes_data'] is List)
+                ? (row['strokes_data'] as List<dynamic>)
+                : (row['strokes_data'] is Map
+                    ? (row['strokes_data'] as Map)
+                        .values
+                        .expand((e) => e is List ? e : [])
+                        .toList()
+                    : []);
+            final texts = (row['texts_data'] is List)
+                ? (row['texts_data'] as List<dynamic>)
+                : (row['texts_data'] is Map
+                    ? (row['texts_data'] as Map)
+                        .values
+                        .expand((e) => e is List ? e : [])
+                        .toList()
+                    : []);
+            final images = (row['images_data'] is List)
+                ? (row['images_data'] as List<dynamic>)
+                : (row['images_data'] is Map
+                    ? (row['images_data'] as Map)
+                        .values
+                        .expand((e) => e is List ? e : [])
+                        .toList()
+                    : []);
             final totalAnnotations =
                 strokes.length + texts.length + images.length;
             final cloudUpdatedAt = row['updated_at'] != null
@@ -338,7 +359,6 @@ class AutoSyncService {
               triggerCloudSync: false,
             );
           }
-        }
       } catch (e) {
         debugPrint('Notice fetching remote annotations: $e');
       }

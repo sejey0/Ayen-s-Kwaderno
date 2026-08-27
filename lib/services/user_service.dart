@@ -44,10 +44,30 @@ class UserService {
       List<UserProfile> profiles = [];
       if (profilesJson != null && profilesJson.isNotEmpty) {
         final List<dynamic> decoded = jsonDecode(profilesJson) as List<dynamic>;
-        profiles = decoded
+        final rawProfiles = decoded
             .map((item) =>
                 UserProfile.fromJson(Map<String, dynamic>.from(item as Map)))
             .toList();
+
+        // Clean up and deduplicate profiles by email or unique ID
+        final Map<String, UserProfile> uniqueMap = {};
+        for (final p in rawProfiles) {
+          final key = p.email != null && p.email!.trim().isNotEmpty
+              ? p.email!.toLowerCase().trim()
+              : p.id;
+          if (!uniqueMap.containsKey(key)) {
+            uniqueMap[key] = p;
+          } else {
+            if (p.isCloudLinked) {
+              uniqueMap[key] = p;
+            }
+          }
+        }
+        profiles = uniqueMap.values.toList();
+        await prefs.setString(
+          _profilesKey,
+          jsonEncode(profiles.map((p) => p.toJson()).toList()),
+        );
       }
 
       profilesListNotifier.value = profiles;
@@ -253,6 +273,17 @@ class UserService {
     await _saveProfile(unlinked, makeActive: true);
   }
 
+  /// Logs out of active account session (signs out of Supabase and clears active session)
+  Future<void> logout() async {
+    try {
+      await Supabase.instance.client.auth.signOut();
+    } catch (_) {}
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_activeProfileIdKey);
+    currentUserNotifier.value = null;
+  }
+
   /// Switches active profile on device (scoped per user)
   Future<void> switchProfile(String profileId) async {
     final list = profilesListNotifier.value;
@@ -299,19 +330,45 @@ class UserService {
 
   Future<void> _saveProfile(UserProfile profile, {bool makeActive = true}) async {
     final list = List<UserProfile>.from(profilesListNotifier.value);
-    final idx = list.indexWhere((p) => p.id == profile.id);
+    
+    // Find matching profile by ID, email, or Supabase user ID
+    final idx = list.indexWhere((p) =>
+        p.id == profile.id ||
+        (profile.email != null &&
+            profile.email!.trim().isNotEmpty &&
+            p.email?.toLowerCase().trim() ==
+                profile.email!.toLowerCase().trim()) ||
+        (profile.supabaseUserId != null &&
+            p.supabaseUserId == profile.supabaseUserId));
+
     if (idx >= 0) {
       list[idx] = profile;
     } else {
       list.insert(0, profile);
     }
 
-    profilesListNotifier.value = list;
+    // Deduplicate profiles by email or id
+    final Map<String, UserProfile> uniqueMap = {};
+    for (final p in list) {
+      final key = p.email != null && p.email!.trim().isNotEmpty
+          ? p.email!.toLowerCase().trim()
+          : p.id;
+      if (!uniqueMap.containsKey(key)) {
+        uniqueMap[key] = p;
+      } else {
+        if (p.id == profile.id || p.isCloudLinked) {
+          uniqueMap[key] = p;
+        }
+      }
+    }
+    final cleanedList = uniqueMap.values.toList();
+
+    profilesListNotifier.value = cleanedList;
 
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(
       _profilesKey,
-      jsonEncode(list.map((p) => p.toJson()).toList()),
+      jsonEncode(cleanedList.map((p) => p.toJson()).toList()),
     );
 
     if (makeActive) {

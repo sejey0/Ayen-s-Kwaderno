@@ -162,6 +162,67 @@ class _AccountProfileDialogState extends State<AccountProfileDialog> {
     }
   }
 
+  Future<void> _handleLogout() async {
+    final confirmed = await showCupertinoDialog<bool>(
+      context: context,
+      builder: (context) => CupertinoAlertDialog(
+        title: const Text('Log Out of Account?'),
+        content: const Text(
+          'Are you sure you want to log out? Your notes and documents remain safely stored in your cloud account.',
+        ),
+        actions: [
+          CupertinoDialogAction(
+            child: const Text('Cancel'),
+            onPressed: () => Navigator.pop(context, false),
+          ),
+          CupertinoDialogAction(
+            isDestructiveAction: true,
+            child: const Text('Log Out'),
+            onPressed: () => Navigator.pop(context, true),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      Navigator.pop(context); // Close bottom sheet
+      await UserService.instance.logout();
+    }
+  }
+
+  Future<void> _handleDeleteProfile(UserProfile targetProfile) async {
+    final confirmed = await showCupertinoDialog<bool>(
+      context: context,
+      builder: (context) => CupertinoAlertDialog(
+        title: Text('Remove Profile "${targetProfile.name}"?'),
+        content: const Text(
+          'This will remove this profile and its local cached notes from this device. Cloud-synced data remains safe in your cloud account.',
+        ),
+        actions: [
+          CupertinoDialogAction(
+            child: const Text('Cancel'),
+            onPressed: () => Navigator.pop(context, false),
+          ),
+          CupertinoDialogAction(
+            isDestructiveAction: true,
+            child: const Text('Remove'),
+            onPressed: () => Navigator.pop(context, true),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      await UserService.instance.deleteProfile(targetProfile.id);
+      if (!mounted) return;
+      if (UserService.instance.currentUser == null) {
+        Navigator.pop(context);
+      } else {
+        setState(() {});
+      }
+    }
+  }
+
   Future<void> _handleSaveProfile() async {
     final name = _nameController.text.trim();
     if (name.isEmpty) return;
@@ -857,15 +918,33 @@ class _AccountProfileDialogState extends State<AccountProfileDialog> {
                                   ),
                                 ),
                                 if (isActive)
-                                  const Icon(CupertinoIcons.checkmark_alt_circle_fill,
-                                      color: AppTheme.primaryPurple, size: 18)
+                                  const Icon(
+                                      CupertinoIcons.checkmark_alt_circle_fill,
+                                      color: AppTheme.primaryPurple,
+                                      size: 18)
                                 else
-                                  TextButton(
-                                    onPressed: () {
-                                      UserService.instance.switchProfile(p.id);
-                                    },
-                                    child: const Text('Switch',
-                                        style: TextStyle(fontSize: 12)),
+                                  Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      TextButton(
+                                        onPressed: () {
+                                          UserService.instance
+                                              .switchProfile(p.id);
+                                        },
+                                        child: const Text('Switch',
+                                            style: TextStyle(fontSize: 12)),
+                                      ),
+                                      IconButton(
+                                        icon: const Icon(CupertinoIcons.trash,
+                                            size: 16,
+                                            color: Color(0xFFEF4444)),
+                                        padding: EdgeInsets.zero,
+                                        constraints: const BoxConstraints(),
+                                        onPressed: () =>
+                                            _handleDeleteProfile(p),
+                                        tooltip: 'Remove Profile',
+                                      ),
+                                    ],
                                   ),
                               ],
                             ),
@@ -875,6 +954,89 @@ class _AccountProfileDialogState extends State<AccountProfileDialog> {
                     );
                   },
                 ),
+
+                const SizedBox(height: 24),
+
+                // ==========================================
+                // DEDICATED LOGOUT / REMOVE CURRENT PROFILE CARD
+                // ==========================================
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFEF2F2),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: const Color(0xFFFCA5A5)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.logout_rounded,
+                              color: Color(0xFFDC2626), size: 18),
+                          const SizedBox(width: 8),
+                          Text(
+                            isCloud
+                                ? 'Account Session'
+                                : 'Active Profile Management',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 13,
+                              color: Color(0xFF991B1B),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        isCloud
+                            ? 'Logging out will sign you out of this device. Your notes and documents remain safely stored in your cloud account.'
+                            : 'Removing this profile will delete its local notes cache from this device.',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: Color(0xFFB91C1C),
+                          height: 1.3,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 42,
+                        child: OutlinedButton.icon(
+                          onPressed: isCloud
+                              ? _handleLogout
+                              : () => _handleDeleteProfile(user),
+                          icon: Icon(
+                            isCloud
+                                ? Icons.logout_rounded
+                                : CupertinoIcons.trash,
+                            size: 16,
+                            color: const Color(0xFFDC2626),
+                          ),
+                          label: Text(
+                            isCloud
+                                ? 'Log Out Account'
+                                : 'Remove Profile from Device',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 13,
+                              color: Color(0xFFDC2626),
+                            ),
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            side: const BorderSide(color: Color(0xFFDC2626)),
+                            backgroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 10),
               ],
             ),
           ),

@@ -35,23 +35,48 @@ class DocumentStorageService {
   static Future<void> migrateLegacyDataToUser(String userId) async {
     try {
       final prefs = await SharedPreferences.getInstance();
+      final allKeys = prefs.getKeys();
 
       // 1. Migrate documents
-      final legacyDocsJson = prefs.getString(_legacyDocumentsKey);
       final userDocsKey = _getScopedDocumentsKey(userId);
-      if (legacyDocsJson != null &&
-          legacyDocsJson.isNotEmpty &&
-          !prefs.containsKey(userDocsKey)) {
-        await prefs.setString(userDocsKey, legacyDocsJson);
+      final currentDocs = prefs.getString(userDocsKey);
+      if (currentDocs == null || currentDocs.isEmpty || currentDocs == '[]') {
+        String? foundDocs = prefs.getString(_legacyDocumentsKey);
+        if (foundDocs == null || foundDocs.isEmpty || foundDocs == '[]') {
+          for (final k in allKeys) {
+            if (k.startsWith('ayens_kwaderno_docs_u_') && k != userDocsKey) {
+              final val = prefs.getString(k);
+              if (val != null && val.isNotEmpty && val != '[]') {
+                foundDocs = val;
+                break;
+              }
+            }
+          }
+        }
+        if (foundDocs != null && foundDocs.isNotEmpty && foundDocs != '[]') {
+          await prefs.setString(userDocsKey, foundDocs);
+        }
       }
 
       // 2. Migrate notes
-      final legacyNotesJson = prefs.getString(_legacyHandwritingNotesKey);
       final userNotesKey = _getScopedNotesKey(userId);
-      if (legacyNotesJson != null &&
-          legacyNotesJson.isNotEmpty &&
-          !prefs.containsKey(userNotesKey)) {
-        await prefs.setString(userNotesKey, legacyNotesJson);
+      final currentNotes = prefs.getString(userNotesKey);
+      if (currentNotes == null || currentNotes.isEmpty || currentNotes == '[]') {
+        String? foundNotes = prefs.getString(_legacyHandwritingNotesKey);
+        if (foundNotes == null || foundNotes.isEmpty || foundNotes == '[]') {
+          for (final k in allKeys) {
+            if (k.startsWith('ayens_kwaderno_notes_u_') && k != userNotesKey) {
+              final val = prefs.getString(k);
+              if (val != null && val.isNotEmpty && val != '[]') {
+                foundNotes = val;
+                break;
+              }
+            }
+          }
+        }
+        if (foundNotes != null && foundNotes.isNotEmpty && foundNotes != '[]') {
+          await prefs.setString(userNotesKey, foundNotes);
+        }
       }
     } catch (_) {}
   }
@@ -78,9 +103,15 @@ class DocumentStorageService {
   /// Loads saved documents from SharedPreferences scoped strictly for the active user
   static Future<List<DocumentItem>> loadSavedDocuments([String? userId]) async {
     try {
+      final targetUserId = userId ?? UserService.instance.activeUserId;
       final prefs = await SharedPreferences.getInstance();
-      final scopedKey = _getScopedDocumentsKey(userId);
-      final String? jsonString = prefs.getString(scopedKey);
+      final scopedKey = _getScopedDocumentsKey(targetUserId);
+      String? jsonString = prefs.getString(scopedKey);
+
+      if (jsonString == null || jsonString.isEmpty || jsonString == '[]') {
+        await migrateLegacyDataToUser(targetUserId);
+        jsonString = prefs.getString(scopedKey);
+      }
 
       if (jsonString == null || jsonString.isEmpty) {
         return [];
@@ -283,7 +314,12 @@ class DocumentStorageService {
       final targetUserId = userId ?? UserService.instance.activeUserId;
       final prefs = await SharedPreferences.getInstance();
       final scopedKey = _getScopedNotesKey(targetUserId);
-      final String? jsonString = prefs.getString(scopedKey);
+      String? jsonString = prefs.getString(scopedKey);
+
+      if (jsonString == null || jsonString.isEmpty || jsonString == '[]') {
+        await migrateLegacyDataToUser(targetUserId);
+        jsonString = prefs.getString(scopedKey);
+      }
 
       if (jsonString == null || jsonString.isEmpty) {
         return [];
