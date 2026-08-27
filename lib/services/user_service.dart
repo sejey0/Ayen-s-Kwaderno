@@ -114,6 +114,27 @@ class UserService {
     );
 
     await _saveProfile(updated, makeActive: true);
+
+    if (updated.isCloudLinked) {
+      try {
+        final client = Supabase.instance.client;
+        final profilePayload = {
+          'id': updated.id,
+          'name': updated.name,
+          'avatar_emoji': updated.avatarEmoji,
+          'avatar_color_index': updated.avatarColorIndex,
+          'email': updated.email,
+          'is_cloud_linked': true,
+          'created_at': updated.createdAt.toUtc().toIso8601String(),
+          'last_active_at': DateTime.now().toUtc().toIso8601String(),
+        };
+        await client
+            .from('user_profiles')
+            .upsert(profilePayload, onConflict: 'id');
+      } catch (e) {
+        debugPrint('Notice updating user profile to cloud: $e');
+      }
+    }
   }
 
   /// Links the current offline profile to a Supabase Cloud Account (Email/Password)
@@ -176,6 +197,25 @@ class UserService {
     }
 
     await _saveProfile(linkedProfile, makeActive: true);
+
+    // Direct immediate upsert to user_profiles table in Supabase
+    try {
+      final profilePayload = {
+        'id': linkedProfile.id,
+        'name': linkedProfile.name,
+        'avatar_emoji': linkedProfile.avatarEmoji,
+        'avatar_color_index': linkedProfile.avatarColorIndex,
+        'email': linkedProfile.email,
+        'is_cloud_linked': true,
+        'created_at': linkedProfile.createdAt.toUtc().toIso8601String(),
+        'last_active_at': DateTime.now().toUtc().toIso8601String(),
+      };
+      await client
+          .from('user_profiles')
+          .upsert(profilePayload, onConflict: 'id');
+    } catch (e) {
+      debugPrint('Notice saving user profile to cloud: $e');
+    }
 
     // Trigger instant cloud sync for all notes and documents
     AutoSyncService.instance.triggerSync(immediate: true);
