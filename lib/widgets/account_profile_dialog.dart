@@ -161,6 +161,7 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
     }
   }
 
+  /// Dynamic Logout Routing Logic
   Future<void> _handleLogout() async {
     final confirmed = await showCupertinoDialog<bool>(
       context: context,
@@ -187,7 +188,8 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
       if (Navigator.of(context).canPop()) {
         Navigator.of(context).pop();
       }
-      await UserService.instance.logout();
+      // Ends active session for this profile and dynamically evaluates remaining active profiles
+      await UserService.instance.logoutCurrentProfile();
     }
   }
 
@@ -197,7 +199,7 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
       builder: (context) => CupertinoAlertDialog(
         title: Text('Remove Profile "${targetProfile.name}"?'),
         content: const Text(
-          'This will remove this profile and its local cached notes from this device. Cloud-synced data remains safe in your cloud account.',
+          'This will remove this profile from this device. Cloud-synced data remains safe in your cloud account.',
         ),
         actions: [
           CupertinoDialogAction(
@@ -281,192 +283,11 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
     }
   }
 
+  /// Immediately navigates to full-screen Login/Sign-In page
   void _navigateToAddProfile() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        padding: const EdgeInsets.all(24),
-        decoration: const BoxDecoration(
-          color: AppTheme.surfaceWhite,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: AppTheme.dividerColor,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
-            const SizedBox(height: 18),
-            const Text(
-              'Add New Profile',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w800,
-                color: AppTheme.textPrimary,
-                letterSpacing: -0.3,
-              ),
-            ),
-            const SizedBox(height: 6),
-            const Text(
-              'Sign in to sync your cloud notes or create a new offline notebook profile.',
-              style: TextStyle(
-                fontSize: 13,
-                color: AppTheme.textSecondary,
-              ),
-            ),
-            const SizedBox(height: 20),
-            // Option 1: Cloud Sign In / Sign Up
-            ListTile(
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.of(context).push(
-                  CupertinoPageRoute(
-                    builder: (context) => const CloudAuthPage(),
-                  ),
-                );
-              },
-              leading: Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [AppTheme.primaryPurple, AppTheme.accentPink],
-                  ),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Icon(CupertinoIcons.cloud_fill,
-                    color: Colors.white, size: 20),
-              ),
-              title: const Text(
-                'Cloud Account (Sign In / Register)',
-                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
-              ),
-              subtitle: const Text(
-                'Access your synced notes across all devices',
-                style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
-              ),
-              trailing: const Icon(CupertinoIcons.chevron_right,
-                  size: 16, color: AppTheme.textMuted),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14),
-                side: const BorderSide(color: AppTheme.dividerColor),
-              ),
-            ),
-            const SizedBox(height: 12),
-            // Option 2: Offline Profile
-            ListTile(
-              onTap: () {
-                Navigator.pop(context);
-                _showCreateOfflineProfileDialog();
-              },
-              leading: Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: AppTheme.primaryPurpleLight,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Center(
-                  child: Text('📓', style: TextStyle(fontSize: 22)),
-                ),
-              ),
-              title: const Text(
-                'Offline Student Profile',
-                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
-              ),
-              subtitle: const Text(
-                'Local notes stored only on this device',
-                style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
-              ),
-              trailing: const Icon(CupertinoIcons.chevron_right,
-                  size: 16, color: AppTheme.textMuted),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14),
-                side: const BorderSide(color: AppTheme.dividerColor),
-              ),
-            ),
-            const SizedBox(height: 12),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _showCreateOfflineProfileDialog() async {
-    final addController = TextEditingController();
-    String emoji = '🎒';
-
-    await showCupertinoDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => CupertinoAlertDialog(
-          title: const Text('New Student Profile'),
-          content: Column(
-            children: [
-              const SizedBox(height: 8),
-              const Text('Add another offline notebook space to this device.'),
-              const SizedBox(height: 12),
-              CupertinoTextField(
-                controller: addController,
-                placeholder: 'Student Name (e.g. Maria)',
-                textCapitalization: TextCapitalization.words,
-              ),
-              const SizedBox(height: 10),
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: _avatarEmojis.map((e) {
-                    final isSel = e == emoji;
-                    return GestureDetector(
-                      onTap: () => setDialogState(() => emoji = e),
-                      child: Container(
-                        padding: const EdgeInsets.all(4),
-                        margin: const EdgeInsets.symmetric(horizontal: 2),
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: isSel
-                              ? AppTheme.primaryPurpleLight
-                              : Colors.transparent,
-                        ),
-                        child: Text(e, style: const TextStyle(fontSize: 20)),
-                      ),
-                    );
-                  }).toList(),
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            CupertinoDialogAction(
-              child: const Text('Cancel'),
-              onPressed: () => Navigator.pop(context),
-            ),
-            CupertinoDialogAction(
-              isDefaultAction: true,
-              child: const Text('Create Profile'),
-              onPressed: () async {
-                final name = addController.text.trim();
-                if (name.isNotEmpty) {
-                  Navigator.pop(context);
-                  await UserService.instance.createOfflineProfile(
-                    name: name,
-                    avatarEmoji: emoji,
-                  );
-                  if (mounted) setState(() {});
-                }
-              },
-            ),
-          ],
-        ),
+    Navigator.of(context).push(
+      CupertinoPageRoute(
+        builder: (context) => const CloudAuthPage(),
       ),
     );
   }
@@ -627,7 +448,7 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
             ),
           ),
           const SizedBox(width: 16),
-          // Name and Email
+          // Name and Registered Email
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -807,7 +628,7 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
   }
 
   // ===========================================================================
-  // 3. CLOUD STATUS CARD
+  // 3. CLOUD STATUS CARD (Clean green card, side-by-side buttons, no duplicate email)
   // ===========================================================================
 
   Widget _buildCloudStatusCard(UserProfile user, bool isCloud) {
@@ -851,7 +672,7 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
             const SizedBox(height: 14),
             Row(
               children: [
-                // Balanced "Sync Now" Button
+                // Side-by-side "Sync Now" Button
                 Expanded(
                   child: SizedBox(
                     height: 38,
@@ -881,7 +702,7 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
                   ),
                 ),
                 const SizedBox(width: 10),
-                // Balanced "Unlink Cloud" Button
+                // Side-by-side "Unlink Cloud" Button
                 Expanded(
                   child: SizedBox(
                     height: 38,
@@ -906,7 +727,7 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
         ),
       );
     } else {
-      // Connect Cloud Card
+      // Offline: Connect Cloud Card
       return Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
@@ -988,7 +809,7 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Section Header with "+ Add Profile" action
+            // Section Title with "+ Add Profile" action button
             Row(
               children: [
                 const Expanded(
@@ -1033,7 +854,7 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
             ),
             const SizedBox(height: 12),
 
-            // Profile List Cards
+            // Profile List Cards (Tappable cards to switch, active with checkmark)
             ...profiles.map((p) {
               final isActive = p.id == activeUser.id;
               return _buildProfileItemCard(p, isActive);
@@ -1139,21 +960,21 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
   }
 
   // ===========================================================================
-  // 5. SESSION MANAGEMENT & DANGER ZONE
+  // 5. DANGER ZONE & SESSION ACTIONS
   // ===========================================================================
 
   Widget _buildSessionManagementSection(UserProfile user, bool isCloud) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Subtle divider
+        // Subtle neutral divider
         Container(
           height: 1,
           color: AppTheme.dividerColor,
         ),
         const SizedBox(height: 20),
 
-        // Reset Local Cache Button (Only when cloud-linked)
+        // "Reset Local Cache & Re-sync": Secondary outlined button
         if (isCloud) ...[
           SizedBox(
             width: double.infinity,
@@ -1182,21 +1003,20 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
           const SizedBox(height: 10),
         ],
 
-        // Log Out or Remove Profile Button
+        // "Log Out Account": Primary red action button
         SizedBox(
           width: double.infinity,
           height: 46,
           child: TextButton.icon(
-            onPressed:
-                isCloud ? _handleLogout : () => _handleDeleteProfile(user),
-            icon: Icon(
-              isCloud ? Icons.logout_rounded : CupertinoIcons.trash,
+            onPressed: _handleLogout,
+            icon: const Icon(
+              Icons.logout_rounded,
               size: 17,
-              color: const Color(0xFFDC2626),
+              color: Color(0xFFDC2626),
             ),
-            label: Text(
-              isCloud ? 'Log Out Account' : 'Remove Profile from Device',
-              style: const TextStyle(
+            label: const Text(
+              'Log Out Account',
+              style: TextStyle(
                 fontWeight: FontWeight.w700,
                 fontSize: 14,
                 color: Color(0xFFDC2626),

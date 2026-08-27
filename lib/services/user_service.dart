@@ -285,6 +285,47 @@ class UserService {
     currentUserNotifier.value = null;
   }
 
+  /// Ends the session for the currently active profile, removes it from device profiles,
+  /// and returns the count of remaining active profiles on the device.
+  Future<int> logoutCurrentProfile() async {
+    final current = currentUser;
+    if (current == null) return profilesListNotifier.value.length;
+
+    if (current.isCloudLinked) {
+      try {
+        await Supabase.instance.client.auth.signOut();
+      } catch (_) {}
+    }
+
+    final list = List<UserProfile>.from(profilesListNotifier.value);
+    list.removeWhere((p) => p.id == current.id);
+    profilesListNotifier.value = list;
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      _profilesKey,
+      jsonEncode(list.map((p) => p.toJson()).toList()),
+    );
+    await prefs.remove(_activeProfileIdKey);
+
+    currentUserNotifier.value = null;
+    return list.length;
+  }
+
+  /// Clears all local profile sessions and redirects to fresh authentication
+  Future<void> logoutAll() async {
+    try {
+      await Supabase.instance.client.auth.signOut();
+    } catch (_) {}
+
+    profilesListNotifier.value = [];
+    currentUserNotifier.value = null;
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_profilesKey);
+    await prefs.remove(_activeProfileIdKey);
+  }
+
   /// Switches active profile on device (scoped per user)
   Future<void> switchProfile(String profileId) async {
     final list = profilesListNotifier.value;

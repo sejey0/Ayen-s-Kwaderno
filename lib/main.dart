@@ -4,6 +4,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'models/user_profile_model.dart';
 import 'screens/home_screen.dart';
+import 'screens/select_profile_screen.dart';
 import 'screens/welcome_auth_screen.dart';
 import 'services/auto_sync_service.dart';
 import 'services/user_service.dart';
@@ -68,7 +69,15 @@ class AyensKwadernoApp extends StatelessWidget {
         valueListenable: UserService.instance.currentUserNotifier,
         builder: (context, user, _) {
           if (user == null) {
-            return const WelcomeAuthScreen();
+            return ValueListenableBuilder<List<UserProfile>>(
+              valueListenable: UserService.instance.profilesListNotifier,
+              builder: (context, profiles, _) {
+                if (profiles.isNotEmpty) {
+                  return const SelectProfileScreen();
+                }
+                return const WelcomeAuthScreen();
+              },
+            );
           }
           return const HomeScreen();
         },
