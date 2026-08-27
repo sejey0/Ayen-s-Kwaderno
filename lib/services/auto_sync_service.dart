@@ -130,8 +130,10 @@ class AutoSyncService {
       // -------------------------------------------------------------
       if (user != null && user.isCloudLinked) {
         try {
+          final targetId =
+              user.supabaseUserId ?? client.auth.currentUser?.id ?? user.id;
           final profilePayload = {
-            'id': user.id,
+            'id': targetId,
             'name': user.name,
             'avatar_emoji': user.avatarEmoji,
             'avatar_color_index': user.avatarColorIndex,
@@ -144,7 +146,7 @@ class AutoSyncService {
               .from('user_profiles')
               .upsert(profilePayload, onConflict: 'id');
         } catch (e) {
-          debugPrint('Notice syncing user profile: $e');
+          debugPrint('Notice user profile cloud sync status: $e');
         }
       }
 

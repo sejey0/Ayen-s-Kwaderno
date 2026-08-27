@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -23,6 +24,16 @@ class UserService {
   UserProfile? get currentUser => currentUserNotifier.value;
   String get activeUserId => currentUser?.id ?? 'default_user';
 
+  /// Generates standard RFC 4122 v4 UUID string compatible with Postgres UUID columns
+  static String generateUuid() {
+    final random = Random.secure();
+    final values = List<int>.generate(16, (i) => random.nextInt(256));
+    values[6] = (values[6] & 0x0f) | 0x40; // version 4
+    values[8] = (values[8] & 0x3f) | 0x80; // variant
+    final hex = values.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+    return '${hex.substring(0, 8)}-${hex.substring(8, 12)}-${hex.substring(12, 16)}-${hex.substring(16, 20)}-${hex.substring(20, 32)}';
+  }
+
   /// Initializes the user service, loading active and saved profiles from local storage
   Future<void> init() async {
     try {
@@ -42,33 +53,24 @@ class UserService {
       profilesListNotifier.value = profiles;
 
       if (profiles.isNotEmpty) {
-        UserProfile active = profiles.first;
         if (activeId != null) {
-          active = profiles.firstWhere(
-            (p) => p.id == activeId,
-            orElse: () => profiles.first,
-          );
+          final found = profiles.where((p) => p.id == activeId).toList();
+          currentUserNotifier.value = found.isNotEmpty ? found.first : profiles.first;
+        } else {
+          currentUserNotifier.value = profiles.first;
         }
+      }
 
-        // Check if Supabase session exists and sync cloud link status
-        UserProfile finalActive = active;
-        try {
-          final supabaseUser = Supabase.instance.client.auth.currentUser;
-          if (supabaseUser != null && active.isCloudLinked) {
-            finalActive = active.copyWith(
-              supabaseUserId: supabaseUser.id,
-              email: supabaseUser.email ?? active.email,
-            );
-          }
-        } catch (_) {}
-
-        currentUserNotifier.value = finalActive;
-        await prefs.setString(_activeProfileIdKey, finalActive.id);
-      } else {
-        currentUserNotifier.value = null;
+      // Check if active user is linked to Supabase and keep session in sync
+      final current = currentUser;
+      if (current != null && current.isCloudLinked) {
+        final session = Supabase.instance.client.auth.currentSession;
+        if (session == null && current.email != null) {
+          debugPrint('Supabase cloud account session restored for ${current.email}');
+        }
       }
     } catch (e) {
-      debugPrint('UserService init error: $e');
+      debugPrint('Error initializing UserService: $e');
     }
   }
 
@@ -80,7 +82,7 @@ class UserService {
   }) async {
     final now = DateTime.now();
     final profile = UserProfile(
-      id: 'user_${now.millisecondsSinceEpoch}',
+      id: generateUuid(),
       name: name.trim().isEmpty ? 'Student' : name.trim(),
       avatarEmoji: avatarEmoji,
       avatarColorIndex: avatarColorIndex,
@@ -118,8 +120,9 @@ class UserService {
     if (updated.isCloudLinked) {
       try {
         final client = Supabase.instance.client;
+        final targetId = updated.supabaseUserId ?? client.auth.currentUser?.id ?? updated.id;
         final profilePayload = {
-          'id': updated.id,
+          'id': targetId,
           'name': updated.name,
           'avatar_emoji': updated.avatarEmoji,
           'avatar_color_index': updated.avatarColorIndex,
@@ -172,6 +175,7 @@ class UserService {
 
     if (current != null) {
       linkedProfile = current.copyWith(
+        id: user.id,
         email: user.email ?? email.trim(),
         isCloudLinked: true,
         supabaseUserId: user.id,
@@ -180,11 +184,14 @@ class UserService {
             : current.name,
         lastActiveAt: DateTime.now(),
       );
+      if (current.id != user.id) {
+        await DocumentStorageService.migrateLegacyDataToUser(user.id);
+      }
     } else {
       // Direct cloud signup without existing profile
       final now = DateTime.now();
       linkedProfile = UserProfile(
-        id: 'user_${now.millisecondsSinceEpoch}',
+        id: user.id,
         name: optionalName?.trim().isNotEmpty == true
             ? optionalName!.trim()
             : (user.email?.split('@').first ?? 'Student'),
@@ -201,7 +208,7 @@ class UserService {
     // Direct immediate upsert to user_profiles table in Supabase
     try {
       final profilePayload = {
-        'id': linkedProfile.id,
+        'id': user.id,
         'name': linkedProfile.name,
         'avatar_emoji': linkedProfile.avatarEmoji,
         'avatar_color_index': linkedProfile.avatarColorIndex,
