@@ -6,9 +6,12 @@ import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/document_item_model.dart';
 import '../models/handwriting_note_model.dart';
+import '../models/user_profile_model.dart';
 import '../services/auto_sync_service.dart';
 import '../services/document_storage_service.dart';
+import '../services/user_service.dart';
 import '../theme/app_theme.dart';
+import '../widgets/account_profile_dialog.dart';
 import '../widgets/handwriting_canvas.dart';
 import '../widgets/pdf_thumbnail_widget.dart';
 import '../widgets/type_note_dialog.dart';
@@ -77,6 +80,8 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     AutoSyncService.instance.statusNotifier
         .addListener(_onSyncStatusUpdated);
+    UserService.instance.currentUserNotifier
+        .addListener(_onUserChanged);
     _loadInitialData();
   }
 
@@ -84,7 +89,15 @@ class _HomeScreenState extends State<HomeScreen> {
   void dispose() {
     AutoSyncService.instance.statusNotifier
         .removeListener(_onSyncStatusUpdated);
+    UserService.instance.currentUserNotifier
+        .removeListener(_onUserChanged);
     super.dispose();
+  }
+
+  void _onUserChanged() {
+    if (mounted) {
+      _loadInitialData();
+    }
   }
 
   void _onSyncStatusUpdated() {
@@ -1086,48 +1099,82 @@ class _HomeScreenState extends State<HomeScreen> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Row(
-          children: [
-            Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: const LinearGradient(
-                  colors: [AppTheme.primaryPurple, AppTheme.accentPink],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: AppTheme.primaryPurple.withValues(alpha: 0.3),
-                    blurRadius: 12,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
+        GestureDetector(
+          onTap: () => AccountProfileDialog.show(context),
+          child: Row(
+            children: [
+              ValueListenableBuilder<UserProfile?>(
+                valueListenable: UserService.instance.currentUserNotifier,
+                builder: (context, user, _) {
+                  final emoji = user?.avatarEmoji ?? '📓';
+                  return Container(
+                    width: 46,
+                    height: 46,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: const LinearGradient(
+                        colors: [AppTheme.primaryPurple, AppTheme.accentPink],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppTheme.primaryPurple.withValues(alpha: 0.3),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Center(
+                      child: Text(
+                        emoji,
+                        style: const TextStyle(fontSize: 22),
+                      ),
+                    ),
+                  );
+                },
               ),
-              child: const Center(
-                child: Text(
-                  'A',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 20,
-                  ),
-                ),
+              const SizedBox(width: 10),
+              ValueListenableBuilder<UserProfile?>(
+                valueListenable: UserService.instance.currentUserNotifier,
+                builder: (context, user, _) {
+                  final name = user?.name ?? "Ayen's Kwaderno";
+                  final isCloud = user?.isCloudLinked == true;
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Text(
+                            name,
+                            style: const TextStyle(
+                              fontSize: 17.5,
+                              fontWeight: FontWeight.w800,
+                              color: AppTheme.textPrimary,
+                              letterSpacing: -0.3,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          const Icon(CupertinoIcons.chevron_down,
+                              size: 12, color: AppTheme.textSecondary),
+                        ],
+                      ),
+                      Text(
+                        isCloud ? "☁️ Cloud Synced" : "📱 Offline Notebook",
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: isCloud
+                              ? const Color(0xFF065F46)
+                              : AppTheme.textSecondary,
+                        ),
+                      ),
+                    ],
+                  );
+                },
               ),
-            ),
-            const SizedBox(width: 12),
-            const Text(
-              "Ayen's Kwaderno",
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w800,
-                color: AppTheme.textPrimary,
-                letterSpacing: -0.3,
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
         Row(
           children: [

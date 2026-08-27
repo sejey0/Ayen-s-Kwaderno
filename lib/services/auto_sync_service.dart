@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/document_item_model.dart';
 import '../models/handwriting_note_model.dart';
 import 'document_storage_service.dart';
+import 'user_service.dart';
 
 enum AutoSyncStatus {
   synced,
@@ -91,6 +92,13 @@ class AutoSyncService {
   Future<void> syncAllToCloud() async {
     if (_isSyncing) return;
 
+    final user = UserService.instance.currentUser;
+    // If the user profile is purely offline (not linked to cloud), skip remote sync
+    if (user != null && !user.isCloudLinked) {
+      statusNotifier.value = AutoSyncStatus.synced;
+      return;
+    }
+
     // Check connectivity first
     try {
       final connectivityResults = await Connectivity().checkConnectivity();
@@ -113,6 +121,29 @@ class AutoSyncService {
 
     try {
       final client = Supabase.instance.client;
+
+      // -------------------------------------------------------------
+      // 0. AUTO-UPLOAD USER PROFILE TO SUPABASE
+      // -------------------------------------------------------------
+      if (user != null && user.isCloudLinked) {
+        try {
+          final profilePayload = {
+            'id': user.id,
+            'name': user.name,
+            'avatar_emoji': user.avatarEmoji,
+            'avatar_color_index': user.avatarColorIndex,
+            'email': user.email,
+            'is_cloud_linked': user.isCloudLinked,
+            'created_at': user.createdAt.toUtc().toIso8601String(),
+            'last_active_at': DateTime.now().toUtc().toIso8601String(),
+          };
+          await client
+              .from('user_profiles')
+              .upsert(profilePayload, onConflict: 'id');
+        } catch (e) {
+          debugPrint('Notice syncing user profile: $e');
+        }
+      }
 
       // -------------------------------------------------------------
       // 1. AUTO-UPLOAD ALL SAVED HANDWRITTEN & TYPED NOTES TO SUPABASE

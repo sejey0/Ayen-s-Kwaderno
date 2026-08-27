@@ -7,25 +7,88 @@ import '../models/image_annotation_model.dart';
 import '../models/stroke_model.dart';
 import '../models/text_annotation_model.dart';
 import 'auto_sync_service.dart';
+import 'user_service.dart';
 
 /// Manages persistent local storage of recently opened/imported documents, annotations,
-/// and handwriting notes using SharedPreferences with automated real-time Supabase sync.
+/// and handwriting notes scoped per user profile with automated real-time Supabase sync.
 class DocumentStorageService {
-  static const String _documentsKey = 'ayens_kwaderno_recent_documents_v2';
-  static const String _handwritingNotesKey =
+  static const String _legacyDocumentsKey = 'ayens_kwaderno_recent_documents_v2';
+  static const String _legacyHandwritingNotesKey =
       'ayens_kwaderno_handwriting_notes_v1';
-  static String _annotationsKey(String documentName) =>
+  static String _legacyAnnotationsKey(String documentName) =>
       'ayens_kwaderno_annotations_$documentName';
+
+  static String _getScopedDocumentsKey([String? userId]) {
+    final uid = userId ?? UserService.instance.activeUserId;
+    return 'ayens_kwaderno_docs_u_$uid';
+  }
+
+  static String _getScopedNotesKey([String? userId]) {
+    final uid = userId ?? UserService.instance.activeUserId;
+    return 'ayens_kwaderno_notes_u_$uid';
+  }
+
+  static String _getScopedAnnotationsKey(String documentName, [String? userId]) {
+    final uid = userId ?? UserService.instance.activeUserId;
+    return 'ayens_kwaderno_annot_u_${uid}_$documentName';
+  }
+
+  /// Migrates legacy un-scoped data from old keys to the given user profile ID
+  static Future<void> migrateLegacyDataToUser(String userId) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+
+      // 1. Migrate documents
+      final legacyDocsJson = prefs.getString(_legacyDocumentsKey);
+      final userDocsKey = _getScopedDocumentsKey(userId);
+      if (legacyDocsJson != null &&
+          legacyDocsJson.isNotEmpty &&
+          !prefs.containsKey(userDocsKey)) {
+        await prefs.setString(userDocsKey, legacyDocsJson);
+      }
+
+      // 2. Migrate notes
+      final legacyNotesJson = prefs.getString(_legacyHandwritingNotesKey);
+      final userNotesKey = _getScopedNotesKey(userId);
+      if (legacyNotesJson != null &&
+          legacyNotesJson.isNotEmpty &&
+          !prefs.containsKey(userNotesKey)) {
+        await prefs.setString(userNotesKey, legacyNotesJson);
+      }
+    } catch (_) {}
+  }
+
+  /// Clears all local storage keys for a specific user ID
+  static Future<void> deleteAllUserData(String userId) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_getScopedDocumentsKey(userId));
+      await prefs.remove(_getScopedNotesKey(userId));
+      final allKeys = prefs.getKeys();
+      for (final key in allKeys) {
+        if (key.startsWith('ayens_kwaderno_annot_u_${userId}_')) {
+          await prefs.remove(key);
+        }
+      }
+    } catch (_) {}
+  }
 
   // ==========================================
   // DOCUMENT FILES PERSISTENCE
   // ==========================================
 
-  /// Loads all saved documents from SharedPreferences
-  static Future<List<DocumentItem>> loadSavedDocuments() async {
+  /// Loads saved documents from SharedPreferences scoped for the active user
+  static Future<List<DocumentItem>> loadSavedDocuments([String? userId]) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final String? jsonString = prefs.getString(_documentsKey);
+      final scopedKey = _getScopedDocumentsKey(userId);
+      String? jsonString = prefs.getString(scopedKey);
+
+      // Fallback to legacy key if scoped key not populated yet
+      if ((jsonString == null || jsonString.isEmpty) &&
+          prefs.containsKey(_legacyDocumentsKey)) {
+        jsonString = prefs.getString(_legacyDocumentsKey);
+      }
 
       if (jsonString == null || jsonString.isEmpty) {
         return [];
@@ -49,9 +112,10 @@ class DocumentStorageService {
   static Future<void> saveOrUpdateDocument(
     DocumentItem doc, {
     bool triggerCloudSync = true,
+    String? userId,
   }) async {
     try {
-      final docs = await loadSavedDocuments();
+      final docs = await loadSavedDocuments(userId);
 
       // Remove existing entry by filename if any
       final existingIndex =
@@ -71,12 +135,12 @@ class DocumentStorageService {
         docs.insert(0, doc);
       }
 
-      // Keep max 50 recent documents
+      // Keep max 50 recent documents per user
       if (docs.length > 50) {
         docs.removeRange(50, docs.length);
       }
 
-      await _persistDocumentsList(docs);
+      await _persistDocumentsList(docs, userId);
 
       if (triggerCloudSync) {
         AutoSyncService.instance.triggerSync();
@@ -85,14 +149,14 @@ class DocumentStorageService {
   }
 
   /// Removes a document from local storage and Supabase
-  static Future<void> deleteDocument(String fileName) async {
+  static Future<void> deleteDocument(String fileName, [String? userId]) async {
     try {
-      final docs = await loadSavedDocuments();
+      final docs = await loadSavedDocuments(userId);
       docs.removeWhere((d) => d.fileName == fileName);
-      await _persistDocumentsList(docs);
-      await clearLocalAnnotations(fileName);
+      await _persistDocumentsList(docs, userId);
+      await clearLocalAnnotations(fileName, userId);
 
-      // Async background deletion from Supabase
+      // Async background deletion from Supabase if cloud linked
       try {
         final client = Supabase.instance.client;
         await client
@@ -105,13 +169,14 @@ class DocumentStorageService {
     } catch (_) {}
   }
 
-  /// Saves full annotation payload (strokes, texts, images) to local SharedPreferences & triggers cloud auto-upload
+  /// Saves full annotation payload to local SharedPreferences & triggers cloud auto-upload
   static Future<void> saveLocalAnnotations(
     String documentName, {
     required List<Stroke> strokes,
     required List<TextAnnotation> texts,
     required List<ImageAnnotation> images,
     bool triggerCloudSync = true,
+    String? userId,
   }) async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -122,7 +187,7 @@ class DocumentStorageService {
         'updated_at': DateTime.now().toUtc().toIso8601String(),
       };
       await prefs.setString(
-          _annotationsKey(documentName), jsonEncode(data));
+          _getScopedAnnotationsKey(documentName, userId), jsonEncode(data));
 
       if (triggerCloudSync) {
         AutoSyncService.instance.triggerSync();
@@ -132,10 +197,18 @@ class DocumentStorageService {
 
   /// Loads full annotation payload from local SharedPreferences
   static Future<Map<String, dynamic>?> loadLocalAnnotations(
-      String documentName) async {
+      String documentName, [String? userId]) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final jsonString = prefs.getString(_annotationsKey(documentName));
+      final scopedKey = _getScopedAnnotationsKey(documentName, userId);
+      String? jsonString = prefs.getString(scopedKey);
+
+      // Fallback to legacy key
+      if ((jsonString == null || jsonString.isEmpty) &&
+          prefs.containsKey(_legacyAnnotationsKey(documentName))) {
+        jsonString = prefs.getString(_legacyAnnotationsKey(documentName));
+      }
+
       if (jsonString != null && jsonString.isNotEmpty) {
         return jsonDecode(jsonString) as Map<String, dynamic>;
       }
@@ -144,30 +217,41 @@ class DocumentStorageService {
   }
 
   /// Clears local annotations for a document
-  static Future<void> clearLocalAnnotations(String documentName) async {
+  static Future<void> clearLocalAnnotations(
+      String documentName, [String? userId]) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.remove(_annotationsKey(documentName));
+      await prefs.remove(_getScopedAnnotationsKey(documentName, userId));
+      await prefs.remove(_legacyAnnotationsKey(documentName));
     } catch (_) {}
   }
 
   /// Saves the complete document list to SharedPreferences
-  static Future<void> _persistDocumentsList(List<DocumentItem> docs) async {
+  static Future<void> _persistDocumentsList(
+      List<DocumentItem> docs, [String? userId]) async {
     final prefs = await SharedPreferences.getInstance();
     final String encoded =
         jsonEncode(docs.map((d) => d.toJson()).toList());
-    await prefs.setString(_documentsKey, encoded);
+    await prefs.setString(_getScopedDocumentsKey(userId), encoded);
   }
 
   // ==========================================
   // HANDWRITING NOTES PERSISTENCE & CLOUD SYNC
   // ==========================================
 
-  /// Loads all saved handwriting notes from SharedPreferences
-  static Future<List<HandwritingNote>> loadHandwritingNotes() async {
+  /// Loads all saved handwriting notes from SharedPreferences scoped for the active user
+  static Future<List<HandwritingNote>> loadHandwritingNotes(
+      [String? userId]) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final String? jsonString = prefs.getString(_handwritingNotesKey);
+      final scopedKey = _getScopedNotesKey(userId);
+      String? jsonString = prefs.getString(scopedKey);
+
+      // Fallback to legacy key if scoped not populated
+      if ((jsonString == null || jsonString.isEmpty) &&
+          prefs.containsKey(_legacyHandwritingNotesKey)) {
+        jsonString = prefs.getString(_legacyHandwritingNotesKey);
+      }
 
       if (jsonString == null || jsonString.isEmpty) {
         return [];
@@ -192,9 +276,10 @@ class DocumentStorageService {
   static Future<void> saveOrUpdateHandwritingNote(
     HandwritingNote note, {
     bool triggerCloudSync = true,
+    String? userId,
   }) async {
     try {
-      final notes = await loadHandwritingNotes();
+      final notes = await loadHandwritingNotes(userId);
       final existingIndex = notes.indexWhere((n) => n.id == note.id);
 
       if (existingIndex >= 0) {
@@ -203,12 +288,12 @@ class DocumentStorageService {
         notes.insert(0, note);
       }
 
-      // Keep max 100 recent handwriting notes
+      // Keep max 100 recent handwriting notes per user
       if (notes.length > 100) {
         notes.removeRange(100, notes.length);
       }
 
-      await _persistHandwritingNotesList(notes);
+      await _persistHandwritingNotesList(notes, userId);
 
       if (triggerCloudSync) {
         AutoSyncService.instance.triggerSync();
@@ -217,11 +302,11 @@ class DocumentStorageService {
   }
 
   /// Deletes a handwriting note from local storage and Supabase
-  static Future<void> deleteHandwritingNote(String id) async {
+  static Future<void> deleteHandwritingNote(String id, [String? userId]) async {
     try {
-      final notes = await loadHandwritingNotes();
+      final notes = await loadHandwritingNotes(userId);
       notes.removeWhere((n) => n.id == id);
-      await _persistHandwritingNotesList(notes);
+      await _persistHandwritingNotesList(notes, userId);
 
       // Async background deletion from Supabase
       try {
@@ -235,10 +320,10 @@ class DocumentStorageService {
 
   /// Saves the complete handwriting notes list to SharedPreferences
   static Future<void> _persistHandwritingNotesList(
-      List<HandwritingNote> notes) async {
+      List<HandwritingNote> notes, [String? userId]) async {
     final prefs = await SharedPreferences.getInstance();
     final String encoded =
         jsonEncode(notes.map((n) => n.toJson()).toList());
-    await prefs.setString(_handwritingNotesKey, encoded);
+    await prefs.setString(_getScopedNotesKey(userId), encoded);
   }
 }

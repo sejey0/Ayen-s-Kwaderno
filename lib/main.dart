@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'models/user_profile_model.dart';
 import 'screens/home_screen.dart';
+import 'screens/welcome_auth_screen.dart';
 import 'services/auto_sync_service.dart';
+import 'services/user_service.dart';
 import 'theme/app_theme.dart';
 
 Future<void> main() async {
@@ -43,6 +46,9 @@ Future<void> main() async {
     debugPrint('Supabase initialization error: $e');
   }
 
+  // Initialize User Profile service (offline accounts + cloud auth)
+  await UserService.instance.init();
+
   // Initialize automated background sync & connectivity monitoring
   AutoSyncService.instance.initialize();
 
@@ -58,7 +64,15 @@ class AyensKwadernoApp extends StatelessWidget {
       title: "Ayen's Kwaderno",
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
-      home: const HomeScreen(),
+      home: ValueListenableBuilder<UserProfile?>(
+        valueListenable: UserService.instance.currentUserNotifier,
+        builder: (context, user, _) {
+          if (user == null) {
+            return const WelcomeAuthScreen();
+          }
+          return const HomeScreen();
+        },
+      ),
     );
   }
 }
