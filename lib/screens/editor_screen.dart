@@ -123,6 +123,7 @@ class _EditorScreenState extends State<EditorScreen>
   Offset? _swipeStartPos;
   int _activePointerCount = 0;
   bool _hadMultiTouch = false;
+  bool _isDraggingAnnotation = false;
   ui.Image? _renderedPageUiImage;
   final Map<int, ui.Image> _renderedPages = {};
   late PageController _pageController;
@@ -1174,6 +1175,12 @@ class _EditorScreenState extends State<EditorScreen>
                       child: Listener(
                         onPointerDown: (PointerDownEvent event) {
                           _activePointerCount++;
+                          if (_isDraggingAnnotation ||
+                              _selectedImageId != null ||
+                              _selectedTextId != null) {
+                            _swipeStartPos = null;
+                            return;
+                          }
                           if (_activePointerCount == 1) {
                             _swipeStartPos = event.position;
                             _hadMultiTouch = false;
@@ -1187,6 +1194,9 @@ class _EditorScreenState extends State<EditorScreen>
                           if (_activePointerCount == 0 &&
                               !_hadMultiTouch &&
                               !_isCurrentlyZoomed &&
+                              !_isDraggingAnnotation &&
+                              _selectedImageId == null &&
+                              _selectedTextId == null &&
                               _activeTool == AnnotationTool.none &&
                               _swipeStartPos != null) {
                             final double dx =
@@ -1703,7 +1713,16 @@ class _EditorScreenState extends State<EditorScreen>
           children: [
             GestureDetector(
               behavior: HitTestBehavior.opaque,
+              onPanStart: (DragStartDetails details) {
+                _swipeStartPos = null;
+                _isDraggingAnnotation = true;
+                setState(() {
+                  _selectedImageId = annotation.id;
+                  _selectedTextId = null;
+                });
+              },
               onPanUpdate: (DragUpdateDetails details) {
+                _swipeStartPos = null;
                 setState(() {
                   annotation.position += Offset(
                     details.delta.dx / scaleX,
@@ -1713,7 +1732,15 @@ class _EditorScreenState extends State<EditorScreen>
                   _selectedTextId = null;
                 });
               },
-              onPanEnd: (_) => _autoSaveAndSync(),
+              onPanEnd: (_) {
+                _swipeStartPos = null;
+                _isDraggingAnnotation = false;
+                _autoSaveAndSync();
+              },
+              onPanCancel: () {
+                _swipeStartPos = null;
+                _isDraggingAnnotation = false;
+              },
               onTap: () {
                 setState(() {
                   _selectedImageId = isSelected ? null : annotation.id;
@@ -1769,7 +1796,12 @@ class _EditorScreenState extends State<EditorScreen>
                 bottom: -10,
                 child: GestureDetector(
                   behavior: HitTestBehavior.opaque,
+                  onPanStart: (_) {
+                    _swipeStartPos = null;
+                    _isDraggingAnnotation = true;
+                  },
                   onPanUpdate: (DragUpdateDetails details) {
+                    _swipeStartPos = null;
                     setState(() {
                       final newWidth = (annotation.size.width +
                               (details.delta.dx / scaleX))
@@ -1780,7 +1812,15 @@ class _EditorScreenState extends State<EditorScreen>
                       annotation.size = Size(newWidth, newHeight);
                     });
                   },
-                  onPanEnd: (_) => _autoSaveAndSync(),
+                  onPanEnd: (_) {
+                    _swipeStartPos = null;
+                    _isDraggingAnnotation = false;
+                    _autoSaveAndSync();
+                  },
+                  onPanCancel: () {
+                    _swipeStartPos = null;
+                    _isDraggingAnnotation = false;
+                  },
                   child: Container(
                     width: 30,
                     height: 30,
@@ -1823,7 +1863,17 @@ class _EditorScreenState extends State<EditorScreen>
     final isSelected = _selectedTextId == annotation.id;
 
     return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onPanStart: (_) {
+        _swipeStartPos = null;
+        _isDraggingAnnotation = true;
+        setState(() {
+          _selectedTextId = annotation.id;
+          _selectedImageId = null;
+        });
+      },
       onPanUpdate: (DragUpdateDetails details) {
+        _swipeStartPos = null;
         setState(() {
           annotation.position += Offset(
             details.delta.dx / scaleX,
@@ -1833,7 +1883,15 @@ class _EditorScreenState extends State<EditorScreen>
           _selectedImageId = null;
         });
       },
-      onPanEnd: (_) => _autoSaveAndSync(),
+      onPanEnd: (_) {
+        _swipeStartPos = null;
+        _isDraggingAnnotation = false;
+        _autoSaveAndSync();
+      },
+      onPanCancel: () {
+        _swipeStartPos = null;
+        _isDraggingAnnotation = false;
+      },
       onTap: () {
         setState(() {
           _selectedTextId = isSelected ? null : annotation.id;
