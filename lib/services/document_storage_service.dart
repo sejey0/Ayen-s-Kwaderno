@@ -308,6 +308,15 @@ class DocumentStorageService {
             .from('document_annotations')
             .delete()
             .eq('document_name', 'u_${targetUserId}___$fileName');
+
+        final storagePath = 'u_$targetUserId/$fileName';
+        try {
+          await client.storage.from('documents').remove([storagePath]);
+        } catch (_) {
+          try {
+            await client.storage.from('user_documents').remove([storagePath]);
+          } catch (_) {}
+        }
       } catch (_) {}
 
       AutoSyncService.instance.triggerSync(immediate: true);
