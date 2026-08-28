@@ -147,6 +147,17 @@ class DocumentStorageService {
     } catch (_) {}
   }
 
+  static String getMimeType(String fileName) {
+    final lower = fileName.toLowerCase();
+    if (lower.endsWith('.pdf')) return 'application/pdf';
+    if (lower.endsWith('.png')) return 'image/png';
+    if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
+    if (lower.endsWith('.webp')) return 'image/webp';
+    if (lower.endsWith('.bmp')) return 'image/bmp';
+    if (lower.endsWith('.gif')) return 'image/gif';
+    return 'application/octet-stream';
+  }
+
   // ==========================================
   // DOCUMENT FILES PERSISTENCE
   // ==========================================
@@ -184,6 +195,8 @@ class DocumentStorageService {
                 File('${savedDocsDir.path}/${d.fileName}.pdf'),
                 File('${savedDocsDir.path}/${d.fileName}.png'),
                 File('${savedDocsDir.path}/${d.fileName}.jpg'),
+                File('${savedDocsDir.path}/${d.fileName}.jpeg'),
+                File('${savedDocsDir.path}/${d.fileName}.webp'),
               ];
               for (final f in candidates) {
                 if (f.existsSync()) {
@@ -272,18 +285,26 @@ class DocumentStorageService {
           if (fileSize <= maxUploadLimit) {
             final fileBytes = await file.readAsBytes();
             final storagePath = 'u_$targetUserId/${doc.fileName}';
+            final mimeType = getMimeType(doc.fileName);
             try {
               await client.storage.from('documents').uploadBinary(
                     storagePath,
                     fileBytes,
-                    fileOptions: const FileOptions(upsert: true),
+                    fileOptions: FileOptions(
+                      upsert: true,
+                      contentType: mimeType,
+                    ),
                   );
-            } catch (_) {
+            } catch (e) {
+              debugPrint('Notice uploading doc binary to documents bucket: $e');
               try {
                 await client.storage.from('user_documents').uploadBinary(
                       storagePath,
                       fileBytes,
-                      fileOptions: const FileOptions(upsert: true),
+                      fileOptions: FileOptions(
+                        upsert: true,
+                        contentType: mimeType,
+                      ),
                     );
               } catch (_) {}
             }

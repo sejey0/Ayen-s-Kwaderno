@@ -147,25 +147,38 @@ class _UploadDocumentDialogState extends State<UploadDocumentDialog> {
     if (_selectedFilePath == null) return;
 
     String persistentPath = _selectedFilePath!;
+
+    String ext = '';
+    if (_selectedFileName != null && _selectedFileName!.contains('.')) {
+      ext = _selectedFileName!.substring(_selectedFileName!.lastIndexOf('.'));
+    } else if (_selectedFilePath != null && _selectedFilePath!.contains('.')) {
+      ext = _selectedFilePath!.substring(_selectedFilePath!.lastIndexOf('.'));
+    }
+    if (ext.isEmpty) {
+      ext = _isImage ? '.jpg' : '.pdf';
+    }
+
+    // Use custom title if entered, otherwise fallback to filename
+    String customTitle = _titleController.text.trim().isNotEmpty
+        ? _titleController.text.trim()
+        : (_selectedFileName ?? 'Document$ext');
+
+    if (!customTitle.toLowerCase().endsWith(ext.toLowerCase())) {
+      customTitle = '$customTitle$ext';
+    }
+
     try {
       final appDir = await getApplicationDocumentsDirectory();
       final savedDocsDir = Directory('${appDir.path}/saved_documents');
       if (!savedDocsDir.existsSync()) {
         savedDocsDir.createSync(recursive: true);
       }
-      final baseName = _selectedFileName ??
-          'document_${DateTime.now().millisecondsSinceEpoch}.pdf';
-      final permanentFile = File('${savedDocsDir.path}/$baseName');
+      final permanentFile = File('${savedDocsDir.path}/$customTitle');
       if (permanentFile.path != _selectedFilePath) {
         await File(_selectedFilePath!).copy(permanentFile.path);
         persistentPath = permanentFile.path;
       }
     } catch (_) {}
-
-    // Use custom title if entered, otherwise fallback to filename
-    final customTitle = _titleController.text.trim().isNotEmpty
-        ? _titleController.text.trim()
-        : (_selectedFileName ?? 'Document');
 
     int fileSizeInBytes = 0;
     try {
