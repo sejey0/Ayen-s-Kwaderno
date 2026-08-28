@@ -167,8 +167,13 @@ class _EditorScreenState extends State<EditorScreen>
   SyncStatus _syncStatus = SyncStatus.synced;
   Timer? _cloudSyncDebounceTimer;
 
-  String get _documentIdentifier =>
-      widget.fileName ?? widget.pdfPath.split(Platform.pathSeparator).last;
+  String get _documentIdentifier {
+    if (widget.fileName != null && widget.fileName!.trim().isNotEmpty) {
+      return widget.fileName!.trim();
+    }
+    final normalized = widget.pdfPath.replaceAll('\\', '/');
+    return normalized.split('/').last;
+  }
 
   bool get _isImageDocument {
     final lower = widget.pdfPath.toLowerCase();
@@ -220,10 +225,68 @@ class _EditorScreenState extends State<EditorScreen>
     _loadAnnotationsOfflineFirst();
   }
 
+  /// Flushes any pending local and remote saves immediately
+  void _flushPendingSaves() {
+    try {
+      _perPageStrokes[_currentPage] = List.from(_strokes);
+      _perPageTextAnnotations[_currentPage] = List.from(_textAnnotations);
+      _perPageImageAnnotations[_currentPage] = List.from(_imageAnnotations);
+
+      int totalItems = 0;
+      for (final list in _perPageStrokes.values) {
+        totalItems += list.length;
+      }
+      for (final list in _perPageTextAnnotations.values) {
+        totalItems += list.length;
+      }
+      for (final list in _perPageImageAnnotations.values) {
+        totalItems += list.length;
+      }
+
+      DocumentStorageService.saveLocalAnnotations(
+        _documentIdentifier,
+        strokes: _strokes,
+        texts: _textAnnotations,
+        images: _imageAnnotations,
+        extraData: {
+          'page_count': _pageCount,
+          'strokes_by_page': {
+            for (var entry in _perPageStrokes.entries)
+              entry.key.toString():
+                  entry.value.map((s) => s.toJson()).toList(),
+          },
+          'texts_by_page': {
+            for (var entry in _perPageTextAnnotations.entries)
+              entry.key.toString():
+                  entry.value.map((t) => t.toJson()).toList(),
+          },
+          'images_by_page': {
+            for (var entry in _perPageImageAnnotations.entries)
+              entry.key.toString():
+                  entry.value.map((i) => i.toJson()).toList(),
+          },
+        },
+      );
+
+      DocumentStorageService.saveOrUpdateDocument(
+        DocumentItem(
+          fileName: _documentIdentifier,
+          filePath: widget.pdfPath,
+          lastOpenedAt: DateTime.now(),
+          annotationsCount: totalItems,
+          isCloudSynced: _syncStatus == SyncStatus.synced,
+        ),
+      );
+
+      _syncToSupabaseDirect();
+    } catch (_) {}
+  }
+
   @override
   void dispose() {
     SystemChrome.setPreferredOrientations(DeviceOrientation.values);
     _cloudSyncDebounceTimer?.cancel();
+    _flushPendingSaves();
     _zoomAnimationController.dispose();
     _pageController.dispose();
     _scrollController.dispose();
@@ -1641,11 +1704,16 @@ class _EditorScreenState extends State<EditorScreen>
     final isLandscape =
         MediaQuery.of(context).orientation == Orientation.landscape;
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFF3F4F6),
-      body: SafeArea(
-        top: false,
-        child: Stack(
+    return PopScope(
+      canPop: true,
+      onPopInvokedWithResult: (didPop, result) {
+        _flushPendingSaves();
+      },
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF3F4F6),
+        body: SafeArea(
+          top: false,
+          child: Stack(
           children: [
             // ==========================================
             // INTEGRATED HD PDF CANVAS & INTERACTIVE VIEWER
@@ -2044,6 +2112,7 @@ class _EditorScreenState extends State<EditorScreen>
           ],
         ),
       ),
+    ),
     );
   }
 
@@ -3082,7 +3151,10 @@ class _EditorScreenState extends State<EditorScreen>
                         color: AppTheme.primaryPurple,
                         size: 18,
                       ),
-                      onPressed: () => Navigator.of(context).pop(),
+                      onPressed: () {
+                        _flushPendingSaves();
+                        Navigator.of(context).pop();
+                      },
                     ),
                   ),
                   const SizedBox(width: 10),

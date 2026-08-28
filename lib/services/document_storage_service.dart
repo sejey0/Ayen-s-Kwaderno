@@ -262,11 +262,20 @@ class DocumentStorageService {
         final client = Supabase.instance.client;
         final annotationsData =
             await loadLocalAnnotations(doc.fileName, targetUserId);
+        final strokesPayload = annotationsData?['strokes_by_page'] ??
+            annotationsData?['strokes'] ??
+            [];
+        final textsPayload = annotationsData?['texts_by_page'] ??
+            annotationsData?['texts'] ??
+            [];
+        final imagesPayload = annotationsData?['images_by_page'] ??
+            annotationsData?['images'] ??
+            [];
         final payload = {
           'document_name': 'u_${targetUserId}___${doc.fileName}',
-          'strokes_data': annotationsData?['strokes'] ?? [],
-          'texts_data': annotationsData?['texts'] ?? [],
-          'images_data': annotationsData?['images'] ?? [],
+          'strokes_data': strokesPayload,
+          'texts_data': textsPayload,
+          'images_data': imagesPayload,
           'updated_at': annotationsData?['updated_at'] ??
               DateTime.now().toUtc().toIso8601String(),
         };
@@ -377,11 +386,18 @@ class DocumentStorageService {
       // Immediate auto-upload of annotations to Supabase database
       try {
         final client = Supabase.instance.client;
+        final strokesPayload = extraData?['strokes_by_page'] ??
+            strokes.map((s) => s.toJson()).toList();
+        final textsPayload = extraData?['texts_by_page'] ??
+            texts.map((t) => t.toJson()).toList();
+        final imagesPayload = extraData?['images_by_page'] ??
+            images.map((i) => i.toJson()).toList();
+
         final payload = {
           'document_name': 'u_${targetUserId}___$documentName',
-          'strokes_data': strokes.map((s) => s.toJson()).toList(),
-          'texts_data': texts.map((t) => t.toJson()).toList(),
-          'images_data': images.map((i) => i.toJson()).toList(),
+          'strokes_data': strokesPayload,
+          'texts_data': textsPayload,
+          'images_data': imagesPayload,
           'updated_at': DateTime.now().toUtc().toIso8601String(),
         };
         client

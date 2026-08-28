@@ -222,36 +222,78 @@ class AutoSyncService {
           }
 
           // Otherwise, it's a document:
-          final strokes = (row['strokes_data'] is List)
-              ? (row['strokes_data'] as List<dynamic>)
-              : (row['strokes_data'] is Map
-                  ? (row['strokes_data'] as Map)
-                      .values
-                      .expand((e) => e is List ? e : [])
-                      .toList()
-                  : []);
-          final texts = (row['texts_data'] is List)
-              ? (row['texts_data'] as List<dynamic>)
-              : (row['texts_data'] is Map
-                  ? (row['texts_data'] as Map)
-                      .values
-                      .expand((e) => e is List ? e : [])
-                      .toList()
-                  : []);
-          final images = (row['images_data'] is List)
-              ? (row['images_data'] as List<dynamic>)
-              : (row['images_data'] is Map
-                  ? (row['images_data'] as Map)
-                      .values
-                      .expand((e) => e is List ? e : [])
-                      .toList()
-                  : []);
+          final rawStrokes = row['strokes_data'];
+          final rawTexts = row['texts_data'];
+          final rawImages = row['images_data'];
+
+          Map<String, dynamic> strokesByPage = {};
+          List<dynamic> flatStrokes = [];
+          if (rawStrokes is Map) {
+            strokesByPage = Map<String, dynamic>.from(rawStrokes);
+            flatStrokes = strokesByPage.values
+                .expand((e) => e is List ? e : [])
+                .toList();
+          } else if (rawStrokes is List) {
+            flatStrokes = rawStrokes;
+            strokesByPage['1'] = rawStrokes;
+          }
+
+          Map<String, dynamic> textsByPage = {};
+          List<dynamic> flatTexts = [];
+          if (rawTexts is Map) {
+            textsByPage = Map<String, dynamic>.from(rawTexts);
+            flatTexts = textsByPage.values
+                .expand((e) => e is List ? e : [])
+                .toList();
+          } else if (rawTexts is List) {
+            flatTexts = rawTexts;
+            textsByPage['1'] = rawTexts;
+          }
+
+          Map<String, dynamic> imagesByPage = {};
+          List<dynamic> flatImages = [];
+          if (rawImages is Map) {
+            imagesByPage = Map<String, dynamic>.from(rawImages);
+            flatImages = imagesByPage.values
+                .expand((e) => e is List ? e : [])
+                .toList();
+          } else if (rawImages is List) {
+            flatImages = rawImages;
+            imagesByPage['1'] = rawImages;
+          }
+
           final totalAnnotations =
-              strokes.length + texts.length + images.length;
+              flatStrokes.length + flatTexts.length + flatImages.length;
           final cloudUpdatedAt = row['updated_at'] != null
               ? DateTime.tryParse(row['updated_at'] as String)?.toLocal() ??
                   DateTime.now()
               : DateTime.now();
+
+          // Immediately write cloud annotations into local SharedPreferences so they persist offline & on new devices
+          try {
+            final localData = {
+              'strokes': flatStrokes.isNotEmpty
+                  ? flatStrokes
+                  : (strokesByPage['1'] is List ? strokesByPage['1'] : []),
+              'texts': flatTexts.isNotEmpty
+                  ? flatTexts
+                  : (textsByPage['1'] is List ? textsByPage['1'] : []),
+              'images': flatImages.isNotEmpty
+                  ? flatImages
+                  : (imagesByPage['1'] is List ? imagesByPage['1'] : []),
+              'strokes_by_page': strokesByPage,
+              'texts_by_page': textsByPage,
+              'images_by_page': imagesByPage,
+              'updated_at': row['updated_at'] ??
+                  DateTime.now().toUtc().toIso8601String(),
+            };
+
+            final prefs = await SharedPreferences.getInstance();
+            await prefs.setString(
+              'ayens_kwaderno_annot_u_${activeUserId}_$docName',
+              jsonEncode(localData),
+            );
+          } catch (_) {}
 
           // Check if local file exists, or auto-download from Supabase Storage
           String? localFilePath;
@@ -283,8 +325,8 @@ class AutoSyncService {
                 } catch (_) {
                   try {
                     fileBytes = await client.storage
-                        .from('user_documents')
-                        .download(storagePath);
+                      .from('user_documents')
+                      .download(storagePath);
                   } catch (_) {}
                 }
                 if (fileBytes != null && fileBytes.isNotEmpty) {
