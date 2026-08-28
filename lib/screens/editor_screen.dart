@@ -2319,7 +2319,7 @@ class _EditorScreenState extends State<EditorScreen>
                         child: Icon(
                           CupertinoIcons.sparkles,
                           size: 14,
-                          color: AppTheme.accentPink,
+                          color: AppTheme.primaryPurple,
                         ),
                       ),
                     ),
@@ -3551,13 +3551,7 @@ class _EditorScreenState extends State<EditorScreen>
               vertical: 6,
             ),
             decoration: BoxDecoration(
-              gradient: isSelected
-                  ? const LinearGradient(
-                      colors: [AppTheme.primaryPurple, AppTheme.accentPink],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    )
-                  : null,
+              gradient: isSelected ? AppTheme.primaryGradientDiagonal : null,
               color: isSelected ? null : Colors.transparent,
               borderRadius: BorderRadius.circular(28),
               boxShadow: isSelected
