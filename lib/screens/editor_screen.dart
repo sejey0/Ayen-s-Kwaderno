@@ -76,14 +76,44 @@ class _EditorScreenState extends State<EditorScreen>
   late final AnimationController _zoomAnimationController;
   Animation<Matrix4>? _zoomAnimation;
 
+  // 3 Primary Default Stationery Colors: Black, Yellow, Red
+  static const List<Color> _defaultThreeColors = [
+    Color(0xFF0F172A), // 1. Midnight Black
+    Color(0xFFFDE047), // 2. Vibrant Yellow
+    Color(0xFFEF4444), // 3. Bold Red
+  ];
+
+  // Up to 2 Recent Colors
+  final List<Color> _recentColors = [];
+
   // Active annotation tool state
   AnnotationTool _activeTool = AnnotationTool.none;
   PenSubTool _penSubTool = PenSubTool.highlighter;
-  Color _selectedColor = AppTheme.highlighterColors[0];
-  Color? _customColor;
+  Color _selectedColor = const Color(0xFF0F172A);
   double _ballpenWidth = 3.0;
   double _highlighterWidth = 16.0;
   AnnotationTool _previousDrawingTool = AnnotationTool.highlighter;
+
+  void _selectColor(Color color) {
+    setState(() {
+      _selectedColor = color;
+      if (_activeTool == AnnotationTool.eraser) {
+        _activeTool = _previousDrawingTool;
+        _isThicknessMenuExpanded = true;
+      }
+      // If color is not one of the default 3, add/bump to recents (max 2)
+      final isDefault = _defaultThreeColors.any((c) =>
+          (c.toARGB32() & 0x00FFFFFF) == (color.toARGB32() & 0x00FFFFFF));
+      if (!isDefault) {
+        _recentColors.removeWhere((c) =>
+            (c.toARGB32() & 0x00FFFFFF) == (color.toARGB32() & 0x00FFFFFF));
+        _recentColors.insert(0, color);
+        if (_recentColors.length > 2) {
+          _recentColors.removeLast();
+        }
+      }
+    });
+  }
 
   // Slide Orientation State (Default: Vertical)
   PageSlideOrientation _slideOrientation = PageSlideOrientation.vertical;
@@ -4331,9 +4361,8 @@ class _EditorScreenState extends State<EditorScreen>
     );
   }
 
-  /// Opens a modern modal bottom sheet with 24 custom colors to choose from
+  /// Opens a modern modal bottom sheet with 24 custom presets and custom RGB/Hex color mixer
   void _openCustomColorPicker() {
-    // 24 Curated Stationery & Highlighter Tones
     const List<Color> customSpectrum = [
       // Neutrals & Darks
       Color(0xFF0F172A), // Midnight Black
@@ -4365,137 +4394,459 @@ class _EditorScreenState extends State<EditorScreen>
       Color(0xFFEA580C), // Tangy Orange
     ];
 
+    int activeTab = 0; // 0 = Presets, 1 = Custom Mixer
+    double red = (_selectedColor.r * 255.0).clamp(0.0, 255.0);
+    double green = (_selectedColor.g * 255.0).clamp(0.0, 255.0);
+    double blue = (_selectedColor.b * 255.0).clamp(0.0, 255.0);
+
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
       builder: (context) {
-        return Container(
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-            boxShadow: [
-              BoxShadow(
-                color: Color(0x221E1B4B),
-                blurRadius: 30,
-                offset: Offset(0, -6),
-              ),
-            ],
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Top drag pill
-              Container(
-                width: 36,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: AppTheme.dividerColor,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              const SizedBox(height: 16),
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final currentColor = Color.fromARGB(
+              255,
+              red.round(),
+              green.round(),
+              blue.round(),
+            );
+            final hexCode =
+                '#${currentColor.toARGB32().toRadixString(16).padLeft(8, '0').substring(2).toUpperCase()}';
 
-              // Title Header
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Row(
-                    children: [
-                      Icon(Icons.palette_rounded,
-                          size: 20, color: AppTheme.primaryPurple),
-                      SizedBox(width: 8),
-                      Text(
-                        'Choose Custom Color',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                          color: AppTheme.textPrimary,
-                        ),
-                      ),
-                    ],
-                  ),
-                  IconButton(
-                    icon: const Icon(CupertinoIcons.xmark_circle_fill,
-                        size: 22, color: AppTheme.textMuted),
-                    onPressed: () => Navigator.pop(context),
+            return Container(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Color(0x221E1B4B),
+                    blurRadius: 30,
+                    offset: Offset(0, -6),
                   ),
                 ],
               ),
-              const SizedBox(height: 14),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Top drag pill
+                  Container(
+                    width: 36,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: AppTheme.dividerColor,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
 
-              // 24 Swatches Grid
-              Wrap(
-                spacing: 12,
-                runSpacing: 12,
-                alignment: WrapAlignment.center,
-                children: customSpectrum.map((color) {
-                  final colorWithAlpha = color.withValues(alpha: 0.4);
-                  final isSelected = (_selectedColor.toARGB32() & 0x00FFFFFF) ==
-                      (color.toARGB32() & 0x00FFFFFF);
-
-                  return GestureDetector(
-                    onTap: () {
-                      HapticFeedback.selectionClick();
-                      setState(() {
-                        _customColor = colorWithAlpha;
-                        _selectedColor = colorWithAlpha;
-                        if (_activeTool == AnnotationTool.eraser) {
-                          _activeTool = _previousDrawingTool;
-                          _isThicknessMenuExpanded = true;
-                        }
-                      });
-                      Navigator.pop(context);
-                    },
-                    child: Container(
-                      width: 42,
-                      height: 42,
-                      decoration: BoxDecoration(
-                        color: color,
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: isSelected
-                              ? AppTheme.textPrimary
-                              : Colors.white,
-                          width: isSelected ? 3.0 : 2.0,
+                  // Header with Tab Switcher & Close
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      // Tab Switcher Pills
+                      Container(
+                        padding: const EdgeInsets.all(3),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF3F4F6),
+                          borderRadius: BorderRadius.circular(16),
                         ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: color.withValues(alpha: 0.35),
-                            blurRadius: 6,
-                            offset: const Offset(0, 2),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            GestureDetector(
+                              onTap: () => setModalState(() => activeTab = 0),
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 180),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 12, vertical: 6),
+                                decoration: BoxDecoration(
+                                  color: activeTab == 0
+                                      ? Colors.white
+                                      : Colors.transparent,
+                                  borderRadius: BorderRadius.circular(14),
+                                  boxShadow: activeTab == 0
+                                      ? [
+                                          BoxShadow(
+                                            color: Colors.black
+                                                .withValues(alpha: 0.08),
+                                            blurRadius: 4,
+                                            offset: const Offset(0, 1),
+                                          ),
+                                        ]
+                                      : null,
+                                ),
+                                child: Text(
+                                  'Palette',
+                                  style: TextStyle(
+                                    fontSize: 12.5,
+                                    fontWeight: FontWeight.w700,
+                                    color: activeTab == 0
+                                        ? AppTheme.primaryPurpleDark
+                                        : AppTheme.textSecondary,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            GestureDetector(
+                              onTap: () => setModalState(() => activeTab = 1),
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 180),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 12, vertical: 6),
+                                decoration: BoxDecoration(
+                                  color: activeTab == 1
+                                      ? Colors.white
+                                      : Colors.transparent,
+                                  borderRadius: BorderRadius.circular(14),
+                                  boxShadow: activeTab == 1
+                                      ? [
+                                          BoxShadow(
+                                            color: Colors.black
+                                                .withValues(alpha: 0.08),
+                                            blurRadius: 4,
+                                            offset: const Offset(0, 1),
+                                          ),
+                                        ]
+                                      : null,
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(
+                                      Icons.tune_rounded,
+                                      size: 14,
+                                      color: AppTheme.primaryPurple,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      'Custom Mixer',
+                                      style: TextStyle(
+                                        fontSize: 12.5,
+                                        fontWeight: FontWeight.w700,
+                                        color: activeTab == 1
+                                            ? AppTheme.primaryPurpleDark
+                                            : AppTheme.textSecondary,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      // Close Button
+                      IconButton(
+                        icon: const Icon(CupertinoIcons.xmark_circle_fill,
+                            size: 22, color: AppTheme.textMuted),
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 14),
+
+                  // TAB 0: 24 Curated Swatches (+ Recents if any)
+                  if (activeTab == 0) ...[
+                    if (_recentColors.isNotEmpty) ...[
+                      const Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          'Recent Colors',
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w700,
+                            color: AppTheme.textSecondary,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: _recentColors.map((rc) {
+                          final isSelected =
+                              (_selectedColor.toARGB32() & 0x00FFFFFF) ==
+                                  (rc.toARGB32() & 0x00FFFFFF);
+                          return GestureDetector(
+                            onTap: () {
+                              HapticFeedback.selectionClick();
+                              _selectColor(rc);
+                              Navigator.pop(context);
+                            },
+                            child: Container(
+                              margin: const EdgeInsets.only(right: 10),
+                              width: 38,
+                              height: 38,
+                              decoration: BoxDecoration(
+                                color: rc,
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: isSelected
+                                      ? AppTheme.textPrimary
+                                      : Colors.white,
+                                  width: isSelected ? 2.5 : 1.5,
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: rc.withValues(alpha: 0.35),
+                                    blurRadius: 6,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ],
+                              ),
+                              child: isSelected
+                                  ? const Icon(
+                                      CupertinoIcons.checkmark,
+                                      size: 16,
+                                      color: Colors.white,
+                                    )
+                                  : null,
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                      const SizedBox(height: 12),
+                      const Divider(height: 1),
+                      const SizedBox(height: 12),
+                    ],
+
+                    // 24 Swatches Grid
+                    Wrap(
+                      spacing: 12,
+                      runSpacing: 12,
+                      alignment: WrapAlignment.center,
+                      children: customSpectrum.map((color) {
+                        final isSelected =
+                            (_selectedColor.toARGB32() & 0x00FFFFFF) ==
+                                (color.toARGB32() & 0x00FFFFFF);
+
+                        return GestureDetector(
+                          onTap: () {
+                            HapticFeedback.selectionClick();
+                            _selectColor(color);
+                            Navigator.pop(context);
+                          },
+                          child: Container(
+                            width: 42,
+                            height: 42,
+                            decoration: BoxDecoration(
+                              color: color,
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: isSelected
+                                    ? AppTheme.textPrimary
+                                    : Colors.white,
+                                width: isSelected ? 3.0 : 2.0,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: color.withValues(alpha: 0.35),
+                                  blurRadius: 6,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
+                            ),
+                            child: isSelected
+                                ? const Icon(
+                                    CupertinoIcons.checkmark,
+                                    size: 18,
+                                    color: Colors.white,
+                                  )
+                                : null,
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ],
+
+                  // TAB 1: Custom Color Mixer (Interactive RGB Sliders + Live Swatch + Hex)
+                  if (activeTab == 1) ...[
+                    // Live Swatch Card
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF9FAFB),
+                        borderRadius: BorderRadius.circular(18),
+                        border: Border.all(color: AppTheme.dividerColor),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 46,
+                            height: 46,
+                            decoration: BoxDecoration(
+                              color: currentColor,
+                              shape: BoxShape.circle,
+                              border:
+                                  Border.all(color: Colors.white, width: 2.5),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: currentColor.withValues(alpha: 0.4),
+                                  blurRadius: 10,
+                                  offset: const Offset(0, 3),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 14),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                hexCode,
+                                style: const TextStyle(
+                                  fontFamily: 'OpenSauceSans',
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w800,
+                                  color: AppTheme.textPrimary,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                              Text(
+                                'RGB(${red.round()}, ${green.round()}, ${blue.round()})',
+                                style: const TextStyle(
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppTheme.textSecondary,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const Spacer(),
+                          // Apply Button
+                          ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppTheme.primaryPurple,
+                              foregroundColor: Colors.white,
+                              elevation: 0,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 14, vertical: 10),
+                            ),
+                            icon: const Icon(CupertinoIcons.checkmark_alt,
+                                size: 16),
+                            label: const Text(
+                              'Apply',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            onPressed: () {
+                              HapticFeedback.mediumImpact();
+                              _selectColor(currentColor);
+                              Navigator.pop(context);
+                            },
                           ),
                         ],
                       ),
-                      child: isSelected
-                          ? const Icon(
-                              CupertinoIcons.checkmark,
-                              size: 18,
-                              color: Colors.white,
-                            )
-                          : null,
                     ),
-                  );
-                }).toList(),
+
+                    const SizedBox(height: 14),
+
+                    // Red Slider
+                    _buildColorSliderRow(
+                      label: 'Red',
+                      value: red,
+                      color: const Color(0xFFEF4444),
+                      onChanged: (v) => setModalState(() => red = v),
+                    ),
+
+                    // Green Slider
+                    _buildColorSliderRow(
+                      label: 'Green',
+                      value: green,
+                      color: const Color(0xFF10B981),
+                      onChanged: (v) => setModalState(() => green = v),
+                    ),
+
+                    // Blue Slider
+                    _buildColorSliderRow(
+                      label: 'Blue',
+                      value: blue,
+                      color: const Color(0xFF3B82F6),
+                      onChanged: (v) => setModalState(() => blue = v),
+                    ),
+                  ],
+                ],
               ),
-            ],
-          ),
+            );
+          },
         );
       },
     );
   }
 
+  Widget _buildColorSliderRow({
+    required String label,
+    required double value,
+    required Color color,
+    required ValueChanged<double> onChanged,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 44,
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: color,
+              ),
+            ),
+          ),
+          Expanded(
+            child: SliderTheme(
+              data: SliderThemeData(
+                activeTrackColor: color,
+                inactiveTrackColor: color.withValues(alpha: 0.15),
+                thumbColor: color,
+                trackHeight: 4,
+                thumbShape:
+                    const RoundSliderThumbShape(enabledThumbRadius: 7),
+                overlayShape:
+                    const RoundSliderOverlayShape(overlayRadius: 14),
+              ),
+              child: Slider(
+                value: value,
+                min: 0,
+                max: 255,
+                onChanged: onChanged,
+              ),
+            ),
+          ),
+          SizedBox(
+            width: 32,
+            child: Text(
+              '${value.round()}',
+              textAlign: TextAlign.end,
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: AppTheme.textPrimary,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   /// Secondary floating color palette & tool presets picker
   Widget _buildColorPickerSubBar({bool isVertical = false}) {
-    // List of active dots: 5 presets + optional active custom color
+    // 3 Default colors + up to 2 Recent colors
     final List<Color> activeColorDots = [
-      ...AppTheme.highlighterColors,
-      if (_customColor != null &&
-          !AppTheme.highlighterColors.any((c) =>
-              (c.toARGB32() & 0x00FFFFFF) ==
-              (_customColor!.toARGB32() & 0x00FFFFFF)))
-        _customColor!,
+      ..._defaultThreeColors,
+      ..._recentColors,
     ];
 
     return ClipRRect(
@@ -4534,22 +4885,14 @@ class _EditorScreenState extends State<EditorScreen>
               direction: isVertical ? Axis.vertical : Axis.horizontal,
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Color Dots
+                // Color Dots (3 Defaults + up to 2 Recents)
                 ...activeColorDots.map((color) {
                   final isSelected =
                       (_selectedColor.toARGB32() & 0x00FFFFFF) ==
                               (color.toARGB32() & 0x00FFFFFF) &&
                           _activeTool != AnnotationTool.eraser;
                   return GestureDetector(
-                    onTap: () {
-                      setState(() {
-                        _selectedColor = color;
-                        if (_activeTool == AnnotationTool.eraser) {
-                          _activeTool = _previousDrawingTool;
-                          _isThicknessMenuExpanded = true;
-                        }
-                      });
-                    },
+                    onTap: () => _selectColor(color),
                     child: Container(
                       margin: EdgeInsets.symmetric(
                         horizontal: isVertical ? 0 : 3.5,
@@ -4577,9 +4920,9 @@ class _EditorScreenState extends State<EditorScreen>
                   );
                 }),
 
-                // Custom Rainbow Color Wheel Button
+                // Custom Rainbow Color Wheel Button (+)
                 Tooltip(
-                  message: 'Custom Color Palette',
+                  message: 'Custom Color Palette & RGB Mixer',
                   child: GestureDetector(
                     onTap: _openCustomColorPicker,
                     child: Container(
