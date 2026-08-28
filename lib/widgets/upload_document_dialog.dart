@@ -123,10 +123,9 @@ class _UploadDocumentDialogState extends State<UploadDocumentDialog> {
       _selectedFileSize = size;
       _isImage = isImg;
       _pdfPage1Bytes = pdfBytes;
-      // Only auto-fill if the user hasn't typed their own custom title yet
-      if (!_userManuallyEditedTitle || _titleController.text.trim().isEmpty) {
-        _titleController.text = name;
-      }
+      // Auto-fill document title with the selected file name
+      _titleController.text = name;
+      _userManuallyEditedTitle = false;
     });
   }
 
@@ -137,9 +136,8 @@ class _UploadDocumentDialogState extends State<UploadDocumentDialog> {
       _selectedFileSize = null;
       _isImage = false;
       _pdfPage1Bytes = null;
-      if (!_userManuallyEditedTitle) {
-        _titleController.clear();
-      }
+      _titleController.clear();
+      _userManuallyEditedTitle = false;
     });
   }
 
