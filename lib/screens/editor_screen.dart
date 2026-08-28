@@ -6,6 +6,9 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:syncfusion_pdfviewer_platform_interface/pdfviewer_platform_interface.dart';
 import '../models/document_item_model.dart';
@@ -2787,6 +2790,43 @@ class _EditorScreenState extends State<EditorScreen>
                     ),
                   ),
                 ),
+
+                Container(
+                  width: 1,
+                  height: 12,
+                  color: AppTheme.dividerColor,
+                ),
+
+                // 8. Cancel Selection / Done Button
+                Tooltip(
+                  message: 'Cancel Selection / Done',
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () {
+                      HapticFeedback.selectionClick();
+                      setState(() {
+                        _selectedImageId = null;
+                        _selectedTextId = null;
+                      });
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 5, vertical: 3),
+                      child: Container(
+                        padding: const EdgeInsets.all(3.5),
+                        decoration: const BoxDecoration(
+                          color: Color(0xFFF1F5F9),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          CupertinoIcons.xmark,
+                          size: 12,
+                          color: Color(0xFF64748B),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
@@ -3060,6 +3100,20 @@ class _EditorScreenState extends State<EditorScreen>
                         color: AppTheme.accentPink,
                       ),
                     ),
+                    const SizedBox(width: 8),
+                    GestureDetector(
+                      onTap: () {
+                        HapticFeedback.selectionClick();
+                        setState(() {
+                          _selectedTextId = null;
+                        });
+                      },
+                      child: const Icon(
+                        CupertinoIcons.xmark,
+                        size: 13,
+                        color: AppTheme.textMuted,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -3255,135 +3309,218 @@ class _EditorScreenState extends State<EditorScreen>
 
               const SizedBox(height: 6),
 
-              // Row 2 / Next Space: Page Badge + Undo/Redo + Delete/Clear + Sync Status
-              Row(
-                children: [
-                  // Page Count Badge (Always visible, e.g. Page 1 of 1, No Icon, Bold)
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 10, vertical: 4.5),
-                    decoration: BoxDecoration(
-                      color: AppTheme.surfaceWhite,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: AppTheme.primaryPurpleLight,
-                        width: 1.2,
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: AppTheme.primaryPurple.withValues(alpha: 0.06),
-                          blurRadius: 4,
-                          offset: const Offset(0, 1),
-                        ),
-                      ],
-                    ),
-                    child: Text(
-                      'Page $_currentPage of ${_pageCount < 1 ? 1 : _pageCount}',
-                      style: const TextStyle(
-                        fontFamily: 'OpenSauceSans',
-                        fontSize: 12,
-                        fontWeight: FontWeight.w800,
-                        color: AppTheme.textPrimary,
-                        letterSpacing: -0.1,
-                      ),
-                    ),
-                  ),
-
-                  const Spacer(),
-
-                  // Undo & Redo Capsule Group
-                  Container(
-                    height: 32,
-                    padding: const EdgeInsets.symmetric(horizontal: 2),
-                    decoration: BoxDecoration(
-                      color: AppTheme.surfaceWhite,
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(
-                        color: AppTheme.primaryPurpleLight,
-                        width: 1.2,
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: AppTheme.primaryPurple.withValues(alpha: 0.05),
-                          blurRadius: 4,
-                          offset: const Offset(0, 1),
-                        ),
-                      ],
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        // Undo Button
-                        IconButton(
-                          padding: EdgeInsets.zero,
-                          constraints:
-                              const BoxConstraints(minWidth: 28, minHeight: 28),
-                          icon: Icon(
-                            CupertinoIcons.arrow_uturn_left,
-                            color: (_undoStack.isNotEmpty || _strokes.isNotEmpty)
-                                ? AppTheme.primaryPurple
-                                : AppTheme.textMuted.withValues(alpha: 0.35),
-                            size: 16,
-                          ),
-                          tooltip: 'Undo (↩)',
-                          onPressed: (_undoStack.isNotEmpty || _strokes.isNotEmpty)
-                              ? _undo
-                              : null,
-                        ),
-                        Container(
-                          width: 1,
-                          height: 14,
+              // Row 2 / Next Space: Page Badge + Undo/Redo + Delete/Clear + Download + Sync Status
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Page Count Badge (Always visible, e.g. Page 1 of 1, No Icon, Bold)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: AppTheme.surfaceWhite,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
                           color: AppTheme.primaryPurpleLight,
+                          width: 1.2,
                         ),
-                        // Redo Button
-                        IconButton(
-                          padding: EdgeInsets.zero,
-                          constraints:
-                              const BoxConstraints(minWidth: 28, minHeight: 28),
-                          icon: Icon(
-                            CupertinoIcons.arrow_uturn_right,
-                            color: _redoStack.isNotEmpty
-                                ? AppTheme.primaryPurple
-                                : AppTheme.textMuted.withValues(alpha: 0.35),
-                            size: 16,
+                        boxShadow: [
+                          BoxShadow(
+                            color:
+                                AppTheme.primaryPurple.withValues(alpha: 0.06),
+                            blurRadius: 4,
+                            offset: const Offset(0, 1),
                           ),
-                          tooltip: 'Redo (↪)',
-                          onPressed: _redoStack.isNotEmpty ? _redo : null,
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  // Delete Selected Image Sticker Button
-                  if (_selectedImageId != null) ...[
-                    const SizedBox(width: 5),
-                    IconButton(
-                      padding: EdgeInsets.zero,
-                      constraints:
-                          const BoxConstraints(minWidth: 32, minHeight: 32),
-                      icon: Container(
-                        padding: const EdgeInsets.all(5),
-                        decoration: const BoxDecoration(
-                          color: Color(0xFFFEE2E2),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          CupertinoIcons.trash_fill,
-                          color: Color(0xFFEF4444),
-                          size: 14,
+                        ],
+                      ),
+                      child: Text(
+                        'Page $_currentPage of ${_pageCount < 1 ? 1 : _pageCount}',
+                        style: const TextStyle(
+                          fontFamily: 'OpenSauceSans',
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                          color: AppTheme.textPrimary,
+                          letterSpacing: -0.1,
                         ),
                       ),
-                      tooltip: 'Delete Selected Image',
-                      onPressed: () {
-                        HapticFeedback.heavyImpact();
-                        _deleteImageAnnotation(_selectedImageId!);
-                      },
                     ),
-                  ],
 
-                  // Clear Annotations Button
-                  if (totalAnnotationsCount > 0 && _selectedImageId == null) ...[
-                    const SizedBox(width: 5),
+                    const SizedBox(width: 8),
+
+                    // Undo & Redo Capsule Group
+                    Container(
+                      height: 32,
+                      padding: const EdgeInsets.symmetric(horizontal: 2),
+                      decoration: BoxDecoration(
+                        color: AppTheme.surfaceWhite,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: AppTheme.primaryPurpleLight,
+                          width: 1.2,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color:
+                                AppTheme.primaryPurple.withValues(alpha: 0.05),
+                            blurRadius: 4,
+                            offset: const Offset(0, 1),
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          // Undo Button
+                          IconButton(
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(
+                                minWidth: 28, minHeight: 28),
+                            icon: Icon(
+                              CupertinoIcons.arrow_uturn_left,
+                              color: (_undoStack.isNotEmpty ||
+                                      _strokes.isNotEmpty)
+                                  ? AppTheme.primaryPurple
+                                  : AppTheme.textMuted
+                                      .withValues(alpha: 0.35),
+                              size: 16,
+                            ),
+                            tooltip: 'Undo (↩)',
+                            onPressed: (_undoStack.isNotEmpty ||
+                                    _strokes.isNotEmpty)
+                                ? _undo
+                                : null,
+                          ),
+                          Container(
+                            width: 1,
+                            height: 14,
+                            color: AppTheme.primaryPurpleLight,
+                          ),
+                          // Redo Button
+                          IconButton(
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(
+                                minWidth: 28, minHeight: 28),
+                            icon: Icon(
+                              CupertinoIcons.arrow_uturn_right,
+                              color: _redoStack.isNotEmpty
+                                  ? AppTheme.primaryPurple
+                                  : AppTheme.textMuted
+                                      .withValues(alpha: 0.35),
+                              size: 16,
+                            ),
+                            tooltip: 'Redo (↪)',
+                            onPressed:
+                                _redoStack.isNotEmpty ? _redo : null,
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    // Selected Item Actions (Cancel Selection & Delete)
+                    if (_selectedImageId != null || _selectedTextId != null) ...[
+                      const SizedBox(width: 4),
+                      // Cancel Selection Button
+                      IconButton(
+                        padding: EdgeInsets.zero,
+                        constraints:
+                            const BoxConstraints(minWidth: 32, minHeight: 32),
+                        icon: Container(
+                          padding: const EdgeInsets.all(5),
+                          decoration: BoxDecoration(
+                            color: AppTheme.primaryPurpleLight,
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: AppTheme.primaryPurple
+                                  .withValues(alpha: 0.35),
+                              width: 1.2,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: AppTheme.primaryPurple
+                                    .withValues(alpha: 0.10),
+                                blurRadius: 4,
+                                offset: const Offset(0, 1),
+                              ),
+                            ],
+                          ),
+                          child: const Icon(
+                            CupertinoIcons.xmark,
+                            color: AppTheme.primaryPurple,
+                            size: 13,
+                          ),
+                        ),
+                        tooltip: 'Cancel Selection',
+                        onPressed: () {
+                          HapticFeedback.selectionClick();
+                          setState(() {
+                            _selectedImageId = null;
+                            _selectedTextId = null;
+                          });
+                        },
+                      ),
+                      const SizedBox(width: 4),
+                      // Delete Selected Button
+                      IconButton(
+                        padding: EdgeInsets.zero,
+                        constraints:
+                            const BoxConstraints(minWidth: 32, minHeight: 32),
+                        icon: Container(
+                          padding: const EdgeInsets.all(5),
+                          decoration: const BoxDecoration(
+                            color: Color(0xFFFEE2E2),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            CupertinoIcons.trash_fill,
+                            color: Color(0xFFEF4444),
+                            size: 14,
+                          ),
+                        ),
+                        tooltip: 'Delete Selected',
+                        onPressed: () {
+                          HapticFeedback.heavyImpact();
+                          if (_selectedImageId != null) {
+                            _deleteImageAnnotation(_selectedImageId!);
+                          } else if (_selectedTextId != null) {
+                            _deleteTextAnnotation(_selectedTextId!);
+                          }
+                        },
+                      ),
+                    ],
+
+                    // Clear Annotations Button
+                    if (totalAnnotationsCount > 0 &&
+                        _selectedImageId == null &&
+                        _selectedTextId == null) ...[
+                      const SizedBox(width: 4),
+                      IconButton(
+                        padding: EdgeInsets.zero,
+                        constraints:
+                            const BoxConstraints(minWidth: 32, minHeight: 32),
+                        icon: Container(
+                          padding: const EdgeInsets.all(5),
+                          decoration: BoxDecoration(
+                            color: AppTheme.accentPinkLight
+                                .withValues(alpha: 0.5),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            CupertinoIcons.trash,
+                            color: AppTheme.accentPink,
+                            size: 14,
+                          ),
+                        ),
+                        tooltip: 'Clear Annotations',
+                        onPressed: _clearAnnotations,
+                      ),
+                    ],
+
+                    const SizedBox(width: 4),
+
+                    // Download / Export Marked Document Button
                     IconButton(
                       padding: EdgeInsets.zero,
                       constraints:
@@ -3391,25 +3528,38 @@ class _EditorScreenState extends State<EditorScreen>
                       icon: Container(
                         padding: const EdgeInsets.all(5),
                         decoration: BoxDecoration(
-                          color: AppTheme.accentPinkLight.withValues(alpha: 0.5),
+                          color: AppTheme.primaryPurpleLight,
                           shape: BoxShape.circle,
+                          border: Border.all(
+                            color: AppTheme.primaryPurple
+                                .withValues(alpha: 0.35),
+                            width: 1.2,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: AppTheme.primaryPurple
+                                  .withValues(alpha: 0.12),
+                              blurRadius: 4,
+                              offset: const Offset(0, 1),
+                            ),
+                          ],
                         ),
                         child: const Icon(
-                          CupertinoIcons.trash,
-                          color: AppTheme.accentPink,
+                          CupertinoIcons.arrow_down_to_line_alt,
+                          color: AppTheme.primaryPurple,
                           size: 14,
                         ),
                       ),
-                      tooltip: 'Clear Annotations',
-                      onPressed: _clearAnnotations,
+                      tooltip: 'Save / Download to Device (with Markings)',
+                      onPressed: _showDownloadExportModal,
                     ),
+
+                    const SizedBox(width: 4),
+
+                    // Smart Auto-Sync Status Badge / Manual Sync Trigger
+                    _buildSyncStatusBadge(),
                   ],
-
-                  const SizedBox(width: 4),
-
-                  // Smart Auto-Sync Status Badge / Manual Sync Trigger
-                  _buildSyncStatusBadge(),
-                ],
+                ),
               ),
             ],
           ),
@@ -3458,7 +3608,10 @@ class _EditorScreenState extends State<EditorScreen>
                   size: 18,
                 ),
                 tooltip: 'Back',
-                onPressed: () => Navigator.of(context).pop(),
+                onPressed: () {
+                  _flushPendingSaves();
+                  Navigator.of(context).pop();
+                },
               ),
               Container(
                 width: 1,
@@ -3611,6 +3764,842 @@ class _EditorScreenState extends State<EditorScreen>
         ),
       ),
     );
+  }
+
+  // ==========================================
+  // DOCUMENT EXPORT & DOWNLOAD TO DEVICE
+  // ==========================================
+
+  /// Displays the interactive Export & Download Sheet
+  void _showDownloadExportModal() {
+    HapticFeedback.selectionClick();
+    final cleanDocName = _documentIdentifier.split('.').first;
+    final isPdf = _documentIdentifier.toLowerCase().endsWith('.pdf') ||
+        widget.pdfPath.toLowerCase().endsWith('.pdf') ||
+        _pageCount > 1;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (modalContext) {
+        return Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Drag handle
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 16),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFE2E8F0),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+
+              // Title Header with Unified Back Button
+              Row(
+                children: [
+                  // Back Button (matching top app bar and tools style)
+                  Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(20),
+                      onTap: () => Navigator.pop(modalContext),
+                      child: Container(
+                        padding: const EdgeInsets.all(7),
+                        decoration: BoxDecoration(
+                          color: AppTheme.primaryPurpleLight,
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: AppTheme.primaryPurple
+                                .withValues(alpha: 0.35),
+                            width: 1.2,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: AppTheme.primaryPurple
+                                  .withValues(alpha: 0.10),
+                              blurRadius: 4,
+                              offset: const Offset(0, 1),
+                            ),
+                          ],
+                        ),
+                        child: const Icon(
+                          CupertinoIcons.chevron_back,
+                          color: AppTheme.primaryPurple,
+                          size: 16,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          isPdf
+                              ? 'Save & Download PDF Document'
+                              : 'Save & Download Image',
+                          style: const TextStyle(
+                            fontFamily: 'OpenSauceSans',
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                            color: AppTheme.textPrimary,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          isPdf
+                              ? 'Download as PDF with all markings & drawings'
+                              : 'Download marked image directly to your device',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: AppTheme.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 18),
+
+              if (isPdf) ...[
+                // PDF Option 1: Save Full PDF with Markings (.pdf)
+                _buildExportOptionTile(
+                  icon: CupertinoIcons.doc_text_fill,
+                  iconColor: AppTheme.primaryPurple,
+                  iconBgColor: AppTheme.primaryPurpleLight,
+                  title: 'Save Marked PDF Document (.pdf)',
+                  subtitle:
+                      'Exports all $_pageCount page${_pageCount == 1 ? '' : 's'} with all markings into a PDF file',
+                  onTap: () async {
+                    Navigator.pop(modalContext);
+                    await _exportMarkedPdf(cleanDocName);
+                  },
+                ),
+
+                const SizedBox(height: 10),
+
+                // PDF Option 2: Save Current Page as HD Image (.png)
+                _buildExportOptionTile(
+                  icon: CupertinoIcons.photo_on_rectangle,
+                  iconColor: AppTheme.primaryPurpleDark,
+                  iconBgColor: AppTheme.primaryPurpleLight,
+                  title: 'Save Current Page as Image (.png)',
+                  subtitle:
+                      'High-definition image of page $_currentPage with markings',
+                  onTap: () async {
+                    Navigator.pop(modalContext);
+                    await _exportSinglePage(
+                      _currentPage,
+                      '${cleanDocName}_page_${_currentPage}_marked.png',
+                    );
+                  },
+                ),
+
+                if (_pageCount > 1) ...[
+                  const SizedBox(height: 10),
+                  // PDF Option 3: Save All Pages as Images (.png)
+                  _buildExportOptionTile(
+                    icon: CupertinoIcons.doc_on_doc,
+                    iconColor: AppTheme.primaryPurpleDark,
+                    iconBgColor: AppTheme.primaryPurpleLight,
+                    title: 'Save All $_pageCount Pages as Images (.png)',
+                    subtitle:
+                        'Exports each page as a marked PNG image to Downloads',
+                    onTap: () async {
+                      Navigator.pop(modalContext);
+                      await _exportAllPages(cleanDocName);
+                    },
+                  ),
+                ],
+
+                const SizedBox(height: 10),
+
+                // PDF Option 4: Clean Original PDF
+                _buildExportOptionTile(
+                  icon: CupertinoIcons.arrow_down_doc,
+                  iconColor: AppTheme.primaryPurple,
+                  iconBgColor:
+                      AppTheme.primaryPurpleLight.withValues(alpha: 0.7),
+                  title: 'Save Clean Original PDF (.pdf)',
+                  subtitle: 'Downloads original unmodified PDF file',
+                  onTap: () async {
+                    Navigator.pop(modalContext);
+                    await _exportOriginalFile();
+                  },
+                ),
+              ] else ...[
+                // Image Option 1: Save Marked Image (.png)
+                _buildExportOptionTile(
+                  icon: CupertinoIcons.photo_fill,
+                  iconColor: AppTheme.primaryPurple,
+                  iconBgColor: AppTheme.primaryPurpleLight,
+                  title: 'Save Marked Image (.png)',
+                  subtitle:
+                      'High-definition PNG image with all drawings & stickers',
+                  onTap: () async {
+                    Navigator.pop(modalContext);
+                    await _exportSinglePage(
+                      1,
+                      '${cleanDocName}_marked.png',
+                    );
+                  },
+                ),
+
+                const SizedBox(height: 10),
+
+                // Image Option 2: Save as PDF Document (.pdf)
+                _buildExportOptionTile(
+                  icon: CupertinoIcons.doc_text_fill,
+                  iconColor: AppTheme.primaryPurpleDark,
+                  iconBgColor: AppTheme.primaryPurpleLight,
+                  title: 'Save as PDF Document (.pdf)',
+                  subtitle: 'Converts marked image into a PDF document',
+                  onTap: () async {
+                    Navigator.pop(modalContext);
+                    await _exportMarkedPdf(cleanDocName);
+                  },
+                ),
+
+                const SizedBox(height: 10),
+
+                // Image Option 3: Clean Original Image
+                _buildExportOptionTile(
+                  icon: CupertinoIcons.arrow_down_doc,
+                  iconColor: AppTheme.primaryPurple,
+                  iconBgColor:
+                      AppTheme.primaryPurpleLight.withValues(alpha: 0.7),
+                  title: 'Save Clean Original Image',
+                  subtitle: 'Downloads original unmodified image file',
+                  onTap: () async {
+                    Navigator.pop(modalContext);
+                    await _exportOriginalFile();
+                  },
+                ),
+              ],
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  /// Generates a multi-page or single-page PDF with all markings rendered into PDF pages
+  Future<void> _exportMarkedPdf(String cleanDocName) async {
+    final totalPages = _pageCount < 1 ? 1 : _pageCount;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const SizedBox(
+              width: 14,
+              height: 14,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Colors.white,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Text('Generating marked PDF ($totalPages page${totalPages == 1 ? '' : 's'})...'),
+          ],
+        ),
+        duration: const Duration(seconds: 3),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+
+    try {
+      final pdfDoc = pw.Document();
+      final double refW = (_pageWidth > 0) ? _pageWidth : 595.0;
+      final double refH = (_pageHeight > 0) ? _pageHeight : 842.0;
+
+      for (int p = 1; p <= totalPages; p++) {
+        final pageBytes = await _renderPageWithAnnotations(p);
+        if (pageBytes != null) {
+          final image = pw.MemoryImage(pageBytes);
+          pdfDoc.addPage(
+            pw.Page(
+              pageFormat: PdfPageFormat(refW, refH),
+              margin: pw.EdgeInsets.zero,
+              build: (pw.Context context) {
+                return pw.FullPage(
+                  ignoreMargins: true,
+                  child: pw.Image(image, fit: pw.BoxFit.fill),
+                );
+              },
+            ),
+          );
+        }
+      }
+
+      final pdfBytes = await pdfDoc.save();
+      final fileName = '${cleanDocName}_marked.pdf';
+      final savedPath = await _saveBytesToDevice(pdfBytes, fileName);
+
+      if (!mounted) return;
+
+      if (savedPath != null) {
+        HapticFeedback.mediumImpact();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(CupertinoIcons.checkmark_circle_fill,
+                    color: Color(0xFF10B981), size: 18),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Saved PDF to Downloads: ${savedPath.split(Platform.pathSeparator).last}',
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: AppTheme.textPrimary,
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 4),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Unable to access device Downloads directory.'),
+            backgroundColor: Color(0xFFEF4444),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('Error exporting marked PDF: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to export PDF: $e'),
+          backgroundColor: const Color(0xFFEF4444),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  Widget _buildExportOptionTile({
+    required IconData icon,
+    required Color iconColor,
+    required Color iconBgColor,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF8FAFC),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: const Color(0xFFE2E8F0)),
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: iconBgColor,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(icon, color: iconColor, size: 20),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontFamily: 'OpenSauceSans',
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: const TextStyle(
+                        fontSize: 11.5,
+                        color: AppTheme.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(
+                CupertinoIcons.chevron_right,
+                size: 14,
+                color: Color(0xFF94A3B8),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _exportSinglePage(int pageNum, String fileName) async {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Row(
+          children: [
+            SizedBox(
+              width: 14,
+              height: 14,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Colors.white,
+              ),
+            ),
+            SizedBox(width: 10),
+            Text('Generating marked document...'),
+          ],
+        ),
+        duration: Duration(seconds: 1),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+
+    final bytes = await _renderPageWithAnnotations(pageNum);
+    if (bytes == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Failed to generate image.'),
+          backgroundColor: Color(0xFFEF4444),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    final savedPath = await _saveBytesToDevice(bytes, fileName);
+    if (!mounted) return;
+
+    if (savedPath != null) {
+      HapticFeedback.mediumImpact();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(CupertinoIcons.checkmark_circle_fill,
+                  color: Color(0xFF10B981), size: 18),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Saved to Downloads: ${savedPath.split(Platform.pathSeparator).last}',
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: AppTheme.textPrimary,
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 4),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Unable to access device Downloads directory.'),
+          backgroundColor: Color(0xFFEF4444),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  Future<void> _exportAllPages(String cleanDocName) async {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const SizedBox(
+              width: 14,
+              height: 14,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Colors.white,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Text('Exporting $_pageCount pages with markings...'),
+          ],
+        ),
+        duration: const Duration(seconds: 2),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+
+    int successCount = 0;
+
+    for (int p = 1; p <= _pageCount; p++) {
+      final bytes = await _renderPageWithAnnotations(p);
+      if (bytes != null) {
+        final path = await _saveBytesToDevice(
+          bytes,
+          '${cleanDocName}_page_${p}_marked.png',
+        );
+        if (path != null) {
+          successCount++;
+        }
+      }
+    }
+
+    if (!mounted) return;
+
+    if (successCount > 0) {
+      HapticFeedback.mediumImpact();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(CupertinoIcons.checkmark_circle_fill,
+                  color: Color(0xFF10B981), size: 18),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Exported $successCount pages to Downloads folder!',
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: AppTheme.textPrimary,
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 4),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<void> _exportOriginalFile() async {
+    final origFile = File(widget.pdfPath);
+    if (!origFile.existsSync()) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Original document file is not found locally.'),
+          backgroundColor: Color(0xFFEF4444),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    final bytes = await origFile.readAsBytes();
+    final fileName = _documentIdentifier;
+    final savedPath = await _saveBytesToDevice(bytes, fileName);
+
+    if (!mounted) return;
+
+    if (savedPath != null) {
+      HapticFeedback.mediumImpact();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(CupertinoIcons.checkmark_circle_fill,
+                  color: Color(0xFF10B981), size: 18),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Saved to Downloads: ${savedPath.split(Platform.pathSeparator).last}',
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: AppTheme.textPrimary,
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 4),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+      );
+    }
+  }
+
+  /// Exports and renders a page with all drawings, highlighters, sticky notes, and stickers flattened
+  Future<Uint8List?> _renderPageWithAnnotations(int pageNum) async {
+    try {
+      final double refW = (_pageWidth > 0) ? _pageWidth : 595.0;
+      final double refH = (_pageHeight > 0) ? _pageHeight : 842.0;
+
+      // High-resolution export scale (2.5x for crisp text & ink)
+      const double exportScale = 2.5;
+      final int exportW = (refW * exportScale).round().clamp(100, 4000);
+      final int exportH = (refH * exportScale).round().clamp(100, 4000);
+
+      final recorder = ui.PictureRecorder();
+      final canvas = Canvas(
+        recorder,
+        Rect.fromLTWH(0, 0, exportW.toDouble(), exportH.toDouble()),
+      );
+
+      // 1. Fill crisp white background
+      canvas.drawRect(
+        Rect.fromLTWH(0, 0, exportW.toDouble(), exportH.toDouble()),
+        Paint()..color = Colors.white,
+      );
+
+      // 2. Draw base page image if available
+      final bgImage = _renderedPages[pageNum] ??
+          (pageNum == _currentPage ? _renderedPageUiImage : null);
+      if (bgImage != null) {
+        canvas.drawImageRect(
+          bgImage,
+          Rect.fromLTWH(
+              0, 0, bgImage.width.toDouble(), bgImage.height.toDouble()),
+          Rect.fromLTWH(0, 0, exportW.toDouble(), exportH.toDouble()),
+          Paint()..filterQuality = FilterQuality.high,
+        );
+      }
+
+      // Scale canvas to reference coordinates
+      canvas.save();
+      canvas.scale(exportScale, exportScale);
+
+      // 3. Draw Historical & Page Strokes (Highlighters, pens, lines)
+      final strokes = pageNum == _currentPage
+          ? _strokes
+          : (_perPageStrokes[pageNum] ?? []);
+
+      for (final stroke in strokes) {
+        if (stroke.points.isEmpty) continue;
+        final isHighlighter =
+            stroke.color.a < 0.95 || stroke.strokeWidth >= 9.0;
+        final paintColor = isHighlighter
+            ? stroke.color.withValues(alpha: 0.38)
+            : stroke.color;
+
+        final paint = Paint()
+          ..color = paintColor
+          ..strokeWidth = stroke.strokeWidth
+          ..strokeCap = StrokeCap.round
+          ..strokeJoin = StrokeJoin.round
+          ..style = PaintingStyle.stroke;
+
+        if (stroke.isStraightLine) {
+          if (stroke.points.length == 1) {
+            canvas.drawCircle(
+              stroke.points.first,
+              stroke.strokeWidth / 2,
+              paint..style = PaintingStyle.fill,
+            );
+          } else {
+            canvas.drawLine(
+              stroke.points.first,
+              stroke.points.last,
+              paint,
+            );
+          }
+        } else {
+          if (stroke.points.length == 1) {
+            canvas.drawCircle(
+              stroke.points.first,
+              stroke.strokeWidth / 2,
+              paint..style = PaintingStyle.fill,
+            );
+          } else {
+            final path = Path();
+            final start = stroke.points[0];
+            path.moveTo(start.dx, start.dy);
+
+            for (int i = 1; i < stroke.points.length - 1; i++) {
+              final p0 = stroke.points[i];
+              final p1 = stroke.points[i + 1];
+              final midX = (p0.dx + p1.dx) / 2;
+              final midY = (p0.dy + p1.dy) / 2;
+              path.quadraticBezierTo(p0.dx, p0.dy, midX, midY);
+            }
+
+            if (stroke.points.length > 1) {
+              final last = stroke.points.last;
+              path.lineTo(last.dx, last.dy);
+            }
+
+            canvas.drawPath(path, paint);
+          }
+        }
+      }
+
+      // 4. Draw Image Stickers
+      final images = pageNum == _currentPage
+          ? _imageAnnotations
+          : (_perPageImageAnnotations[pageNum] ?? []);
+
+      for (final imgAnnot in images) {
+        final imgFile = File(imgAnnot.imagePath);
+        if (imgFile.existsSync()) {
+          try {
+            final imgBytes = imgFile.readAsBytesSync();
+            final codec = await ui.instantiateImageCodec(imgBytes);
+            final frame = await codec.getNextFrame();
+            final stickerUiImg = frame.image;
+
+            final rect = Rect.fromLTWH(
+              imgAnnot.position.dx,
+              imgAnnot.position.dy,
+              imgAnnot.size.width,
+              imgAnnot.size.height,
+            );
+
+            canvas.save();
+            if (imgAnnot.shape == 'circle') {
+              canvas.clipPath(Path()..addOval(rect));
+            } else {
+              final radius = imgAnnot.shape == 'pill'
+                  ? 32.0
+                  : (imgAnnot.shape == 'polaroid' ? 6.0 : 12.0);
+              canvas.clipRRect(
+                  RRect.fromRectAndRadius(rect, Radius.circular(radius)));
+            }
+            canvas.drawImageRect(
+              stickerUiImg,
+              Rect.fromLTWH(
+                0,
+                0,
+                stickerUiImg.width.toDouble(),
+                stickerUiImg.height.toDouble(),
+              ),
+              rect,
+              Paint()..filterQuality = FilterQuality.high,
+            );
+            canvas.restore();
+          } catch (_) {}
+        }
+      }
+
+      // 5. Draw Digital Text Sticky Notes
+      final texts = pageNum == _currentPage
+          ? _textAnnotations
+          : (_perPageTextAnnotations[pageNum] ?? []);
+
+      for (final textAnnot in texts) {
+        final textSpan = TextSpan(
+          text: textAnnot.text,
+          style: const TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: Color(0xFF1E293B),
+          ),
+        );
+        final textPainter = TextPainter(
+          text: textSpan,
+          textDirection: TextDirection.ltr,
+        )..layout(maxWidth: 220);
+
+        final bgRect = RRect.fromRectAndRadius(
+          Rect.fromLTWH(
+            textAnnot.position.dx,
+            textAnnot.position.dy,
+            textPainter.width + 16,
+            textPainter.height + 12,
+          ),
+          const Radius.circular(8),
+        );
+
+        canvas.drawRRect(
+          bgRect,
+          Paint()..color = const Color(0xFFFEF3C7),
+        );
+        canvas.drawRRect(
+          bgRect,
+          Paint()
+            ..color = const Color(0xFFF59E0B)
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 1.0,
+        );
+
+        textPainter.paint(
+          canvas,
+          Offset(textAnnot.position.dx + 8, textAnnot.position.dy + 6),
+        );
+      }
+
+      canvas.restore();
+
+      final picture = recorder.endRecording();
+      final exportedImage = await picture.toImage(exportW, exportH);
+      final byteData =
+          await exportedImage.toByteData(format: ui.ImageByteFormat.png);
+      return byteData?.buffer.asUint8List();
+    } catch (e) {
+      debugPrint('Error rendering page with annotations: $e');
+      return null;
+    }
+  }
+
+  /// Writes bytes directly to public device storage (Downloads or Documents)
+  Future<String?> _saveBytesToDevice(
+      Uint8List bytes, String suggestedFileName) async {
+    Directory? targetDir;
+
+    // 1. Android public Download folder
+    if (Platform.isAndroid) {
+      final standardDownload = Directory('/storage/emulated/0/Download');
+      if (standardDownload.existsSync()) {
+        targetDir = standardDownload;
+      }
+    }
+
+    // 2. Standard Downloads directory
+    if (targetDir == null) {
+      try {
+        targetDir = await getDownloadsDirectory();
+      } catch (_) {}
+    }
+
+    // 3. Fallback to App Documents directory
+    if (targetDir == null) {
+      try {
+        targetDir = await getApplicationDocumentsDirectory();
+      } catch (_) {}
+    }
+
+    if (targetDir == null) return null;
+
+    final sanitizedName =
+        suggestedFileName.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
+    final filePath = '${targetDir.path}/$sanitizedName';
+    final file = File(filePath);
+    await file.writeAsBytes(bytes);
+    return file.path;
   }
 
   /// Floating Annotation Toolbar (Horizontal at bottom for Portrait, Vertical at side for Landscape)
