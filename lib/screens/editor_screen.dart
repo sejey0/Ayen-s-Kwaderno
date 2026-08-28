@@ -186,6 +186,7 @@ class _EditorScreenState extends State<EditorScreen>
 
   @override
   void dispose() {
+    SystemChrome.setPreferredOrientations(DeviceOrientation.values);
     _cloudSyncDebounceTimer?.cancel();
     _zoomAnimationController.dispose();
     _pageController.dispose();
@@ -309,6 +310,25 @@ class _EditorScreenState extends State<EditorScreen>
     await _renderPage(page);
     if (page > 1) _renderPage(page - 1);
     if (page < _pageCount) _renderPage(page + 1);
+  }
+
+  /// Toggles device display orientation between Portrait and Landscape
+  void _toggleScreenOrientation() {
+    HapticFeedback.selectionClick();
+    final isLandscape =
+        MediaQuery.of(context).orientation == Orientation.landscape;
+
+    if (isLandscape) {
+      SystemChrome.setPreferredOrientations([
+        DeviceOrientation.portraitUp,
+        DeviceOrientation.portraitDown,
+      ]);
+    } else {
+      SystemChrome.setPreferredOrientations([
+        DeviceOrientation.landscapeLeft,
+        DeviceOrientation.landscapeRight,
+      ]);
+    }
   }
 
   /// Toggles between Vertical Scroll (Default) and Horizontal Slide
@@ -1353,6 +1373,11 @@ class _EditorScreenState extends State<EditorScreen>
     final pageTexts =
         isCurrent ? _textAnnotations : (_perPageTextAnnotations[pageNum] ?? []);
 
+    final double refW = (_pageWidth > 0) ? _pageWidth : 595.0;
+    final double refH = (_pageHeight > 0) ? _pageHeight : 842.0;
+    final double scaleX = displayW / refW;
+    final double scaleY = displayH / refH;
+
     return Center(
       child: Container(
         width: displayW,
@@ -1402,11 +1427,16 @@ class _EditorScreenState extends State<EditorScreen>
                           behavior: HitTestBehavior.opaque,
                           onPanStart: (DragStartDetails details) {
                             _recordUndoSnapshot();
+                            final refPoint = Offset(
+                              details.localPosition.dx / scaleX,
+                              details.localPosition.dy / scaleY,
+                            );
+
                             if (_activeTool == AnnotationTool.eraser) {
                               setState(() {
-                                _currentEraserPos = details.localPosition;
+                                _currentEraserPos = refPoint;
                               });
-                              _eraseStrokesNear(details.localPosition, 10.0);
+                              _eraseStrokesNear(refPoint, 12.0);
                             } else if (_activeTool == AnnotationTool.highlighter ||
                                 _activeTool == AnnotationTool.straightLine) {
                               final isPen = _penSubTool == PenSubTool.ballpen;
@@ -1414,7 +1444,7 @@ class _EditorScreenState extends State<EditorScreen>
                                   isPen ? _ballpenWidth : _highlighterWidth;
                               setState(() {
                                 _currentStroke = Stroke(
-                                  points: [details.localPosition],
+                                  points: [refPoint],
                                   color: isPen
                                       ? _selectedColor.withValues(alpha: 1.0)
                                       : _selectedColor,
@@ -1426,15 +1456,19 @@ class _EditorScreenState extends State<EditorScreen>
                             }
                           },
                           onPanUpdate: (DragUpdateDetails details) {
+                            final refPoint = Offset(
+                              details.localPosition.dx / scaleX,
+                              details.localPosition.dy / scaleY,
+                            );
+
                             if (_activeTool == AnnotationTool.eraser) {
                               setState(() {
-                                _currentEraserPos = details.localPosition;
+                                _currentEraserPos = refPoint;
                               });
-                              _eraseStrokesNear(details.localPosition, 10.0);
+                              _eraseStrokesNear(refPoint, 12.0);
                             } else if (_currentStroke != null) {
                               setState(() {
-                                _currentStroke!.points
-                                    .add(details.localPosition);
+                                _currentStroke!.points.add(refPoint);
                               });
                             }
                           },
@@ -1486,6 +1520,8 @@ class _EditorScreenState extends State<EditorScreen>
                               penSubTool: _penSubTool,
                               eraserPos: isCurrent ? _currentEraserPos : null,
                               eraserMode: _eraserMode,
+                              refWidth: refW,
+                              refHeight: refH,
                             ),
                             size: Size.infinite,
                           ),
@@ -1497,6 +1533,8 @@ class _EditorScreenState extends State<EditorScreen>
                         strokes: pageStrokes,
                         currentStroke: null,
                         activeTool: AnnotationTool.none,
+                        refWidth: refW,
+                        refHeight: refH,
                       ),
                       size: Size.infinite,
                     ),
@@ -1507,24 +1545,28 @@ class _EditorScreenState extends State<EditorScreen>
               ...pageImages.map((annotation) {
                 final isSel = _selectedImageId == annotation.id;
                 return Positioned(
-                  left: annotation.position.dx,
+                  left: annotation.position.dx * scaleX,
                   top: isSel
-                      ? annotation.position.dy - 34
-                      : annotation.position.dy,
-                  child: _buildDraggableResizableImageWidget(annotation),
+                      ? (annotation.position.dy * scaleY) - 34
+                      : (annotation.position.dy * scaleY),
+                  child: _buildDraggableResizableImageWidget(
+                    annotation,
+                    scaleX: scaleX,
+                    scaleY: scaleY,
+                  ),
                 );
               })
             else
               ...pageImages.map((annotation) {
                 return Positioned(
-                  left: annotation.position.dx,
-                  top: annotation.position.dy,
+                  left: annotation.position.dx * scaleX,
+                  top: annotation.position.dy * scaleY,
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(14),
                     child: Image.file(
                       File(annotation.imagePath),
-                      width: annotation.size.width,
-                      height: annotation.size.height,
+                      width: (annotation.size.width * scaleX).clamp(20.0, 1200.0),
+                      height: (annotation.size.height * scaleY).clamp(20.0, 1200.0),
                       fit: BoxFit.cover,
                     ),
                   ),
@@ -1534,9 +1576,13 @@ class _EditorScreenState extends State<EditorScreen>
             // 4. Digital Text Notes (Saved Notes)
             ...pageTexts.map((annotation) {
               return Positioned(
-                left: annotation.position.dx,
-                top: annotation.position.dy,
-                child: _buildDraggableTextWidget(annotation),
+                left: annotation.position.dx * scaleX,
+                top: annotation.position.dy * scaleY,
+                child: _buildDraggableTextWidget(
+                  annotation,
+                  scaleX: scaleX,
+                  scaleY: scaleY,
+                ),
               );
             }),
           ],
@@ -1545,10 +1591,12 @@ class _EditorScreenState extends State<EditorScreen>
     );
   }
 
-
-
   /// Draggable & Resizable Image Sticker Widget locked to PDF
-  Widget _buildDraggableResizableImageWidget(ImageAnnotation annotation) {
+  Widget _buildDraggableResizableImageWidget(
+    ImageAnnotation annotation, {
+    required double scaleX,
+    required double scaleY,
+  }) {
     final isSelected = _selectedImageId == annotation.id;
 
     return Column(
@@ -1615,7 +1663,10 @@ class _EditorScreenState extends State<EditorScreen>
               behavior: HitTestBehavior.opaque,
               onPanUpdate: (DragUpdateDetails details) {
                 setState(() {
-                  annotation.position += details.delta;
+                  annotation.position += Offset(
+                    details.delta.dx / scaleX,
+                    details.delta.dy / scaleY,
+                  );
                   _selectedImageId = annotation.id;
                   _selectedTextId = null;
                 });
@@ -1629,8 +1680,8 @@ class _EditorScreenState extends State<EditorScreen>
               },
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 80),
-                width: annotation.size.width.clamp(30.0, 1200.0),
-                height: annotation.size.height.clamp(30.0, 1200.0),
+                width: (annotation.size.width * scaleX).clamp(30.0, 1200.0),
+                height: (annotation.size.height * scaleY).clamp(30.0, 1200.0),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(
@@ -1678,9 +1729,11 @@ class _EditorScreenState extends State<EditorScreen>
                   behavior: HitTestBehavior.opaque,
                   onPanUpdate: (DragUpdateDetails details) {
                     setState(() {
-                      final newWidth = (annotation.size.width + details.delta.dx)
+                      final newWidth = (annotation.size.width +
+                              (details.delta.dx / scaleX))
                           .clamp(40.0, 800.0);
-                      final newHeight = (annotation.size.height + details.delta.dy)
+                      final newHeight = (annotation.size.height +
+                              (details.delta.dy / scaleY))
                           .clamp(40.0, 800.0);
                       annotation.size = Size(newWidth, newHeight);
                     });
@@ -1720,13 +1773,20 @@ class _EditorScreenState extends State<EditorScreen>
   }
 
   /// Draggable Digital Text Note Widget locked to PDF
-  Widget _buildDraggableTextWidget(TextAnnotation annotation) {
+  Widget _buildDraggableTextWidget(
+    TextAnnotation annotation, {
+    required double scaleX,
+    required double scaleY,
+  }) {
     final isSelected = _selectedTextId == annotation.id;
 
     return GestureDetector(
       onPanUpdate: (DragUpdateDetails details) {
         setState(() {
-          annotation.position += details.delta;
+          annotation.position += Offset(
+            details.delta.dx / scaleX,
+            details.delta.dy / scaleY,
+          );
           _selectedTextId = annotation.id;
           _selectedImageId = null;
         });
@@ -1744,7 +1804,7 @@ class _EditorScreenState extends State<EditorScreen>
           horizontal: 12,
           vertical: 8,
         ),
-        constraints: const BoxConstraints(maxWidth: 280),
+        constraints: BoxConstraints(maxWidth: (280 * scaleX).clamp(180.0, 600.0)),
         decoration: BoxDecoration(
           color: Colors.white.withValues(alpha: 0.94),
           borderRadius: BorderRadius.circular(14),
@@ -1813,7 +1873,7 @@ class _EditorScreenState extends State<EditorScreen>
             Text(
               annotation.text,
               style: TextStyle(
-                fontSize: annotation.fontSize.clamp(8.0, 60.0),
+                fontSize: (annotation.fontSize * scaleX).clamp(8.0, 60.0),
                 fontWeight: FontWeight.w600,
                 color: annotation.color,
                 height: 1.3,
@@ -2182,10 +2242,39 @@ class _EditorScreenState extends State<EditorScreen>
                   tooltip: 'Insert Image / Screenshot',
                 ),
 
+                const SizedBox(width: 4),
+                _buildVerticalDivider(),
+                const SizedBox(width: 2),
+
+                // Screen Orientation Switcher (Portrait 📱 / Landscape 🔄)
+                Tooltip(
+                  message: MediaQuery.of(context).orientation == Orientation.landscape
+                      ? 'Switch to Portrait Mode (📱)'
+                      : 'Switch to Landscape Mode (🔄)',
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(28),
+                      onTap: _toggleScreenOrientation,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 8,
+                        ),
+                        child: Icon(
+                          MediaQuery.of(context).orientation == Orientation.landscape
+                              ? CupertinoIcons.device_phone_portrait
+                              : CupertinoIcons.device_phone_landscape,
+                          size: 20,
+                          color: AppTheme.textSecondary,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+
                 // Multi-page Slide Direction Switcher (Positioned on the outer edge)
                 if (_pageCount > 1) ...[
-                  const SizedBox(width: 4),
-                  _buildVerticalDivider(),
                   const SizedBox(width: 2),
                   Tooltip(
                     message: _slideOrientation == PageSlideOrientation.vertical
@@ -2198,7 +2287,7 @@ class _EditorScreenState extends State<EditorScreen>
                         onTap: _toggleSlideOrientation,
                         child: Padding(
                           padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
+                            horizontal: 8,
                             vertical: 8,
                           ),
                           child: Icon(
@@ -3047,6 +3136,8 @@ class BaseAnnotationPainter extends CustomPainter {
   final PenSubTool? penSubTool;
   final Offset? eraserPos;
   final EraserMode? eraserMode;
+  final double refWidth;
+  final double refHeight;
 
   BaseAnnotationPainter({
     required this.strokes,
@@ -3055,10 +3146,18 @@ class BaseAnnotationPainter extends CustomPainter {
     this.penSubTool,
     this.eraserPos,
     this.eraserMode,
+    this.refWidth = 595.0,
+    this.refHeight = 842.0,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
+    final double safeRefW = refWidth > 0 ? refWidth : 595.0;
+    final double safeRefH = refHeight > 0 ? refHeight : 842.0;
+
+    canvas.save();
+    canvas.scale(size.width / safeRefW, size.height / safeRefH);
+
     // 1. Draw all committed historical strokes
     for (final stroke in strokes) {
       _renderStroke(canvas, stroke);
@@ -3102,6 +3201,8 @@ class BaseAnnotationPainter extends CustomPainter {
       canvas.drawCircle(eraserPos!, cursorRadius, eraserFillPaint);
       canvas.drawCircle(eraserPos!, cursorRadius, eraserRingPaint);
     }
+
+    canvas.restore();
   }
 
   /// Renders a dynamic stylus nib / pen marker indicator at the active writing tip
