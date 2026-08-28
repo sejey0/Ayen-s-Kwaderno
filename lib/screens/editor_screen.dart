@@ -2860,15 +2860,18 @@ class _EditorScreenState extends State<EditorScreen>
                 children: [
                   // Back Button
                   Container(
-                    width: 32,
-                    height: 32,
+                    width: 34,
+                    height: 34,
                     decoration: BoxDecoration(
-                      gradient: AppTheme.primaryGradient,
-                      shape: BoxShape.circle,
+                      color: AppTheme.surfaceWhite,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: AppTheme.primaryPurpleLight,
+                        width: 1.2,
+                      ),
                       boxShadow: [
                         BoxShadow(
-                          color:
-                              AppTheme.primaryPurple.withValues(alpha: 0.3),
+                          color: AppTheme.primaryPurple.withValues(alpha: 0.06),
                           blurRadius: 6,
                           offset: const Offset(0, 2),
                         ),
@@ -2878,7 +2881,7 @@ class _EditorScreenState extends State<EditorScreen>
                       padding: EdgeInsets.zero,
                       icon: const Icon(
                         CupertinoIcons.chevron_back,
-                        color: Colors.white,
+                        color: AppTheme.primaryPurple,
                         size: 18,
                       ),
                       onPressed: () => Navigator.of(context).pop(),
@@ -2955,80 +2958,111 @@ class _EditorScreenState extends State<EditorScreen>
               // Row 2 / Next Space: Page Badge + Undo/Redo + Delete/Clear + Sync Status
               Row(
                 children: [
-                  // Page Count Badge
-                  if (_pageCount > 1)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 3.5),
-                      decoration: BoxDecoration(
-                        gradient: AppTheme.primaryGradient,
-                        borderRadius: BorderRadius.circular(8),
-                        boxShadow: [
-                          BoxShadow(
-                            color: AppTheme.primaryPurple
-                                .withValues(alpha: 0.25),
-                            blurRadius: 4,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
+                  // Page Count Badge (Always visible, e.g. Page 1 of 1, No Icon, Bold)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 4.5),
+                    decoration: BoxDecoration(
+                      color: AppTheme.surfaceWhite,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: AppTheme.primaryPurpleLight,
+                        width: 1.2,
                       ),
-                      child: Text(
-                        'Page $_currentPage of $_pageCount',
-                        style: const TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.white,
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppTheme.primaryPurple.withValues(alpha: 0.06),
+                          blurRadius: 4,
+                          offset: const Offset(0, 1),
                         ),
+                      ],
+                    ),
+                    child: Text(
+                      'Page $_currentPage of ${_pageCount < 1 ? 1 : _pageCount}',
+                      style: const TextStyle(
+                        fontFamily: 'OpenSauceSans',
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                        color: AppTheme.textPrimary,
+                        letterSpacing: -0.1,
                       ),
-                    )
-                  else
-                    const SizedBox.shrink(),
+                    ),
+                  ),
 
                   const Spacer(),
 
-                  // Undo Button
-                  IconButton(
-                    padding: EdgeInsets.zero,
-                    constraints:
-                        const BoxConstraints(minWidth: 32, minHeight: 30),
-                    icon: Icon(
-                      CupertinoIcons.arrow_uturn_left,
-                      color: (_undoStack.isNotEmpty || _strokes.isNotEmpty)
-                          ? AppTheme.textPrimary
-                          : AppTheme.textMuted.withValues(alpha: 0.4),
-                      size: 17,
+                  // Undo & Redo Capsule Group
+                  Container(
+                    height: 32,
+                    padding: const EdgeInsets.symmetric(horizontal: 2),
+                    decoration: BoxDecoration(
+                      color: AppTheme.surfaceWhite,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: AppTheme.primaryPurpleLight,
+                        width: 1.2,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppTheme.primaryPurple.withValues(alpha: 0.05),
+                          blurRadius: 4,
+                          offset: const Offset(0, 1),
+                        ),
+                      ],
                     ),
-                    tooltip: 'Undo (↩)',
-                    onPressed: (_undoStack.isNotEmpty || _strokes.isNotEmpty)
-                        ? _undo
-                        : null,
-                  ),
-
-                  // Redo Button
-                  IconButton(
-                    padding: EdgeInsets.zero,
-                    constraints:
-                        const BoxConstraints(minWidth: 32, minHeight: 30),
-                    icon: Icon(
-                      CupertinoIcons.arrow_uturn_right,
-                      color: _redoStack.isNotEmpty
-                          ? AppTheme.textPrimary
-                          : AppTheme.textMuted.withValues(alpha: 0.4),
-                      size: 17,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Undo Button
+                        IconButton(
+                          padding: EdgeInsets.zero,
+                          constraints:
+                              const BoxConstraints(minWidth: 28, minHeight: 28),
+                          icon: Icon(
+                            CupertinoIcons.arrow_uturn_left,
+                            color: (_undoStack.isNotEmpty || _strokes.isNotEmpty)
+                                ? AppTheme.primaryPurple
+                                : AppTheme.textMuted.withValues(alpha: 0.35),
+                            size: 16,
+                          ),
+                          tooltip: 'Undo (↩)',
+                          onPressed: (_undoStack.isNotEmpty || _strokes.isNotEmpty)
+                              ? _undo
+                              : null,
+                        ),
+                        Container(
+                          width: 1,
+                          height: 14,
+                          color: AppTheme.primaryPurpleLight,
+                        ),
+                        // Redo Button
+                        IconButton(
+                          padding: EdgeInsets.zero,
+                          constraints:
+                              const BoxConstraints(minWidth: 28, minHeight: 28),
+                          icon: Icon(
+                            CupertinoIcons.arrow_uturn_right,
+                            color: _redoStack.isNotEmpty
+                                ? AppTheme.primaryPurple
+                                : AppTheme.textMuted.withValues(alpha: 0.35),
+                            size: 16,
+                          ),
+                          tooltip: 'Redo (↪)',
+                          onPressed: _redoStack.isNotEmpty ? _redo : null,
+                        ),
+                      ],
                     ),
-                    tooltip: 'Redo (↪)',
-                    onPressed: _redoStack.isNotEmpty ? _redo : null,
                   ),
 
                   // Delete Selected Image Sticker Button
                   if (_selectedImageId != null) ...[
-                    const SizedBox(width: 2),
+                    const SizedBox(width: 5),
                     IconButton(
                       padding: EdgeInsets.zero,
                       constraints:
-                          const BoxConstraints(minWidth: 30, minHeight: 30),
+                          const BoxConstraints(minWidth: 32, minHeight: 32),
                       icon: Container(
-                        padding: const EdgeInsets.all(4),
+                        padding: const EdgeInsets.all(5),
                         decoration: const BoxDecoration(
                           color: Color(0xFFFEE2E2),
                           shape: BoxShape.circle,
@@ -3049,15 +3083,22 @@ class _EditorScreenState extends State<EditorScreen>
 
                   // Clear Annotations Button
                   if (totalAnnotationsCount > 0 && _selectedImageId == null) ...[
-                    const SizedBox(width: 2),
+                    const SizedBox(width: 5),
                     IconButton(
                       padding: EdgeInsets.zero,
                       constraints:
-                          const BoxConstraints(minWidth: 30, minHeight: 30),
-                      icon: const Icon(
-                        CupertinoIcons.trash,
-                        color: AppTheme.accentPink,
-                        size: 16,
+                          const BoxConstraints(minWidth: 32, minHeight: 32),
+                      icon: Container(
+                        padding: const EdgeInsets.all(5),
+                        decoration: BoxDecoration(
+                          color: AppTheme.accentPinkLight.withValues(alpha: 0.5),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          CupertinoIcons.trash,
+                          color: AppTheme.accentPink,
+                          size: 14,
+                        ),
                       ),
                       tooltip: 'Clear Annotations',
                       onPressed: _clearAnnotations,
@@ -3168,6 +3209,7 @@ class _EditorScreenState extends State<EditorScreen>
     String label;
     Color bgColor;
     Color textColor;
+    Color borderColor;
 
     switch (_syncStatus) {
       case SyncStatus.synced:
@@ -3176,6 +3218,7 @@ class _EditorScreenState extends State<EditorScreen>
         label = 'Synced';
         bgColor = const Color(0xFFECFDF5);
         textColor = const Color(0xFF065F46);
+        borderColor = const Color(0xFF10B981).withValues(alpha: 0.3);
         break;
       case SyncStatus.syncing:
         icon = const SizedBox(
@@ -3189,13 +3232,15 @@ class _EditorScreenState extends State<EditorScreen>
         label = 'Syncing...';
         bgColor = AppTheme.primaryPurpleLight;
         textColor = AppTheme.primaryPurpleDark;
+        borderColor = AppTheme.primaryPurple.withValues(alpha: 0.3);
         break;
       case SyncStatus.savedLocally:
-        icon = const Icon(CupertinoIcons.checkmark_circle,
+        icon = const Icon(CupertinoIcons.checkmark_circle_fill,
             color: AppTheme.primaryPurple, size: 14);
         label = 'Saved';
         bgColor = AppTheme.primaryPurpleLight;
         textColor = AppTheme.primaryPurpleDark;
+        borderColor = AppTheme.primaryPurple.withValues(alpha: 0.3);
         break;
       case SyncStatus.offline:
         icon = const Icon(CupertinoIcons.bolt_fill,
@@ -3203,15 +3248,24 @@ class _EditorScreenState extends State<EditorScreen>
         label = 'Offline';
         bgColor = const Color(0xFFFFFBEB);
         textColor = const Color(0xFFB45309);
+        borderColor = const Color(0xFFF59E0B).withValues(alpha: 0.3);
         break;
     }
 
     return Container(
+      height: 32,
       margin: const EdgeInsets.only(left: 4),
       decoration: BoxDecoration(
         color: bgColor,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: textColor.withValues(alpha: 0.2)),
+        border: Border.all(color: borderColor, width: 1.2),
+        boxShadow: [
+          BoxShadow(
+            color: textColor.withValues(alpha: 0.05),
+            blurRadius: 4,
+            offset: const Offset(0, 1),
+          ),
+        ],
       ),
       child: Material(
         color: Colors.transparent,
@@ -3230,7 +3284,7 @@ class _EditorScreenState extends State<EditorScreen>
             );
           },
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 9),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -3239,9 +3293,11 @@ class _EditorScreenState extends State<EditorScreen>
                 Text(
                   label,
                   style: TextStyle(
+                    fontFamily: 'OpenSauceSans',
                     color: textColor,
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w700,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.1,
                   ),
                 ),
               ],
