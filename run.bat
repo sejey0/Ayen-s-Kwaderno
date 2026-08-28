@@ -19,7 +19,7 @@ findstr /C:"org.gradle.caching" "%GRADLE_PROP%" >nul || echo org.gradle.caching=
 findstr /C:"org.gradle.jvmargs" "%GRADLE_PROP%" >nul || echo org.gradle.jvmargs=-Xmx2560m -XX:+UseParallelGC -XX:MaxMetaspaceSize=512m>>"%GRADLE_PROP%"
 findstr /C:"android.enableJetifier" "%GRADLE_PROP%" >nul || echo android.enableJetifier=false>>"%GRADLE_PROP%"
 findstr /C:"android.newDsl" "%GRADLE_PROP%" >nul || echo android.newDsl=false>>"%GRADLE_PROP%"
-findstr /C:"android.builtInKotlin" "%GRADLE_PROP%" >nul || echo android.builtInKotlin=true>>"%GRADLE_PROP%"
+findstr /C:"android.builtInKotlin" "%GRADLE_PROP%" >nul || echo android.builtInKotlin=false>>"%GRADLE_PROP%"
 echo [OK] Gradle optimized for 8GB RAM (heap capped at 2.5GB).
 goto GRADLE_DONE
 
