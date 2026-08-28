@@ -151,8 +151,7 @@ class DocumentStorageService {
   // DOCUMENT FILES PERSISTENCE
   // ==========================================
 
-  /// Loads saved documents from SharedPreferences scoped for the active user,
-  /// with automatic fallback/recovery across device profiles and local storage folder so files are always visible
+  /// Loads saved documents from SharedPreferences scoped strictly for the active user
   static Future<List<DocumentItem>> loadSavedDocuments([String? userId]) async {
     try {
       final targetUserId = userId ?? UserService.instance.activeUserId;
@@ -171,66 +170,7 @@ class DocumentStorageService {
             .toList();
       }
 
-      // If user currently has 0 documents, search across device keys / other profiles / saved_documents directory
-      if (docs.isEmpty) {
-        final allKeys = prefs.getKeys();
-        final Set<String> collectedNames = {};
-
-        // 1. Search all other user doc keys on this device
-        for (final key in allKeys) {
-          if (key.startsWith('ayens_kwaderno_docs_u_') ||
-              key == _legacyDocumentsKey ||
-              key == 'ayens_kwaderno_recent_documents_v1') {
-            final candidateJson = prefs.getString(key);
-            if (candidateJson != null &&
-                candidateJson.isNotEmpty &&
-                candidateJson != '[]') {
-              try {
-                final List<dynamic> list = jsonDecode(candidateJson);
-                for (final item in list) {
-                  final d = DocumentItem.fromJson(
-                      Map<String, dynamic>.from(item as Map));
-                  if (!collectedNames.contains(d.fileName)) {
-                    collectedNames.add(d.fileName);
-                    docs.add(d);
-                  }
-                }
-              } catch (_) {}
-            }
-          }
-        }
-
-        // 2. Discover physical files in saved_documents folder
-        try {
-          final appDir = await getApplicationDocumentsDirectory();
-          final savedDocsDir = Directory('${appDir.path}/saved_documents');
-          if (savedDocsDir.existsSync()) {
-            final files = savedDocsDir.listSync();
-            for (final entity in files) {
-              if (entity is File) {
-                final name = entity.uri.pathSegments.last;
-                if (!name.startsWith('.') && !collectedNames.contains(name)) {
-                  collectedNames.add(name);
-                  docs.add(DocumentItem(
-                    fileName: name,
-                    filePath: entity.path,
-                    lastOpenedAt: entity.lastModifiedSync(),
-                    annotationsCount: 0,
-                    paletteIndex: 0,
-                    isCloudSynced: false,
-                  ));
-                }
-              }
-            }
-          }
-        } catch (_) {}
-
-        if (docs.isNotEmpty) {
-          await _persistDocumentsList(docs, targetUserId);
-        }
-      }
-
-      // Validate & ensure valid file paths for existing items
+      // Validate & ensure valid file paths for this user's items
       bool neededUpdate = false;
       for (int i = 0; i < docs.length; i++) {
         final d = docs[i];
@@ -242,6 +182,8 @@ class DocumentStorageService {
               final candidates = [
                 File('${savedDocsDir.path}/${d.fileName}'),
                 File('${savedDocsDir.path}/${d.fileName}.pdf'),
+                File('${savedDocsDir.path}/${d.fileName}.png'),
+                File('${savedDocsDir.path}/${d.fileName}.jpg'),
               ];
               for (final f in candidates) {
                 if (f.existsSync()) {
@@ -302,7 +244,7 @@ class DocumentStorageService {
 
       await _persistDocumentsList(docs, targetUserId);
 
-      // Immediately push document to Supabase database so it appears in the cloud immediately
+      // Push annotations & upload document binary to Supabase
       try {
         final client = Supabase.instance.client;
         final annotationsData =
@@ -320,6 +262,28 @@ class DocumentStorageService {
             .upsert(payload, onConflict: 'document_name')
             .then((_) {})
             .catchError((_) {});
+
+        // Upload physical document / image file to Supabase Storage in background
+        if (doc.filePath != null && File(doc.filePath!).existsSync()) {
+          final file = File(doc.filePath!);
+          final fileBytes = await file.readAsBytes();
+          final storagePath = 'u_$targetUserId/${doc.fileName}';
+          try {
+            await client.storage.from('documents').uploadBinary(
+                  storagePath,
+                  fileBytes,
+                  fileOptions: const FileOptions(upsert: true),
+                );
+          } catch (_) {
+            try {
+              await client.storage.from('user_documents').uploadBinary(
+                    storagePath,
+                    fileBytes,
+                    fileOptions: const FileOptions(upsert: true),
+                  );
+            } catch (_) {}
+          }
+        }
       } catch (_) {}
 
       if (triggerCloudSync) {
@@ -434,8 +398,7 @@ class DocumentStorageService {
     await prefs.setString(_getScopedDocumentsKey(targetUserId), encoded);
   }
 
-  /// Loads all saved handwriting notes from SharedPreferences scoped for the active user,
-  /// with automatic fallback/recovery across device profiles so notes are always visible
+  /// Loads all saved handwriting notes from SharedPreferences scoped strictly for the active user
   static Future<List<HandwritingNote>> loadHandwritingNotes(
       [String? userId]) async {
     try {
@@ -453,38 +416,6 @@ class DocumentStorageService {
             .map((item) => HandwritingNote.fromJson(
                 Map<String, dynamic>.from(item as Map)))
             .toList();
-      }
-
-      // If user currently has 0 notes, search across device keys / other profiles
-      if (notes.isEmpty) {
-        final allKeys = prefs.getKeys();
-        final Set<String> collectedIds = {};
-
-        for (final key in allKeys) {
-          if (key.startsWith('ayens_kwaderno_notes_u_') ||
-              key == _legacyHandwritingNotesKey) {
-            final candidateJson = prefs.getString(key);
-            if (candidateJson != null &&
-                candidateJson.isNotEmpty &&
-                candidateJson != '[]') {
-              try {
-                final List<dynamic> list = jsonDecode(candidateJson);
-                for (final item in list) {
-                  final n = HandwritingNote.fromJson(
-                      Map<String, dynamic>.from(item as Map));
-                  if (!collectedIds.contains(n.id)) {
-                    collectedIds.add(n.id);
-                    notes.add(n);
-                  }
-                }
-              } catch (_) {}
-            }
-          }
-        }
-
-        if (notes.isNotEmpty) {
-          await _persistHandwritingNotesList(notes, targetUserId);
-        }
       }
 
       // Sort newest first

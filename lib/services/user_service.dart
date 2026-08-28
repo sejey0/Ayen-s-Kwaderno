@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -102,13 +103,30 @@ class UserService {
     String? avatarImagePath,
     int avatarColorIndex = 0,
   }) async {
-    final previousId = currentUser?.id;
     final now = DateTime.now();
+
+    String? effectiveAvatarUrl;
+    if (avatarImagePath != null && avatarImagePath.trim().isNotEmpty) {
+      final trimmed = avatarImagePath.trim();
+      if (trimmed.startsWith('data:image') || trimmed.startsWith('http')) {
+        effectiveAvatarUrl = trimmed;
+      } else {
+        try {
+          final file = File(trimmed);
+          if (file.existsSync()) {
+            final bytes = await file.readAsBytes();
+            effectiveAvatarUrl = 'data:image/jpeg;base64,${base64Encode(bytes)}';
+          }
+        } catch (_) {}
+      }
+    }
+
     final profile = UserProfile(
       id: generateUuid(),
       name: name.trim().isEmpty ? 'Student' : name.trim(),
       avatarEmoji: avatarEmoji,
       avatarImagePath: avatarImagePath,
+      avatarUrl: effectiveAvatarUrl,
       avatarColorIndex: avatarColorIndex,
       isCloudLinked: false,
       createdAt: now,
@@ -117,10 +135,8 @@ class UserService {
 
     await _saveProfile(profile, makeActive: true);
 
-    // Automatically migrate documents & notes so files are accessible in the new profile
-    if (previousId != null && previousId != profile.id) {
-      await DocumentStorageService.migrateUserData(previousId, profile.id);
-    } else {
+    // Only migrate legacy data if first profile
+    if (profilesListNotifier.value.length <= 1) {
       await DocumentStorageService.migrateLegacyDataToUser(profile.id);
     }
 
@@ -139,11 +155,34 @@ class UserService {
     final current = currentUser;
     if (current == null) return;
 
+    String? effectiveAvatarUrl = avatarUrl;
+    String? effectiveImagePath = avatarImagePath;
+
+    if (!clearCustomImage && avatarImagePath != null && avatarImagePath.trim().isNotEmpty) {
+      final trimmed = avatarImagePath.trim();
+      if (trimmed.startsWith('data:image') || trimmed.startsWith('http')) {
+        effectiveAvatarUrl = trimmed;
+        effectiveImagePath = trimmed;
+      } else {
+        try {
+          final file = File(trimmed);
+          if (file.existsSync()) {
+            final bytes = await file.readAsBytes();
+            effectiveAvatarUrl = 'data:image/jpeg;base64,${base64Encode(bytes)}';
+            effectiveImagePath = trimmed;
+          }
+        } catch (_) {}
+      }
+    } else if (clearCustomImage) {
+      effectiveAvatarUrl = null;
+      effectiveImagePath = null;
+    }
+
     final updated = current.copyWith(
       name: name != null && name.trim().isNotEmpty ? name.trim() : current.name,
       avatarEmoji: avatarEmoji ?? current.avatarEmoji,
-      avatarImagePath: avatarImagePath,
-      avatarUrl: avatarUrl,
+      avatarImagePath: effectiveImagePath,
+      avatarUrl: effectiveAvatarUrl,
       clearCustomImage: clearCustomImage,
       avatarColorIndex: avatarColorIndex ?? current.avatarColorIndex,
       lastActiveAt: DateTime.now(),
@@ -249,7 +288,23 @@ class UserService {
       }
     } catch (_) {}
 
+    final isPreviousOffline = currentUser?.isCloudLinked != true;
     final previousId = currentUser?.id;
+
+    // If avatarImagePath is a local file, convert to base64 data URI
+    if (avatarImagePath != null && avatarImagePath.trim().isNotEmpty) {
+      final trimmed = avatarImagePath.trim();
+      if (!trimmed.startsWith('data:image') && !trimmed.startsWith('http')) {
+        try {
+          final file = File(trimmed);
+          if (file.existsSync()) {
+            final bytes = await file.readAsBytes();
+            avatarImagePath = 'data:image/jpeg;base64,${base64Encode(bytes)}';
+          }
+        } catch (_) {}
+      }
+    }
+
     final now = DateTime.now();
     final linkedProfile = UserProfile(
       id: user.id,
@@ -267,8 +322,8 @@ class UserService {
 
     await _saveProfile(linkedProfile, makeActive: true);
 
-    // Automatically migrate documents & notes from previous profile to linked profile
-    if (previousId != null && previousId != user.id) {
+    // Only migrate previous documents if upgrading from an offline profile
+    if (previousId != null && previousId != user.id && isPreviousOffline) {
       await DocumentStorageService.migrateUserData(previousId, user.id);
     }
 

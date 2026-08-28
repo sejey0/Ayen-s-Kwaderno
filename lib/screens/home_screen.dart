@@ -4,6 +4,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/document_item_model.dart';
 import '../models/handwriting_note_model.dart';
 import '../models/user_profile_model.dart';
@@ -443,6 +444,8 @@ class _HomeScreenState extends State<HomeScreen> {
           final candidates = [
             File('${savedDocsDir.path}/${doc.fileName}'),
             File('${savedDocsDir.path}/${doc.fileName}.pdf'),
+            File('${savedDocsDir.path}/${doc.fileName}.png'),
+            File('${savedDocsDir.path}/${doc.fileName}.jpg'),
           ];
           for (final f in candidates) {
             if (f.existsSync()) {
@@ -452,6 +455,37 @@ class _HomeScreenState extends State<HomeScreen> {
           }
         }
       } catch (_) {}
+
+      // 3. If not local, try downloading from Supabase Storage
+      if (validPath == null || !File(validPath).existsSync()) {
+        try {
+          final client = Supabase.instance.client;
+          final activeUserId = UserService.instance.activeUserId;
+          final storagePath = 'u_$activeUserId/${doc.fileName}';
+          Uint8List? downloadedBytes;
+          try {
+            downloadedBytes =
+                await client.storage.from('documents').download(storagePath);
+          } catch (_) {
+            try {
+              downloadedBytes = await client.storage
+                  .from('user_documents')
+                  .download(storagePath);
+            } catch (_) {}
+          }
+
+          if (downloadedBytes != null && downloadedBytes.isNotEmpty) {
+            final appDir = await getApplicationDocumentsDirectory();
+            final savedDocsDir = Directory('${appDir.path}/saved_documents');
+            if (!savedDocsDir.existsSync()) {
+              savedDocsDir.createSync(recursive: true);
+            }
+            final permanentFile = File('${savedDocsDir.path}/${doc.fileName}');
+            await permanentFile.writeAsBytes(downloadedBytes);
+            validPath = permanentFile.path;
+          }
+        } catch (_) {}
+      }
     }
 
     if (validPath != null && File(validPath).existsSync()) {

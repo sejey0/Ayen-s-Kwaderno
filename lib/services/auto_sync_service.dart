@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/document_item_model.dart';
@@ -131,13 +133,42 @@ class AutoSyncService {
       final activeUserId = UserService.instance.activeUserId;
 
       // -------------------------------------------------------------
-      // 0. AUTO-UPLOAD USER PROFILE TO SUPABASE
+      // 0. AUTO-UPLOAD / SYNC USER PROFILE TO SUPABASE
       // -------------------------------------------------------------
       if (user != null && user.isCloudLinked) {
         try {
           final targetId =
               user.supabaseUserId ?? client.auth.currentUser?.id ?? user.id;
-          final profilePayload = {
+
+          // Check if remote profile has avatar_url or updated details from another phone
+          try {
+            final remoteProfile = await client
+                .from('user_profiles')
+                .select()
+                .eq('id', targetId)
+                .maybeSingle();
+
+            if (remoteProfile != null) {
+              final remoteAvatar = remoteProfile['avatar_url'] as String?;
+              final remoteName = remoteProfile['name'] as String?;
+              final remoteEmoji = remoteProfile['avatar_emoji'] as String?;
+              final remoteColor = remoteProfile['avatar_color_index'] as int?;
+
+              if (remoteAvatar != null &&
+                  remoteAvatar.isNotEmpty &&
+                  remoteAvatar != user.avatarUrl) {
+                await UserService.instance.updateProfile(
+                  name: remoteName,
+                  avatarEmoji: remoteEmoji,
+                  avatarImagePath: remoteAvatar,
+                  avatarUrl: remoteAvatar,
+                  avatarColorIndex: remoteColor,
+                );
+              }
+            }
+          } catch (_) {}
+
+          final profilePayload = <String, dynamic>{
             'id': targetId,
             'name': user.name,
             'avatar_emoji': user.avatarEmoji,
@@ -147,6 +178,9 @@ class AutoSyncService {
             'created_at': user.createdAt.toUtc().toIso8601String(),
             'last_active_at': DateTime.now().toUtc().toIso8601String(),
           };
+          if (user.avatarUrl != null) {
+            profilePayload['avatar_url'] = user.avatarUrl;
+          }
           await client
               .from('user_profiles')
               .upsert(profilePayload, onConflict: 'id');
@@ -219,12 +253,46 @@ class AutoSyncService {
                   DateTime.now()
               : DateTime.now();
 
-          // Check if local file exists
+          // Check if local file exists, or auto-download from Supabase Storage
           String? localFilePath;
           final localDocIndex =
               localDocs.indexWhere((d) => d.fileName == docName);
-          if (localDocIndex >= 0 && localDocs[localDocIndex].filePath != null) {
+          if (localDocIndex >= 0 &&
+              localDocs[localDocIndex].filePath != null &&
+              File(localDocs[localDocIndex].filePath!).existsSync()) {
             localFilePath = localDocs[localDocIndex].filePath;
+          } else {
+            // Check saved_documents directory or download from cloud
+            try {
+              final appDir = await getApplicationDocumentsDirectory();
+              final savedDocsDir = Directory('${appDir.path}/saved_documents');
+              if (!savedDocsDir.existsSync()) {
+                savedDocsDir.createSync(recursive: true);
+              }
+              final localFile = File('${savedDocsDir.path}/$docName');
+              if (localFile.existsSync()) {
+                localFilePath = localFile.path;
+              } else {
+                // Download file binary from Supabase Storage
+                final storagePath = 'u_$activeUserId/$docName';
+                Uint8List? fileBytes;
+                try {
+                  fileBytes = await client.storage
+                      .from('documents')
+                      .download(storagePath);
+                } catch (_) {
+                  try {
+                    fileBytes = await client.storage
+                        .from('user_documents')
+                        .download(storagePath);
+                  } catch (_) {}
+                }
+                if (fileBytes != null && fileBytes.isNotEmpty) {
+                  await localFile.writeAsBytes(fileBytes);
+                  localFilePath = localFile.path;
+                }
+              }
+            } catch (_) {}
           }
 
           cloudDocs.add(DocumentItem(
@@ -337,7 +405,7 @@ class AutoSyncService {
 
       for (final local in localDocs) {
         if (!cloudDocNames.contains(local.fileName) && !local.isCloudSynced) {
-          // Newly created offline doc: upload document metadata to Supabase
+          // Newly created offline doc: upload document metadata & binary to Supabase
           try {
             final annotationsData =
                 await DocumentStorageService.loadLocalAnnotations(
@@ -354,6 +422,28 @@ class AutoSyncService {
             await client
                 .from('document_annotations')
                 .upsert(payload, onConflict: 'document_name');
+
+            // Upload document file binary to Supabase Storage
+            if (local.filePath != null && File(local.filePath!).existsSync()) {
+              final fileBytes = await File(local.filePath!).readAsBytes();
+              final storagePath = 'u_$activeUserId/${local.fileName}';
+              try {
+                await client.storage.from('documents').uploadBinary(
+                      storagePath,
+                      fileBytes,
+                      fileOptions: const FileOptions(upsert: true),
+                    );
+              } catch (_) {
+                try {
+                  await client.storage.from('user_documents').uploadBinary(
+                        storagePath,
+                        fileBytes,
+                        fileOptions: const FileOptions(upsert: true),
+                      );
+                } catch (_) {}
+              }
+            }
+
             finalDocs.add(local.copyWith(isCloudSynced: true));
           } catch (e) {
             debugPrint('Notice uploading offline doc ${local.fileName}: $e');
