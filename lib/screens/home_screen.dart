@@ -1570,15 +1570,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                           child: Ink(
                             decoration: BoxDecoration(
-                              gradient: const LinearGradient(
-                                colors: [
-                                  AppTheme.primaryPurple,
-                                  Color(0xFF9E8AF0),
-                                  AppTheme.accentPink,
-                                ],
-                                begin: Alignment.centerLeft,
-                                end: Alignment.centerRight,
-                              ),
+                              gradient: AppTheme.primaryGradient,
                               borderRadius: BorderRadius.circular(14),
                               boxShadow: [
                                 BoxShadow(

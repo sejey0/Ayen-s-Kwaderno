@@ -315,19 +315,11 @@ class _TypeNoteDialogState extends State<TypeNoteDialog> {
                   ),
                   child: Ink(
                     decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [
-                          AppTheme.accentPink,
-                          Color(0xFFFF8DA1),
-                          AppTheme.primaryPurple,
-                        ],
-                        begin: Alignment.centerLeft,
-                        end: Alignment.centerRight,
-                      ),
+                      gradient: AppTheme.primaryGradient,
                       borderRadius: BorderRadius.circular(16),
                       boxShadow: [
                         BoxShadow(
-                          color: AppTheme.accentPink.withValues(alpha: 0.35),
+                          color: AppTheme.primaryPurple.withValues(alpha: 0.35),
                           blurRadius: 10,
                           offset: const Offset(0, 4),
                         ),

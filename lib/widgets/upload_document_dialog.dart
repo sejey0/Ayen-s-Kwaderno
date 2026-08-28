@@ -409,17 +409,7 @@ class _UploadDocumentDialogState extends State<UploadDocumentDialog> {
                   ),
                   child: Ink(
                     decoration: BoxDecoration(
-                      gradient: hasFile
-                          ? const LinearGradient(
-                              colors: [
-                                AppTheme.primaryPurple,
-                                Color(0xFF9E8AF0),
-                                AppTheme.accentPink,
-                              ],
-                              begin: Alignment.centerLeft,
-                              end: Alignment.centerRight,
-                            )
-                          : null,
+                      gradient: hasFile ? AppTheme.primaryGradient : null,
                       color: hasFile ? null : const Color(0xFFE2E8F0),
                       borderRadius: BorderRadius.circular(16),
                       boxShadow: hasFile

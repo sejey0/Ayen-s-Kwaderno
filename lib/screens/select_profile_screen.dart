@@ -144,7 +144,7 @@ class SelectProfileScreen extends StatelessWidget {
                   SizedBox(
                     width: double.infinity,
                     height: 50,
-                    child: ElevatedButton.icon(
+                    child: ElevatedButton(
                       onPressed: () {
                         Navigator.of(context).push(
                           CupertinoPageRoute(
@@ -153,22 +153,46 @@ class SelectProfileScreen extends StatelessWidget {
                           ),
                         );
                       },
-                      icon: const Icon(CupertinoIcons.plus_circle_fill,
-                          size: 18, color: Colors.white),
-                      label: const Text(
-                        'Add Profile or Sign In',
-                        style: TextStyle(
-                          fontSize: 14.5,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: -0.2,
-                        ),
-                      ),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.primaryPurple,
-                        foregroundColor: Colors.white,
-                        elevation: 0,
+                        backgroundColor: Colors.transparent,
+                        shadowColor: Colors.transparent,
+                        padding: EdgeInsets.zero,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
+                      child: Ink(
+                        decoration: BoxDecoration(
+                          gradient: AppTheme.primaryGradient,
+                          borderRadius: BorderRadius.circular(14),
+                          boxShadow: [
+                            BoxShadow(
+                              color: AppTheme.primaryPurple
+                                  .withValues(alpha: 0.35),
+                              blurRadius: 10,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: Container(
+                          alignment: Alignment.center,
+                          child: const Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(CupertinoIcons.plus_circle_fill,
+                                  size: 18, color: Colors.white),
+                              SizedBox(width: 8),
+                              Text(
+                                'Add Profile or Sign In',
+                                style: TextStyle(
+                                  fontSize: 14.5,
+                                  fontWeight: FontWeight.w800,
+                                  color: Colors.white,
+                                  letterSpacing: -0.2,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ),

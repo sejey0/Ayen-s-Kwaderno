@@ -752,37 +752,55 @@ class _WelcomeAuthScreenState extends State<WelcomeAuthScreen> {
           child: ElevatedButton(
             onPressed: _isLoading ? null : _handleStartOffline,
             style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.primaryPurple,
-              foregroundColor: Colors.white,
-              elevation: 0,
+              backgroundColor: Colors.transparent,
+              shadowColor: Colors.transparent,
+              padding: EdgeInsets.zero,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(14),
               ),
             ),
-            child: _isLoading
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2.5,
-                      color: Colors.white,
-                    ),
-                  )
-                : const Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        "Create Offline Profile",
-                        style: TextStyle(
-                          fontSize: 14.5,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 0.2,
-                        ),
-                      ),
-                      SizedBox(width: 8),
-                      Icon(CupertinoIcons.arrow_right_circle_fill, size: 18),
-                    ],
+            child: Ink(
+              decoration: BoxDecoration(
+                gradient: AppTheme.primaryGradient,
+                borderRadius: BorderRadius.circular(14),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppTheme.primaryPurple.withValues(alpha: 0.35),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
                   ),
+                ],
+              ),
+              child: Container(
+                alignment: Alignment.center,
+                child: _isLoading
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.5,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            "Create Offline Profile",
+                            style: TextStyle(
+                              fontSize: 14.5,
+                              fontWeight: FontWeight.w800,
+                              color: Colors.white,
+                              letterSpacing: 0.2,
+                            ),
+                          ),
+                          SizedBox(width: 8),
+                          Icon(CupertinoIcons.arrow_right_circle_fill,
+                              size: 18, color: Colors.white),
+                        ],
+                      ),
+              ),
+            ),
           ),
         ),
       ],
@@ -967,39 +985,56 @@ class _WelcomeAuthScreenState extends State<WelcomeAuthScreen> {
         ),
         const SizedBox(height: 20),
 
-        // Action Button
+        // Submit Cloud Button
         SizedBox(
           width: double.infinity,
           height: 48,
           child: ElevatedButton(
             onPressed: _isLoading ? null : _handleCloudAuth,
             style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.primaryPurple,
-              foregroundColor: Colors.white,
-              elevation: 0,
+              backgroundColor: Colors.transparent,
+              shadowColor: Colors.transparent,
+              padding: EdgeInsets.zero,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(14),
               ),
             ),
-            child: _isLoading
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2.5,
-                      color: Colors.white,
-                    ),
-                  )
-                : Text(
-                    isSignUp
-                        ? "Register & Sync Account"
-                        : "Sign In with Email",
-                    style: const TextStyle(
-                      fontSize: 14.5,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0.2,
-                    ),
+            child: Ink(
+              decoration: BoxDecoration(
+                gradient: AppTheme.primaryGradient,
+                borderRadius: BorderRadius.circular(14),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppTheme.primaryPurple.withValues(alpha: 0.35),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
                   ),
+                ],
+              ),
+              child: Container(
+                alignment: Alignment.center,
+                child: _isLoading
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.5,
+                          color: Colors.white,
+                        ),
+                      )
+                    : Text(
+                        isSignUp
+                            ? "Register & Sync Account"
+                            : "Sign In with Email",
+                        style: const TextStyle(
+                          fontSize: 14.5,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white,
+                          letterSpacing: 0.2,
+                        ),
+                      ),
+              ),
+            ),
           ),
         ),
         const SizedBox(height: 16),

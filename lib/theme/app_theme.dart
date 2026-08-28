@@ -14,6 +14,33 @@ class AppTheme {
   static const Color accentPinkLight = Color(0xFFFFE6ED);
   static const Color accentPinkDark = Color(0xFFE56A88);
 
+  // Signature Upload Theme Gradient & Palette
+  static const Color gradientStart = Color(0xFF8E7CE6); // primaryPurple
+  static const Color gradientMiddle = Color(0xFF9E8AF0); // Soft Iris
+  static const Color gradientEnd = Color(0xFFFF85A1); // accentPink
+
+  static const LinearGradient primaryGradient = LinearGradient(
+    colors: [primaryPurple, gradientMiddle, accentPink],
+    begin: Alignment.centerLeft,
+    end: Alignment.centerRight,
+  );
+
+  static const LinearGradient primaryGradientDiagonal = LinearGradient(
+    colors: [primaryPurple, gradientMiddle, accentPink],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+  );
+
+  static const LinearGradient softBackgroundGradient = LinearGradient(
+    colors: [
+      Color(0xFFF9F7FE),
+      Color(0xFFFAF9FD),
+      Color(0xFFFFF7F9),
+    ],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+  );
+
   // Background & Surfaces
   static const Color background = Color(0xFFFAF9FD);
   static const Color surfaceWhite = Color(0xFFFFFFFF);

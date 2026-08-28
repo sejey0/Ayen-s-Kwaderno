@@ -991,12 +991,7 @@ class _HandwritingCanvasDialogState extends State<HandwritingCanvasDialog> {
                       height: 34,
                       padding: const EdgeInsets.symmetric(horizontal: 8),
                       decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [
-                            Color(0xFF7C3AED),
-                            Color(0xFF9333EA),
-                          ],
-                        ),
+                        gradient: AppTheme.primaryGradient,
                         borderRadius: BorderRadius.circular(10),
                         boxShadow: [
                           BoxShadow(
@@ -1106,29 +1101,49 @@ class _HandwritingCanvasDialogState extends State<HandwritingCanvasDialog> {
                   ElevatedButton(
                     onPressed: _isRecognizing ? null : _saveHandwrittenNote,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.accentPink,
-                      foregroundColor: Colors.white,
+                      backgroundColor: Colors.transparent,
+                      shadowColor: Colors.transparent,
                       elevation: 0,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 0),
+                      padding: EdgeInsets.zero,
                       minimumSize: const Size(54, 34),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(10),
                       ),
                     ),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(CupertinoIcons.checkmark_alt, size: 14),
-                        SizedBox(width: 3),
-                        Text(
-                          'Save',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
+                    child: Ink(
+                      decoration: BoxDecoration(
+                        gradient: AppTheme.primaryGradient,
+                        borderRadius: BorderRadius.circular(10),
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppTheme.primaryPurple
+                                .withValues(alpha: 0.25),
+                            blurRadius: 4,
+                            offset: const Offset(0, 2),
                           ),
+                        ],
+                      ),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                        height: 34,
+                        alignment: Alignment.center,
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(CupertinoIcons.checkmark_alt,
+                                size: 14, color: Colors.white),
+                            SizedBox(width: 3),
+                            Text(
+                              'Save',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ],
                         ),
-                      ],
+                      ),
                     ),
                   ),
                 ],
