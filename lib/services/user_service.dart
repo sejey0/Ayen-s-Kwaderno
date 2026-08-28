@@ -102,6 +102,7 @@ class UserService {
     String? avatarImagePath,
     int avatarColorIndex = 0,
   }) async {
+    final previousId = currentUser?.id;
     final now = DateTime.now();
     final profile = UserProfile(
       id: generateUuid(),
@@ -116,8 +117,12 @@ class UserService {
 
     await _saveProfile(profile, makeActive: true);
 
-    // Automatically migrate legacy documents & notes to this profile if first time
-    await DocumentStorageService.migrateLegacyDataToUser(profile.id);
+    // Automatically migrate documents & notes so files are accessible in the new profile
+    if (previousId != null && previousId != profile.id) {
+      await DocumentStorageService.migrateUserData(previousId, profile.id);
+    } else {
+      await DocumentStorageService.migrateLegacyDataToUser(profile.id);
+    }
 
     return profile;
   }
@@ -244,6 +249,7 @@ class UserService {
       }
     } catch (_) {}
 
+    final previousId = currentUser?.id;
     final now = DateTime.now();
     final linkedProfile = UserProfile(
       id: user.id,
@@ -260,6 +266,11 @@ class UserService {
     );
 
     await _saveProfile(linkedProfile, makeActive: true);
+
+    // Automatically migrate documents & notes from previous profile to linked profile
+    if (previousId != null && previousId != user.id) {
+      await DocumentStorageService.migrateUserData(previousId, user.id);
+    }
 
     // Direct immediate upsert to user_profiles table in Supabase
     try {

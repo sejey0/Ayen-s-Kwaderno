@@ -1,4 +1,7 @@
 import 'dart:convert';
+import 'dart:io';
+import 'package:flutter/foundation.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/document_item_model.dart';
@@ -29,6 +32,78 @@ class DocumentStorageService {
   static String _getScopedAnnotationsKey(String documentName, [String? userId]) {
     final uid = userId ?? UserService.instance.activeUserId;
     return 'ayens_kwaderno_annot_u_${uid}_$documentName';
+  }
+
+  /// Copies/merges all documents, notes, and annotations from one user profile to another
+  static Future<void> migrateUserData(String fromUserId, String toUserId) async {
+    if (fromUserId == toUserId) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+
+      // 1. Migrate Documents
+      final fromDocsKey = _getScopedDocumentsKey(fromUserId);
+      final fromDocsJson = prefs.getString(fromDocsKey);
+
+      if (fromDocsJson != null && fromDocsJson.isNotEmpty && fromDocsJson != '[]') {
+        final List<dynamic> fromList = jsonDecode(fromDocsJson);
+        final List<DocumentItem> fromDocs = fromList
+            .map((item) =>
+                DocumentItem.fromJson(Map<String, dynamic>.from(item as Map)))
+            .toList();
+
+        final existingToDocs = await loadSavedDocuments(toUserId);
+        final Set<String> existingNames =
+            existingToDocs.map((d) => d.fileName).toSet();
+
+        for (final doc in fromDocs) {
+          if (!existingNames.contains(doc.fileName)) {
+            existingToDocs.add(doc);
+          }
+        }
+        await _persistDocumentsList(existingToDocs, toUserId);
+      }
+
+      // 2. Migrate Notes
+      final fromNotesKey = _getScopedNotesKey(fromUserId);
+      final fromNotesJson = prefs.getString(fromNotesKey);
+
+      if (fromNotesJson != null && fromNotesJson.isNotEmpty && fromNotesJson != '[]') {
+        final List<dynamic> fromList = jsonDecode(fromNotesJson);
+        final List<HandwritingNote> fromNotes = fromList
+            .map((item) =>
+                HandwritingNote.fromJson(Map<String, dynamic>.from(item as Map)))
+            .toList();
+
+        final existingToNotes = await loadHandwritingNotes(toUserId);
+        final Set<String> existingIds =
+            existingToNotes.map((n) => n.id).toSet();
+
+        for (final note in fromNotes) {
+          if (!existingIds.contains(note.id)) {
+            existingToNotes.add(note);
+          }
+        }
+        await _persistHandwritingNotesList(existingToNotes, toUserId);
+      }
+
+      // 3. Migrate Annotations
+      final allKeys = prefs.getKeys();
+      for (final key in allKeys) {
+        if (key.startsWith('ayens_kwaderno_annot_u_${fromUserId}_')) {
+          final docSuffix =
+              key.substring('ayens_kwaderno_annot_u_${fromUserId}_'.length);
+          final toKey = 'ayens_kwaderno_annot_u_${toUserId}_$docSuffix';
+          if (!prefs.containsKey(toKey)) {
+            final val = prefs.getString(key);
+            if (val != null) {
+              await prefs.setString(toKey, val);
+            }
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('Notice migrating user data: $e');
+    }
   }
 
   /// Migrates legacy un-scoped data from old keys to the given user profile ID
@@ -76,23 +151,113 @@ class DocumentStorageService {
   // DOCUMENT FILES PERSISTENCE
   // ==========================================
 
-  /// Loads saved documents from SharedPreferences scoped strictly for the active user
+  /// Loads saved documents from SharedPreferences scoped for the active user,
+  /// with automatic fallback/recovery across device profiles and local storage folder so files are always visible
   static Future<List<DocumentItem>> loadSavedDocuments([String? userId]) async {
     try {
       final targetUserId = userId ?? UserService.instance.activeUserId;
       final prefs = await SharedPreferences.getInstance();
       final scopedKey = _getScopedDocumentsKey(targetUserId);
-      final String? jsonString = prefs.getString(scopedKey);
+      String? jsonString = prefs.getString(scopedKey);
 
-      if (jsonString == null || jsonString.isEmpty) {
-        return [];
+      List<DocumentItem> docs = [];
+
+      if (jsonString != null && jsonString.isNotEmpty && jsonString != '[]') {
+        final List<dynamic> decodedList =
+            jsonDecode(jsonString) as List<dynamic>;
+        docs = decodedList
+            .map((item) =>
+                DocumentItem.fromJson(Map<String, dynamic>.from(item as Map)))
+            .toList();
       }
 
-      final List<dynamic> decodedList = jsonDecode(jsonString) as List<dynamic>;
-      final List<DocumentItem> docs = decodedList
-          .map((item) =>
-              DocumentItem.fromJson(Map<String, dynamic>.from(item as Map)))
-          .toList();
+      // If user currently has 0 documents, search across device keys / other profiles / saved_documents directory
+      if (docs.isEmpty) {
+        final allKeys = prefs.getKeys();
+        final Set<String> collectedNames = {};
+
+        // 1. Search all other user doc keys on this device
+        for (final key in allKeys) {
+          if (key.startsWith('ayens_kwaderno_docs_u_') ||
+              key == _legacyDocumentsKey ||
+              key == 'ayens_kwaderno_recent_documents_v1') {
+            final candidateJson = prefs.getString(key);
+            if (candidateJson != null &&
+                candidateJson.isNotEmpty &&
+                candidateJson != '[]') {
+              try {
+                final List<dynamic> list = jsonDecode(candidateJson);
+                for (final item in list) {
+                  final d = DocumentItem.fromJson(
+                      Map<String, dynamic>.from(item as Map));
+                  if (!collectedNames.contains(d.fileName)) {
+                    collectedNames.add(d.fileName);
+                    docs.add(d);
+                  }
+                }
+              } catch (_) {}
+            }
+          }
+        }
+
+        // 2. Discover physical files in saved_documents folder
+        try {
+          final appDir = await getApplicationDocumentsDirectory();
+          final savedDocsDir = Directory('${appDir.path}/saved_documents');
+          if (savedDocsDir.existsSync()) {
+            final files = savedDocsDir.listSync();
+            for (final entity in files) {
+              if (entity is File) {
+                final name = entity.uri.pathSegments.last;
+                if (!name.startsWith('.') && !collectedNames.contains(name)) {
+                  collectedNames.add(name);
+                  docs.add(DocumentItem(
+                    fileName: name,
+                    filePath: entity.path,
+                    lastOpenedAt: entity.lastModifiedSync(),
+                    annotationsCount: 0,
+                    paletteIndex: 0,
+                    isCloudSynced: false,
+                  ));
+                }
+              }
+            }
+          }
+        } catch (_) {}
+
+        if (docs.isNotEmpty) {
+          await _persistDocumentsList(docs, targetUserId);
+        }
+      }
+
+      // Validate & ensure valid file paths for existing items
+      bool neededUpdate = false;
+      for (int i = 0; i < docs.length; i++) {
+        final d = docs[i];
+        if (d.filePath == null || !File(d.filePath!).existsSync()) {
+          try {
+            final appDir = await getApplicationDocumentsDirectory();
+            final savedDocsDir = Directory('${appDir.path}/saved_documents');
+            if (savedDocsDir.existsSync()) {
+              final candidates = [
+                File('${savedDocsDir.path}/${d.fileName}'),
+                File('${savedDocsDir.path}/${d.fileName}.pdf'),
+              ];
+              for (final f in candidates) {
+                if (f.existsSync()) {
+                  docs[i] = d.copyWith(filePath: f.path);
+                  neededUpdate = true;
+                  break;
+                }
+              }
+            }
+          } catch (_) {}
+        }
+      }
+
+      if (neededUpdate) {
+        await _persistDocumentsList(docs, targetUserId);
+      }
 
       // Sort newest first
       docs.sort((a, b) => b.lastOpenedAt.compareTo(a.lastOpenedAt));
@@ -269,29 +434,58 @@ class DocumentStorageService {
     await prefs.setString(_getScopedDocumentsKey(targetUserId), encoded);
   }
 
-  // ==========================================
-  // HANDWRITING NOTES PERSISTENCE & CLOUD SYNC
-  // ==========================================
-
-  /// Loads all saved handwriting notes from SharedPreferences scoped strictly for the active user
+  /// Loads all saved handwriting notes from SharedPreferences scoped for the active user,
+  /// with automatic fallback/recovery across device profiles so notes are always visible
   static Future<List<HandwritingNote>> loadHandwritingNotes(
       [String? userId]) async {
     try {
       final targetUserId = userId ?? UserService.instance.activeUserId;
       final prefs = await SharedPreferences.getInstance();
       final scopedKey = _getScopedNotesKey(targetUserId);
-      final String? jsonString = prefs.getString(scopedKey);
+      String? jsonString = prefs.getString(scopedKey);
 
-      if (jsonString == null || jsonString.isEmpty) {
-        return [];
+      List<HandwritingNote> notes = [];
+
+      if (jsonString != null && jsonString.isNotEmpty && jsonString != '[]') {
+        final List<dynamic> decodedList =
+            jsonDecode(jsonString) as List<dynamic>;
+        notes = decodedList
+            .map((item) => HandwritingNote.fromJson(
+                Map<String, dynamic>.from(item as Map)))
+            .toList();
       }
 
-      final List<dynamic> decodedList =
-          jsonDecode(jsonString) as List<dynamic>;
-      final List<HandwritingNote> notes = decodedList
-          .map((item) => HandwritingNote.fromJson(
-              Map<String, dynamic>.from(item as Map)))
-          .toList();
+      // If user currently has 0 notes, search across device keys / other profiles
+      if (notes.isEmpty) {
+        final allKeys = prefs.getKeys();
+        final Set<String> collectedIds = {};
+
+        for (final key in allKeys) {
+          if (key.startsWith('ayens_kwaderno_notes_u_') ||
+              key == _legacyHandwritingNotesKey) {
+            final candidateJson = prefs.getString(key);
+            if (candidateJson != null &&
+                candidateJson.isNotEmpty &&
+                candidateJson != '[]') {
+              try {
+                final List<dynamic> list = jsonDecode(candidateJson);
+                for (final item in list) {
+                  final n = HandwritingNote.fromJson(
+                      Map<String, dynamic>.from(item as Map));
+                  if (!collectedIds.contains(n.id)) {
+                    collectedIds.add(n.id);
+                    notes.add(n);
+                  }
+                }
+              } catch (_) {}
+            }
+          }
+        }
+
+        if (notes.isNotEmpty) {
+          await _persistHandwritingNotesList(notes, targetUserId);
+        }
+      }
 
       // Sort newest first
       notes.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
