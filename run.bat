@@ -18,7 +18,8 @@ findstr /C:"org.gradle.configuration-cache" "%GRADLE_PROP%" >nul || echo org.gra
 findstr /C:"org.gradle.caching" "%GRADLE_PROP%" >nul || echo org.gradle.caching=true>>"%GRADLE_PROP%"
 findstr /C:"org.gradle.jvmargs" "%GRADLE_PROP%" >nul || echo org.gradle.jvmargs=-Xmx2560m -XX:+UseParallelGC -XX:MaxMetaspaceSize=512m>>"%GRADLE_PROP%"
 findstr /C:"android.enableJetifier" "%GRADLE_PROP%" >nul || echo android.enableJetifier=false>>"%GRADLE_PROP%"
-findstr /C:"android.newDsl" "%GRADLE_PROP%" >nul || echo android.newDsl=false>>"%GRADLE_PROP%"
+findstr /C:"android.newDsl" "%GRADLE_PROP%" >nul || echo android.newDsl=true>>"%GRADLE_PROP%"
+findstr /C:"android.builtInKotlin" "%GRADLE_PROP%" >nul || echo android.builtInKotlin=true>>"%GRADLE_PROP%"
 echo [OK] Gradle optimized for 8GB RAM (heap capped at 2.5GB).
 goto GRADLE_DONE
 
@@ -98,7 +99,7 @@ goto END
 :RUN_RELEASE
 echo.
 echo Starting app in RELEASE mode...
-call flutter run --release --android-skip-build-dependency-validation
+call flutter run --release --no-dds --android-skip-build-dependency-validation
 goto END
 
 :RUN_ATTACH
