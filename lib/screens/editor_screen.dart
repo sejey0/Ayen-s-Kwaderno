@@ -89,6 +89,7 @@ class _EditorScreenState extends State<EditorScreen>
   PageSlideOrientation _slideOrientation = PageSlideOrientation.vertical;
   bool _isHeaderVisible = true;
   bool _isToolbarVisible = true;
+  Offset? _navPillPosition;
 
   // Per-Page Annotation Storage Maps
   final Map<int, List<Stroke>> _perPageStrokes = {};
@@ -1807,15 +1808,50 @@ class _EditorScreenState extends State<EditorScreen>
               ),
 
             // ==========================================
-            // FLOATING QUICK NAVIGATE & PAGE CONTROLLER PILL
-            // (1-tap fast toggle between Pan/Navigate and Pen/Marker, with page turn buttons)
+            // DRAGGABLE FLOATING QUICK NAVIGATE MICRO-BUBBLE
+            // (Ultra-compact 1-tap toggle, freely draggable anywhere)
             // ==========================================
             Positioned(
-              top: _isHeaderVisible
-                  ? MediaQuery.of(context).padding.top + 96
-                  : MediaQuery.of(context).padding.top + 10,
-              right: 14,
-              child: _buildFloatingQuickNavigatePill(),
+              left: _navPillPosition?.dx.clamp(
+                8.0,
+                (MediaQuery.of(context).size.width - 65)
+                    .clamp(8.0, MediaQuery.of(context).size.width),
+              ),
+              right: _navPillPosition == null ? 14.0 : null,
+              top: _navPillPosition?.dy.clamp(
+                MediaQuery.of(context).padding.top + 8,
+                (MediaQuery.of(context).size.height - 60)
+                    .clamp(10.0, MediaQuery.of(context).size.height),
+              ),
+              bottom: _navPillPosition == null
+                  ? (_isToolbarVisible
+                      ? ((_activeTool == AnnotationTool.highlighter ||
+                                  _activeTool == AnnotationTool.straightLine ||
+                                  _activeTool == AnnotationTool.eraser)
+                              ? 135.0
+                              : 84.0)
+                      : 24.0)
+                  : null,
+              child: GestureDetector(
+                onPanUpdate: (DragUpdateDetails details) {
+                  final screen = MediaQuery.of(context).size;
+                  final currentX = _navPillPosition?.dx ??
+                      (screen.width - 80);
+                  final currentY = _navPillPosition?.dy ??
+                      (screen.height -
+                          (_isToolbarVisible ? 150.0 : 80.0));
+                  setState(() {
+                    _navPillPosition = Offset(
+                      (currentX + details.delta.dx).clamp(
+                          8.0, (screen.width - 60).clamp(8.0, screen.width)),
+                      (currentY + details.delta.dy).clamp(
+                          MediaQuery.of(context).padding.top + 8,
+                          (screen.height - 60).clamp(10.0, screen.height)),
+                    );
+                  });
+                },
+                child: _buildFloatingQuickNavigatePill(),
+              ),
             ),
 
             // ==========================================
@@ -3527,7 +3563,7 @@ class _EditorScreenState extends State<EditorScreen>
     );
   }
 
-  /// Floating Fast Navigation Pill (1-tap toggle between Pan/Navigate mode and Pen/Marker, with fast page turn buttons)
+  /// Ultra-Compact Floating Fast Navigation Micro-Pill
   Widget _buildFloatingQuickNavigatePill() {
     final isNavigateMode = _activeTool == AnnotationTool.none;
     final isPen = _penSubTool == PenSubTool.ballpen;
@@ -3538,64 +3574,71 @@ class _EditorScreenState extends State<EditorScreen>
             : (isPen ? CupertinoIcons.pen : CupertinoIcons.pencil_outline));
 
     return ClipRRect(
-      borderRadius: BorderRadius.circular(28),
+      borderRadius: BorderRadius.circular(20),
       child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+        filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 4),
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
           decoration: BoxDecoration(
-            color: AppTheme.surfaceWhite.withValues(alpha: 0.94),
-            borderRadius: BorderRadius.circular(28),
+            color: AppTheme.surfaceWhite.withValues(alpha: 0.96),
+            borderRadius: BorderRadius.circular(20),
             border: Border.all(
               color: isNavigateMode
-                  ? AppTheme.primaryPurple.withValues(alpha: 0.45)
-                  : Colors.white.withValues(alpha: 0.8),
-              width: 1.5,
+                  ? AppTheme.primaryPurple
+                  : AppTheme.primaryPurple.withValues(alpha: 0.55),
+              width: 1.6,
             ),
             boxShadow: [
               BoxShadow(
                 color: isNavigateMode
-                    ? AppTheme.primaryPurple.withValues(alpha: 0.22)
-                    : const Color(0xFF1E1B4B).withValues(alpha: 0.12),
-                blurRadius: 14,
-                offset: const Offset(0, 4),
+                    ? AppTheme.primaryPurple.withValues(alpha: 0.28)
+                    : const Color(0xFF1E1B4B).withValues(alpha: 0.16),
+                blurRadius: 10,
+                offset: const Offset(0, 3),
               ),
             ],
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // 1. Fast Mode Toggle Button (🖐️ Navigate vs ✍️ Draw)
+              // 1. Subtle Micro Grip
+              const Padding(
+                padding: EdgeInsets.only(left: 3, right: 2),
+                child: Icon(
+                  CupertinoIcons.ellipsis_vertical,
+                  size: 11,
+                  color: AppTheme.primaryPurple,
+                ),
+              ),
+
+              // 2. Ultra-Compact Fast Mode Toggle (🖐️ vs ✍️)
               Tooltip(
                 message: isNavigateMode
-                    ? 'Resume Drawing (Tap to switch back to Pen/Marker)'
-                    : 'Pan & Scroll Document (Tap to navigate)',
+                    ? 'Resume Drawing (Tap to write)'
+                    : 'Pan & Scroll (Tap to navigate)',
                 child: Material(
                   color: Colors.transparent,
                   child: InkWell(
-                    borderRadius: BorderRadius.circular(24),
+                    borderRadius: BorderRadius.circular(16),
                     onTap: _onToggleNavigateMode,
                     child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
+                      duration: const Duration(milliseconds: 180),
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 6),
+                          horizontal: 7, vertical: 3.5),
                       decoration: BoxDecoration(
                         gradient: isNavigateMode
                             ? AppTheme.primaryGradientDiagonal
                             : null,
                         color: isNavigateMode
                             ? null
-                            : AppTheme.primaryPurpleLight.withValues(alpha: 0.6),
-                        borderRadius: BorderRadius.circular(24),
-                        boxShadow: isNavigateMode
-                            ? [
-                                BoxShadow(
-                                  color: AppTheme.primaryPurple
-                                      .withValues(alpha: 0.35),
-                                  blurRadius: 8,
-                                  offset: const Offset(0, 2),
-                                ),
-                              ]
+                            : AppTheme.primaryPurpleLight.withValues(alpha: 0.8),
+                        borderRadius: BorderRadius.circular(16),
+                        border: !isNavigateMode
+                            ? Border.all(
+                                color: AppTheme.primaryPurple
+                                    .withValues(alpha: 0.3),
+                                width: 1.0,
+                              )
                             : null,
                       ),
                       child: Row(
@@ -3603,38 +3646,23 @@ class _EditorScreenState extends State<EditorScreen>
                         children: [
                           if (!isNavigateMode) ...[
                             Container(
-                              width: 9,
-                              height: 9,
+                              width: 7,
+                              height: 7,
                               decoration: BoxDecoration(
                                 color: _selectedColor,
                                 shape: BoxShape.circle,
-                                border:
-                                    Border.all(color: Colors.white, width: 1.2),
                               ),
                             ),
-                            const SizedBox(width: 5),
+                            const SizedBox(width: 4),
                           ],
                           Icon(
                             isNavigateMode
                                 ? CupertinoIcons.hand_draw
                                 : activeDrawIcon,
-                            size: 15,
+                            size: 13,
                             color: isNavigateMode
                                 ? Colors.white
                                 : AppTheme.primaryPurpleDark,
-                          ),
-                          const SizedBox(width: 5),
-                          Text(
-                            isNavigateMode ? 'Navigate' : 'Drawing',
-                            style: TextStyle(
-                              fontFamily: 'OpenSauceSans',
-                              fontSize: 12,
-                              fontWeight: FontWeight.w800,
-                              color: isNavigateMode
-                                  ? Colors.white
-                                  : AppTheme.primaryPurpleDark,
-                              letterSpacing: -0.2,
-                            ),
                           ),
                         ],
                       ),
@@ -3643,106 +3671,27 @@ class _EditorScreenState extends State<EditorScreen>
                 ),
               ),
 
-              // 2. Fast Page Turning Controls (for multi-page PDFs)
-              if (_pageCount > 1) ...[
-                const SizedBox(width: 4),
-                Container(
-                  width: 1,
-                  height: 16,
-                  color: AppTheme.dividerColor,
-                ),
-                const SizedBox(width: 2),
-
-                // Previous Page Button
-                IconButton(
-                  padding: EdgeInsets.zero,
-                  constraints:
-                      const BoxConstraints(minWidth: 26, minHeight: 26),
-                  icon: Icon(
-                    CupertinoIcons.chevron_left,
-                    size: 14,
-                    color: _currentPage > 1
-                        ? AppTheme.primaryPurple
-                        : AppTheme.textMuted.withValues(alpha: 0.35),
-                  ),
-                  tooltip: 'Previous Page',
-                  onPressed:
-                      _currentPage > 1 ? () => _goToPage(_currentPage - 1) : null,
-                ),
-
-                // Page Number Indicator
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 2),
-                  child: Text(
-                    '$_currentPage/$_pageCount',
-                    style: const TextStyle(
-                      fontFamily: 'OpenSauceSans',
-                      fontSize: 11,
-                      fontWeight: FontWeight.w800,
-                      color: AppTheme.textPrimary,
-                    ),
-                  ),
-                ),
-
-                // Next Page Button
-                IconButton(
-                  padding: EdgeInsets.zero,
-                  constraints:
-                      const BoxConstraints(minWidth: 26, minHeight: 26),
-                  icon: Icon(
-                    CupertinoIcons.chevron_right,
-                    size: 14,
-                    color: _currentPage < _pageCount
-                        ? AppTheme.primaryPurple
-                        : AppTheme.textMuted.withValues(alpha: 0.35),
-                  ),
-                  tooltip: 'Next Page',
-                  onPressed: _currentPage < _pageCount
-                      ? () => _goToPage(_currentPage + 1)
-                      : null,
-                ),
-              ],
-
-              // 3. Zoom Reset Button (when zoomed in)
+              // 3. Zoom Reset Icon (only when zoomed in)
               if (_isCurrentlyZoomed) ...[
-                const SizedBox(width: 2),
+                const SizedBox(width: 1),
                 Container(
                   width: 1,
-                  height: 16,
+                  height: 12,
                   color: AppTheme.dividerColor,
                 ),
-                const SizedBox(width: 2),
+                const SizedBox(width: 1),
                 Tooltip(
-                  message: 'Reset Zoom (Fit to Screen)',
-                  child: Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(16),
-                      onTap: () => _toggleZoom(),
-                      child: const Padding(
-                        padding: EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 4),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              CupertinoIcons.viewfinder,
-                              size: 13,
-                              color: AppTheme.primaryPurple,
-                            ),
-                            SizedBox(width: 3),
-                            Text(
-                              'Fit',
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w800,
-                                color: AppTheme.primaryPurple,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
+                  message: 'Fit to Screen',
+                  child: IconButton(
+                    padding: EdgeInsets.zero,
+                    constraints:
+                        const BoxConstraints(minWidth: 20, minHeight: 20),
+                    icon: const Icon(
+                      CupertinoIcons.viewfinder,
+                      size: 12,
+                      color: AppTheme.primaryPurple,
                     ),
+                    onPressed: () => _toggleZoom(),
                   ),
                 ),
               ],
