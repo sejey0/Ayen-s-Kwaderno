@@ -53,28 +53,14 @@ class WriteNoteChoiceDialog extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Write a Note',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w800,
-                      color: AppTheme.textPrimary,
-                      letterSpacing: -0.3,
-                    ),
-                  ),
-                  SizedBox(height: 2),
-                  Text(
-                    'Choose how you want to create your note',
-                    style: TextStyle(
-                      fontSize: 12.5,
-                      color: AppTheme.textSecondary,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
+              const Text(
+                'Write a Note',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                  color: AppTheme.textPrimary,
+                  letterSpacing: -0.3,
+                ),
               ),
               IconButton(
                 icon: const Icon(
@@ -136,36 +122,13 @@ class WriteNoteChoiceDialog extends StatelessWidget {
                   ),
                   const SizedBox(width: 14),
                   const Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Text(
-                              'Handwritten Note',
-                              style: TextStyle(
-                                fontSize: 15.5,
-                                fontWeight: FontWeight.w700,
-                                color: AppTheme.textPrimary,
-                              ),
-                            ),
-                            SizedBox(width: 6),
-                            Text(
-                              '✍️',
-                              style: TextStyle(fontSize: 14),
-                            ),
-                          ],
-                        ),
-                        SizedBox(height: 3),
-                        Text(
-                          'Full screen white canvas, freehand drawing, colors & eraser tools.',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: AppTheme.textSecondary,
-                            height: 1.3,
-                          ),
-                        ),
-                      ],
+                    child: Text(
+                      'Handwritten Note',
+                      style: TextStyle(
+                        fontSize: 15.5,
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.textPrimary,
+                      ),
                     ),
                   ),
                   const Icon(
@@ -226,36 +189,13 @@ class WriteNoteChoiceDialog extends StatelessWidget {
                   ),
                   const SizedBox(width: 14),
                   const Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Text(
-                              'Type Note',
-                              style: TextStyle(
-                                fontSize: 15.5,
-                                fontWeight: FontWeight.w700,
-                                color: AppTheme.textPrimary,
-                              ),
-                            ),
-                            SizedBox(width: 6),
-                            Text(
-                              '⌨️',
-                              style: TextStyle(fontSize: 14),
-                            ),
-                          ],
-                        ),
-                        SizedBox(height: 3),
-                        Text(
-                          'Type study summaries, quick formulas, and digital reminders.',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: AppTheme.textSecondary,
-                            height: 1.3,
-                          ),
-                        ),
-                      ],
+                    child: Text(
+                      'Type Note',
+                      style: TextStyle(
+                        fontSize: 15.5,
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.textPrimary,
+                      ),
                     ),
                   ),
                   const Icon(

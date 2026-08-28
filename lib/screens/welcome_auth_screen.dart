@@ -45,18 +45,17 @@ class _WelcomeAuthScreenState extends State<WelcomeAuthScreen> {
   String? _errorMessage;
 
   static const List<String> _avatarEmojis = [
-    '📓',
-    '✍️',
-    '🎒',
-    '🌸',
-    '⚡',
-    '🎨',
-    '🎓',
-    '🌟',
-    '💡',
-    '🐾',
-    '📚',
-    '🧸',
+    'book',
+    'pencil',
+    'backpack',
+    'flower',
+    'bolt',
+    'paint',
+    'grad',
+    'star',
+    'bulb',
+    'paw',
+    'bear',
   ];
 
   static const List<Color> _avatarColors = [
@@ -144,7 +143,7 @@ class _WelcomeAuthScreenState extends State<WelcomeAuthScreen> {
                 children: [
                   Icon(CupertinoIcons.trash, size: 18),
                   SizedBox(width: 8),
-                  Text('Remove Photo (Use Emoji)'),
+                  Text('Remove Photo (Use Icon)'),
                 ],
               ),
               onPressed: () {
@@ -342,7 +341,7 @@ class _WelcomeAuthScreenState extends State<WelcomeAuthScreen> {
               children: [
                 // Top Interactive Avatar Badge
                 UserAvatarWidget(
-                  emoji: (isOffline || isSignUp) ? _selectedEmoji : '☁️',
+                  emoji: (isOffline || isSignUp) ? _selectedEmoji : 'cloud',
                   imagePath: (isOffline || isSignUp) ? _selectedImagePath : null,
                   size: 76,
                   showEditBadge: isOffline || isSignUp,
@@ -350,7 +349,7 @@ class _WelcomeAuthScreenState extends State<WelcomeAuthScreen> {
                 ),
                 const SizedBox(height: 14),
 
-                // Header Title & Tagline
+                // Header Title
                 Text(
                   widget.canCancel
                       ? (isOffline
@@ -366,19 +365,7 @@ class _WelcomeAuthScreenState extends State<WelcomeAuthScreen> {
                     letterSpacing: -0.4,
                   ),
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  isOffline
-                      ? "Keep notes privately stored on this device"
-                      : "Access & sync your notes across all your devices",
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    color: AppTheme.textSecondary,
-                    height: 1.3,
-                  ),
-                ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 18),
 
                 // Mode Switcher Tabs (Cloud Account vs Offline Profile)
                 Container(
@@ -631,9 +618,12 @@ class _WelcomeAuthScreenState extends State<WelcomeAuthScreen> {
                     ),
                   ),
                   child: Center(
-                    child: Text(
-                      emoji,
-                      style: const TextStyle(fontSize: 21),
+                    child: Icon(
+                      UserAvatarWidget.getIconForString(emoji),
+                      size: 20,
+                      color: isSelected
+                          ? AppTheme.primaryPurple
+                          : AppTheme.textSecondary,
                     ),
                   ),
                 ),

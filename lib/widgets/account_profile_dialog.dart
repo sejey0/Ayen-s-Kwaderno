@@ -46,18 +46,17 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
   bool _clearedCustomImage = false;
 
   static const List<String> _avatarEmojis = [
-    '📓',
-    '✍️',
-    '🎒',
-    '🌸',
-    '⚡',
-    '🎨',
-    '🎓',
-    '🌟',
-    '💡',
-    '🐾',
-    '📚',
-    '🧸',
+    'book',
+    'pencil',
+    'backpack',
+    'flower',
+    'bolt',
+    'paint',
+    'grad',
+    'star',
+    'bulb',
+    'paw',
+    'bear',
   ];
 
   @override
@@ -146,7 +145,7 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
                 children: [
                   Icon(CupertinoIcons.trash, size: 18),
                   SizedBox(width: 8),
-                  Text('Remove Photo (Use Emoji)'),
+                  Text('Remove Photo (Use Icon)'),
                 ],
               ),
               onPressed: () {
@@ -191,7 +190,7 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
               Icon(CupertinoIcons.checkmark_seal_fill,
                   color: Color(0xFF10B981), size: 16),
               SizedBox(width: 8),
-              Text('Profile updated successfully! ✨',
+              Text('Profile updated successfully!',
                   style: TextStyle(fontWeight: FontWeight.w600)),
             ],
           ),
@@ -217,7 +216,7 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
               Icon(CupertinoIcons.checkmark_seal_fill,
                   color: Color(0xFF10B981), size: 16),
               SizedBox(width: 8),
-              Text('Sync complete! All notes up to date ⚡',
+              Text('Sync complete! All notes up to date',
                   style: TextStyle(fontWeight: FontWeight.w600)),
             ],
           ),
@@ -535,7 +534,7 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
                             },
                             icon: const Icon(CupertinoIcons.trash, size: 11, color: Color(0xFFEF4444)),
                             label: const Text(
-                              'Use Emoji',
+                              'Use Icon',
                               style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFFEF4444)),
                             ),
                             style: TextButton.styleFrom(
@@ -596,7 +595,7 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
           const SizedBox(height: 14),
 
           const Text(
-            'Choose Avatar Emoji',
+            'Choose Avatar Icon',
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w700,
@@ -633,7 +632,13 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
                       ),
                     ),
                     child: Center(
-                      child: Text(emoji, style: const TextStyle(fontSize: 22)),
+                      child: Icon(
+                        UserAvatarWidget.getIconForString(emoji),
+                        size: 20,
+                        color: isSel
+                            ? AppTheme.primaryPurple
+                            : AppTheme.textSecondary,
+                      ),
                     ),
                   ),
                 );
@@ -677,7 +682,7 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
                 const SizedBox(width: 12),
                 const Expanded(
                   child: Text(
-                    'Cloud Backup Active ✨',
+                    'Cloud Backup Active',
                     style: TextStyle(
                       fontWeight: FontWeight.w800,
                       fontSize: 14.5,

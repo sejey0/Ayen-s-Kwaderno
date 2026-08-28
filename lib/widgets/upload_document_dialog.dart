@@ -272,27 +272,14 @@ class _UploadDocumentDialogState extends State<UploadDocumentDialog> {
                             ),
                           ),
                           const SizedBox(width: 12),
-                          const Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Upload Document or Image',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w700,
-                                  color: AppTheme.textPrimary,
-                                  letterSpacing: -0.2,
-                                ),
-                              ),
-                              Text(
-                                'Add custom title & preview real content',
-                                style: TextStyle(
-                                  fontSize: 11.5,
-                                  color: AppTheme.textSecondary,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ],
+                          const Text(
+                            'Upload Document or Image',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              color: AppTheme.textPrimary,
+                              letterSpacing: -0.2,
+                            ),
                           ),
                         ],
                       ),
@@ -387,14 +374,6 @@ class _UploadDocumentDialogState extends State<UploadDocumentDialog> {
                           fontWeight: FontWeight.w600,
                           color: AppTheme.textPrimary,
                         ),
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    const Text(
-                      'This title will be displayed on your saved notebook card.',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: AppTheme.textMuted,
                       ),
                     ),
                     const SizedBox(height: 14),

@@ -67,7 +67,7 @@ class _AppSideNavigationPanelState extends State<AppSideNavigationPanel> {
               Icon(CupertinoIcons.checkmark_seal_fill,
                   color: Color(0xFF10B981), size: 16),
               SizedBox(width: 8),
-              Text('Cloud sync complete! ⚡',
+              Text('Cloud sync complete!',
                   style: TextStyle(fontWeight: FontWeight.w600)),
             ],
           ),
@@ -1043,8 +1043,8 @@ class SwitchAccountBottomSheet extends StatelessWidget {
                                             Text(
                                               profile.isCloudLinked
                                                   ? (profile.email ??
-                                                      '☁️ Cloud Linked')
-                                                  : '📱 Local · Offline',
+                                                      'Cloud Linked')
+                                                  : 'Local · Offline',
                                               style: const TextStyle(
                                                 fontSize: 11.5,
                                                 color: AppTheme.textMuted,

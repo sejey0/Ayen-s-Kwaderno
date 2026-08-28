@@ -75,7 +75,7 @@ class AppTheme {
         surface: surfaceWhite,
         brightness: Brightness.light,
       ),
-      fontFamily: 'Roboto',
+      fontFamily: 'OpenSauceSans',
       appBarTheme: const AppBarTheme(
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -83,10 +83,11 @@ class AppTheme {
         centerTitle: false,
         iconTheme: IconThemeData(color: textPrimary),
         titleTextStyle: TextStyle(
+          fontFamily: 'OpenSauceSans',
           color: textPrimary,
           fontSize: 20,
           fontWeight: FontWeight.w700,
-          letterSpacing: -0.3,
+          letterSpacing: -0.2,
         ),
       ),
       cardTheme: CardThemeData(
@@ -117,8 +118,9 @@ class AppTheme {
             borderRadius: BorderRadius.circular(16),
           ),
           textStyle: const TextStyle(
-            fontSize: 15,
-            fontWeight: FontWeight.w600,
+            fontFamily: 'OpenSauceSans',
+            fontSize: 14.5,
+            fontWeight: FontWeight.w700,
             letterSpacing: 0.1,
           ),
         ),
@@ -132,8 +134,10 @@ class AppTheme {
             borderRadius: BorderRadius.circular(16),
           ),
           textStyle: const TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
+            fontFamily: 'OpenSauceSans',
+            fontSize: 13.5,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.1,
           ),
         ),
       ),

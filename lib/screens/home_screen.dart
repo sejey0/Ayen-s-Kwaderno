@@ -411,7 +411,7 @@ class _HomeScreenState extends State<HomeScreen> {
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                'Saved "${note.title}" to Written Notes! ✍️',
+                'Saved "${note.title}" to Written Notes!',
                 style: const TextStyle(fontWeight: FontWeight.w600),
               ),
             ),
@@ -690,7 +690,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 });
                 messenger.showSnackBar(
                   SnackBar(
-                    content: Text('Deleted "${doc.fileName}" 🗑️'),
+                    content: Text('Deleted "${doc.fileName}"'),
                     backgroundColor: AppTheme.primaryPurpleDark,
                     behavior: SnackBarBehavior.floating,
                     shape: RoundedRectangleBorder(
@@ -731,7 +731,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 });
                 messenger.showSnackBar(
                   SnackBar(
-                    content: Text('Deleted "${note.title}" 🗑️'),
+                    content: Text('Deleted "${note.title}"'),
                     backgroundColor: AppTheme.primaryPurpleDark,
                     behavior: SnackBarBehavior.floating,
                     shape: RoundedRectangleBorder(
@@ -777,7 +777,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   color: Colors.white, size: 18),
               const SizedBox(width: 8),
               Text(
-                'Deleted $count item${count == 1 ? '' : 's'} successfully! 🗑️',
+                'Deleted $count item${count == 1 ? '' : 's'} successfully!',
                 style: const TextStyle(fontWeight: FontWeight.w600),
               ),
             ],
@@ -1303,33 +1303,16 @@ class _HomeScreenState extends State<HomeScreen> {
   /// Top Profile & Greeting Row (Dynamic Section Header)
   Widget _buildHeader() {
     final String headerTitle;
-    final String headerEmoji;
-    final List<Color> headerGradient;
 
     switch (_currentSection) {
       case LibrarySection.dashboard:
-        headerTitle = "Ayen's Kwaderno";
-        headerEmoji = '📓';
-        headerGradient = const [
-          AppTheme.primaryPurple,
-          AppTheme.accentPink,
-        ];
+        headerTitle = 'Dashboard';
         break;
       case LibrarySection.documents:
         headerTitle = 'Documents & Images';
-        headerEmoji = '📄';
-        headerGradient = const [
-          Color(0xFF6366F1),
-          Color(0xFF8B5CF6),
-        ];
         break;
       case LibrarySection.notes:
         headerTitle = 'Handwritten Notes';
-        headerEmoji = '✍️';
-        headerGradient = const [
-          Color(0xFFEC4899),
-          Color(0xFFF43F5E),
-        ];
         break;
     }
 
@@ -1372,46 +1355,19 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
 
-            // Header Title & Icon (Tapping opens Profile Settings)
+            // Header Title (Clean Victory Striker Sans font, no icons)
             GestureDetector(
               onTap: _openProfileSettings,
               behavior: HitTestBehavior.opaque,
-              child: Row(
-                children: [
-                  Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: headerGradient,
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                      borderRadius: BorderRadius.circular(12),
-                      boxShadow: [
-                        BoxShadow(
-                          color: headerGradient.first.withValues(alpha: 0.25),
-                          blurRadius: 8,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: Center(
-                      child: Text(headerEmoji,
-                          style: const TextStyle(fontSize: 20)),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Text(
-                    headerTitle,
-                    style: const TextStyle(
-                      fontSize: 19,
-                      fontWeight: FontWeight.w900,
-                      color: AppTheme.textPrimary,
-                      letterSpacing: -0.4,
-                    ),
-                  ),
-                ],
+              child: Text(
+                headerTitle,
+                style: const TextStyle(
+                  fontFamily: 'OpenSauceSans',
+                  fontSize: 24,
+                  fontWeight: FontWeight.w800,
+                  color: AppTheme.textPrimary,
+                  letterSpacing: -0.4,
+                ),
               ),
             ),
           ],
@@ -1424,7 +1380,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 Color iconColor = const Color(0xFF10B981);
                 IconData iconData = CupertinoIcons.cloud_fill;
                 String tooltip =
-                    'Auto-uploaded to Supabase Database ✨ (Tap to refresh)';
+                    'Auto-uploaded to Supabase Database (Tap to refresh)';
                 Widget? customChild;
 
                 switch (status) {
@@ -1455,7 +1411,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     iconColor = const Color(0xFF10B981);
                     iconData = CupertinoIcons.cloud_fill;
                     tooltip =
-                        'Auto-uploaded to Supabase Database ✨ (Tap to refresh)';
+                        'Auto-uploaded to Supabase Database (Tap to refresh)';
                     break;
                 }
 
@@ -1491,8 +1447,8 @@ class _HomeScreenState extends State<HomeScreen> {
                               Expanded(
                                 child: Text(
                                   status == AutoSyncStatus.offline
-                                      ? 'Offline mode active. All notes will auto-upload the instant you go online! ⚡'
-                                      : 'Database auto-sync refreshed with Supabase! ✨',
+                                      ? 'Offline mode active. All notes will auto-upload the instant you go online.'
+                                      : 'Database auto-sync refreshed with Supabase.',
                                 ),
                               ),
                             ],
@@ -1583,28 +1539,14 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     const SizedBox(width: 14),
                     const Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Quick Study Actions',
-                            style: TextStyle(
-                              fontSize: 17,
-                              fontWeight: FontWeight.w700,
-                              color: AppTheme.textPrimary,
-                              letterSpacing: -0.2,
-                            ),
-                          ),
-                          SizedBox(height: 3),
-                          Text(
-                            'Annotate PDF documents & images, or write notes instantly.',
-                            style: TextStyle(
-                              fontSize: 12.5,
-                              color: AppTheme.textSecondary,
-                              height: 1.35,
-                            ),
-                          ),
-                        ],
+                      child: Text(
+                        'Quick Study Actions',
+                        style: TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w700,
+                          color: AppTheme.textPrimary,
+                          letterSpacing: -0.2,
+                        ),
                       ),
                     ),
                   ],
@@ -1752,12 +1694,6 @@ class _HomeScreenState extends State<HomeScreen> {
               color: AppTheme.textPrimary,
             ),
           ),
-          SizedBox(height: 4),
-          Text(
-            'Upload a PDF document or image to highlight, draw lines, and add notes.',
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
-          ),
         ],
       ),
     );
@@ -1785,12 +1721,6 @@ class _HomeScreenState extends State<HomeScreen> {
               fontSize: 14.5,
               color: AppTheme.textPrimary,
             ),
-          ),
-          SizedBox(height: 4),
-          Text(
-            'Tap "Write a Note" to convert your handwriting or type digital study notes.',
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
           ),
         ],
       ),
@@ -2351,7 +2281,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           Clipboard.setData(ClipboardData(text: note.content));
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
-                              content: Text('Copied "${note.title}"! 📋'),
+                              content: Text('Copied "${note.title}"!'),
                               duration: const Duration(seconds: 1),
                               behavior: SnackBarBehavior.floating,
                             ),

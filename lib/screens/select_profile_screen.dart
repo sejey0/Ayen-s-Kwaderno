@@ -104,7 +104,11 @@ class SelectProfileScreen extends StatelessWidget {
                       ],
                     ),
                     child: const Center(
-                      child: Text('📓', style: TextStyle(fontSize: 34)),
+                      child: Icon(
+                        CupertinoIcons.book_fill,
+                        size: 34,
+                        color: Colors.white,
+                      ),
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -118,17 +122,7 @@ class SelectProfileScreen extends StatelessWidget {
                       letterSpacing: -0.4,
                     ),
                   ),
-                  const SizedBox(height: 6),
-                  const Text(
-                    'Choose an active profile to continue writing',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 13.5,
-                      color: AppTheme.textSecondary,
-                    ),
-                  ),
-
-                  const SizedBox(height: 28),
+                  const SizedBox(height: 20),
 
                   // Profiles List
                   Expanded(

@@ -367,7 +367,7 @@ class _HandwritingCanvasDialogState extends State<HandwritingCanvasDialog> {
     if (_strokes.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Please write or draw something on the canvas first! ✍️'),
+          content: Text('Please write or draw something on the canvas first!'),
           behavior: SnackBarBehavior.floating,
           duration: Duration(seconds: 2),
         ),
@@ -391,7 +391,7 @@ class _HandwritingCanvasDialogState extends State<HandwritingCanvasDialog> {
                   color: Color(0xFFFACC15), size: 18),
               const SizedBox(width: 8),
               Expanded(
-                child: Text('Recognized: "$recognized" ✨'),
+                child: Text('Recognized: "$recognized"'),
               ),
             ],
           ),
@@ -409,7 +409,7 @@ class _HandwritingCanvasDialogState extends State<HandwritingCanvasDialog> {
       });
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Could not detect text clearly yet. You can keep writing or type notes! ✍️'),
+          content: Text('Could not detect text clearly yet. You can keep writing or type notes!'),
           behavior: SnackBarBehavior.floating,
           duration: Duration(seconds: 3),
         ),
@@ -473,7 +473,7 @@ class _HandwritingCanvasDialogState extends State<HandwritingCanvasDialog> {
               if (!mounted) return;
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
-                  content: Text('Gemini API Key updated! ✨'),
+                  content: Text('Gemini API Key updated!'),
                   backgroundColor: AppTheme.primaryPurpleDark,
                   behavior: SnackBarBehavior.floating,
                 ),
@@ -533,7 +533,7 @@ class _HandwritingCanvasDialogState extends State<HandwritingCanvasDialog> {
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                'Saved "$title" (2 Pages: Drawing + Text)! ✍️📄',
+                'Saved "$title" (2 Pages: Drawing + Text)',
                 style: const TextStyle(fontWeight: FontWeight.w600),
               ),
             ),
@@ -618,7 +618,7 @@ class _HandwritingCanvasDialogState extends State<HandwritingCanvasDialog> {
                               Text(
                                 _isEraser
                                     ? 'Eraser Active • Drag over strokes to erase'
-                                    : 'Write, sketch, or draw notes freely ✍️',
+                                    : 'Write, sketch, or draw notes freely',
                                 style: TextStyle(
                                   fontSize: 13,
                                   fontWeight: FontWeight.w600,
@@ -806,7 +806,7 @@ class _HandwritingCanvasDialogState extends State<HandwritingCanvasDialog> {
                           onPressed: () =>
                               setState(() => _activePageIndex = 0),
                           icon: const Icon(CupertinoIcons.pencil, size: 14),
-                          label: const Text('✍️ Page 1: Drawing Canvas'),
+                          label: const Text('Page 1: Drawing Canvas'),
                           style: OutlinedButton.styleFrom(
                             foregroundColor: AppTheme.primaryPurple,
                             side: const BorderSide(
@@ -824,7 +824,7 @@ class _HandwritingCanvasDialogState extends State<HandwritingCanvasDialog> {
                                 text: _convertedTextController.text));
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
-                                content: Text('Copied converted text! 📋'),
+                                content: Text('Copied converted text!'),
                                 duration: Duration(seconds: 1),
                                 behavior: SnackBarBehavior.floating,
                               ),

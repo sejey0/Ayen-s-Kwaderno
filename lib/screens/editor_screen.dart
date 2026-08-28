@@ -1104,7 +1104,7 @@ class _EditorScreenState extends State<EditorScreen>
                 children: [
                   Icon(CupertinoIcons.crop, size: 16, color: Colors.white),
                   SizedBox(width: 8),
-                  Text('Image cropped successfully ✨'),
+                  Text('Image cropped successfully'),
                 ],
               ),
               backgroundColor: AppTheme.primaryPurple,
@@ -1151,7 +1151,7 @@ class _EditorScreenState extends State<EditorScreen>
               children: [
                 Icon(CupertinoIcons.sparkles, size: 16, color: Colors.white),
                 SizedBox(width: 8),
-                Text('Gemini AI background removed ✨'),
+                Text('Gemini AI background removed'),
               ],
             ),
             backgroundColor: AppTheme.primaryPurple,
@@ -2401,8 +2401,8 @@ class _EditorScreenState extends State<EditorScreen>
                               ),
                               const SizedBox(width: 8),
                               Text(annotation.isLocked
-                                  ? 'Image locked in place 🔒'
-                                  : 'Image unlocked 🔓'),
+                                  ? 'Image locked in place'
+                                  : 'Image unlocked'),
                             ],
                           ),
                           backgroundColor: annotation.isLocked
@@ -2462,7 +2462,7 @@ class _EditorScreenState extends State<EditorScreen>
                                 Icon(CupertinoIcons.arrow_counterclockwise,
                                     size: 16, color: Colors.white),
                                 SizedBox(width: 8),
-                                Text('Restored original image ↩️'),
+                                Text('Restored original image'),
                               ],
                             ),
                             backgroundColor: AppTheme.primaryPurple,
@@ -3201,8 +3201,8 @@ class _EditorScreenState extends State<EditorScreen>
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text(_syncStatus == SyncStatus.offline
-                    ? 'Saved locally (Offline mode ⚡)'
-                    : 'Synced to Supabase Cloud ✨'),
+                    ? 'Saved locally (Offline mode)'
+                    : 'Synced to Supabase Cloud'),
                 duration: const Duration(seconds: 1),
                 behavior: SnackBarBehavior.floating,
               ),

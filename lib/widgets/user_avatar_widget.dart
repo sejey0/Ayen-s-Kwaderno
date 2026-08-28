@@ -179,15 +179,57 @@ class UserAvatarWidget extends StatelessWidget {
       }
     }
 
-    // Default: Emoji display
     return _buildEmojiFallback(emoji, emojiFontSize);
   }
 
+  static IconData getIconForString(String? key) {
+    switch (key) {
+      case 'book':
+      case '📓':
+      case '📚':
+        return CupertinoIcons.book_fill;
+      case 'pencil':
+      case '✍️':
+        return CupertinoIcons.pencil;
+      case 'backpack':
+      case '🎒':
+        return CupertinoIcons.bag_fill;
+      case 'flower':
+      case '🌸':
+        return CupertinoIcons.heart_fill;
+      case 'bolt':
+      case '⚡':
+        return CupertinoIcons.bolt_fill;
+      case 'paint':
+      case '🎨':
+        return CupertinoIcons.paintbrush_fill;
+      case 'grad':
+      case '🎓':
+        return CupertinoIcons.square_grid_2x2_fill;
+      case 'star':
+      case '🌟':
+        return CupertinoIcons.star_fill;
+      case 'bulb':
+      case '💡':
+        return CupertinoIcons.lightbulb_fill;
+      case 'paw':
+      case '🐾':
+        return CupertinoIcons.circle_grid_hex_fill;
+      case 'bear':
+      case '🧸':
+        return CupertinoIcons.smiley_fill;
+      default:
+        return CupertinoIcons.person_fill;
+    }
+  }
+
   Widget _buildEmojiFallback(String emoji, double emojiFontSize) {
+    final iconData = getIconForString(emoji);
     return Center(
-      child: Text(
-        emoji,
-        style: TextStyle(fontSize: emojiFontSize),
+      child: Icon(
+        iconData,
+        size: size * 0.52,
+        color: Colors.white,
       ),
     );
   }
