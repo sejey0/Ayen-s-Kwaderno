@@ -15,6 +15,7 @@ import '../models/text_annotation_model.dart';
 import '../services/document_storage_service.dart';
 import '../services/user_service.dart';
 import '../theme/app_theme.dart';
+import '../widgets/image_cropper_dialog.dart';
 
 /// Supported annotation tool types in document editor
 enum AnnotationTool {
@@ -1072,6 +1073,57 @@ class _EditorScreenState extends State<EditorScreen>
     _autoSaveAndSync();
   }
 
+  /// Opens the interactive In-App Image Cropper for an image sticker
+  Future<void> _openImageCropper(ImageAnnotation annotation) async {
+    final croppedPath =
+        await ImageCropperDialog.show(context, annotation.imagePath);
+
+    if (croppedPath != null && mounted) {
+      try {
+        final bytes = await File(croppedPath).readAsBytes();
+        final codec = await ui.instantiateImageCodec(bytes);
+        final frame = await codec.getNextFrame();
+        final img = frame.image;
+
+        final newAspect = img.width / img.height;
+        final currentWidth = annotation.size.width;
+
+        setState(() {
+          annotation.imagePath = croppedPath;
+          annotation.size = Size(currentWidth, currentWidth / newAspect);
+        });
+
+        _autoSaveAndSync();
+        HapticFeedback.mediumImpact();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(CupertinoIcons.crop, size: 16, color: Colors.white),
+                  SizedBox(width: 8),
+                  Text('Image cropped successfully ✨'),
+                ],
+              ),
+              backgroundColor: AppTheme.primaryPurple,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
+      } catch (e) {
+        setState(() {
+          annotation.imagePath = croppedPath;
+        });
+        _autoSaveAndSync();
+      }
+    }
+  }
+
   /// Deletes a specific digital text note
   void _deleteTextAnnotation(String id) {
     setState(() {
@@ -1655,11 +1707,10 @@ class _EditorScreenState extends State<EditorScreen>
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        // 1. Top Action Floating Bar (within hit-test bounds)
+        // 1. Top Action Floating Bar (Drag handle + Delete button)
         if (isSelected)
           Container(
             margin: const EdgeInsets.only(bottom: 6),
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
               color: AppTheme.surfaceWhite,
               borderRadius: BorderRadius.circular(20),
@@ -1669,37 +1720,127 @@ class _EditorScreenState extends State<EditorScreen>
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(
-                  CupertinoIcons.move,
-                  size: 13,
-                  color: AppTheme.primaryPurple,
-                ),
-                const SizedBox(width: 4),
-                const Text(
-                  'Image',
-                  style: TextStyle(
-                    fontSize: 10.5,
-                    fontWeight: FontWeight.w700,
-                    color: AppTheme.primaryPurple,
+                // Active Drag Handle (Drag the entire image by its top bar!)
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onPanStart: (DragStartDetails details) {
+                    _swipeStartPos = null;
+                    _isDraggingAnnotation = true;
+                    setState(() {
+                      _selectedImageId = annotation.id;
+                      _selectedTextId = null;
+                    });
+                  },
+                  onPanUpdate: (DragUpdateDetails details) {
+                    _swipeStartPos = null;
+                    setState(() {
+                      annotation.position += Offset(
+                        details.delta.dx / scaleX,
+                        details.delta.dy / scaleY,
+                      );
+                      _selectedImageId = annotation.id;
+                      _selectedTextId = null;
+                    });
+                  },
+                  onPanEnd: (_) {
+                    _swipeStartPos = null;
+                    _isDraggingAnnotation = false;
+                    _autoSaveAndSync();
+                  },
+                  onPanCancel: () {
+                    _swipeStartPos = null;
+                    _isDraggingAnnotation = false;
+                  },
+                  child: Padding(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: const [
+                        Icon(
+                          CupertinoIcons.move,
+                          size: 13.5,
+                          color: AppTheme.primaryPurple,
+                        ),
+                        SizedBox(width: 4),
+                        Text(
+                          'Drag',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: AppTheme.primaryPurple,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-                const SizedBox(width: 10),
+
+                Container(
+                  width: 1,
+                  height: 14,
+                  color: AppTheme.dividerColor,
+                ),
+
+                // Crop Image Button
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () {
+                    HapticFeedback.selectionClick();
+                    _openImageCropper(annotation);
+                  },
+                  child: Padding(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: const [
+                        Icon(
+                          CupertinoIcons.crop,
+                          size: 13.5,
+                          color: AppTheme.primaryPurple,
+                        ),
+                        SizedBox(width: 4),
+                        Text(
+                          'Crop',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: AppTheme.primaryPurple,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                Container(
+                  width: 1,
+                  height: 14,
+                  color: AppTheme.dividerColor,
+                ),
+
+                // Delete Image Button
                 GestureDetector(
                   behavior: HitTestBehavior.opaque,
                   onTap: () {
                     HapticFeedback.heavyImpact();
                     _deleteImageAnnotation(annotation.id);
                   },
-                  child: Container(
-                    padding: const EdgeInsets.all(4),
-                    decoration: const BoxDecoration(
-                      color: Color(0xFFFEE2E2),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      CupertinoIcons.trash_fill,
-                      size: 14,
-                      color: Color(0xFFEF4444),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 4),
+                    child: Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: const BoxDecoration(
+                        color: Color(0xFFFEE2E2),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        CupertinoIcons.trash_fill,
+                        size: 13,
+                        color: Color(0xFFEF4444),
+                      ),
                     ),
                   ),
                 ),
