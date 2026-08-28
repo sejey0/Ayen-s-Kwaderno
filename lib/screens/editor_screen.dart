@@ -1827,7 +1827,7 @@ class _EditorScreenState extends State<EditorScreen>
 
             // ==========================================
             // DRAGGABLE FLOATING QUICK NAVIGATE MICRO-BUBBLE
-            // (Ultra-compact 1-tap toggle, freely draggable anywhere)
+            // (Ultra-compact 1-tap toggle, anchored by default per file, freely draggable)
             // ==========================================
             Positioned(
               left: _navPillPosition?.dx.clamp(
@@ -1848,16 +1848,20 @@ class _EditorScreenState extends State<EditorScreen>
                                   _activeTool == AnnotationTool.eraser)
                               ? 135.0
                               : 84.0)
-                      : 24.0)
+                      : 80.0)
                   : null,
               child: GestureDetector(
+                onDoubleTap: () {
+                  HapticFeedback.lightImpact();
+                  setState(() => _navPillPosition = null);
+                },
                 onPanUpdate: (DragUpdateDetails details) {
                   final screen = MediaQuery.of(context).size;
                   final currentX = _navPillPosition?.dx ??
                       (screen.width - 80);
                   final currentY = _navPillPosition?.dy ??
                       (screen.height -
-                          (_isToolbarVisible ? 150.0 : 80.0));
+                          (_isToolbarVisible ? 150.0 : 90.0));
                   setState(() {
                     _navPillPosition = Offset(
                       (currentX + details.delta.dx).clamp(
