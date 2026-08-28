@@ -3336,8 +3336,8 @@ class _EditorScreenState extends State<EditorScreen>
                     Tooltip(
                       message: MediaQuery.of(context).orientation ==
                               Orientation.landscape
-                          ? 'Switch to Portrait Mode'
-                          : 'Switch to Landscape Mode',
+                          ? 'Landscape Mode (Tap to rotate)'
+                          : 'Portrait Mode (Tap to rotate)',
                       child: Material(
                         color: Colors.transparent,
                         child: InkWell(
@@ -3345,14 +3345,14 @@ class _EditorScreenState extends State<EditorScreen>
                           onTap: _toggleScreenOrientation,
                           child: Padding(
                             padding: const EdgeInsets.symmetric(
-                              horizontal: 6,
+                              horizontal: 7,
                               vertical: 6,
                             ),
                             child: Icon(
                               MediaQuery.of(context).orientation ==
                                       Orientation.landscape
-                                  ? CupertinoIcons.device_phone_portrait
-                                  : CupertinoIcons.device_phone_landscape,
+                                  ? CupertinoIcons.device_phone_landscape
+                                  : CupertinoIcons.device_phone_portrait,
                               size: 18,
                               color: AppTheme.textSecondary,
                             ),
@@ -3367,8 +3367,8 @@ class _EditorScreenState extends State<EditorScreen>
                       Tooltip(
                         message: _slideOrientation ==
                                 PageSlideOrientation.vertical
-                            ? 'Vertical Scroll Mode (Tap for Horizontal)'
-                            : 'Horizontal Slide Mode (Tap for Vertical)',
+                            ? 'Vertical Scroll (Tap for Horizontal)'
+                            : 'Horizontal Slide (Tap for Vertical)',
                         child: Material(
                           color: Colors.transparent,
                           child: InkWell(
@@ -3376,7 +3376,7 @@ class _EditorScreenState extends State<EditorScreen>
                             onTap: _toggleSlideOrientation,
                             child: Padding(
                               padding: const EdgeInsets.symmetric(
-                                horizontal: 6,
+                                horizontal: 7,
                                 vertical: 6,
                               ),
                               child: Icon(
