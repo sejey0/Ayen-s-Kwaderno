@@ -14,7 +14,7 @@ if not exist "%GRADLE_PROP%" goto SKIP_GRADLE
 
 findstr /C:"org.gradle.daemon" "%GRADLE_PROP%" >nul || echo org.gradle.daemon=true>>"%GRADLE_PROP%"
 findstr /C:"org.gradle.parallel" "%GRADLE_PROP%" >nul || echo org.gradle.parallel=true>>"%GRADLE_PROP%"
-findstr /C:"org.gradle.configuration-cache" "%GRADLE_PROP%" >nul || echo org.gradle.configuration-cache=true>>"%GRADLE_PROP%"
+findstr /C:"org.gradle.configuration-cache" "%GRADLE_PROP%" >nul || echo org.gradle.configuration-cache=false>>"%GRADLE_PROP%"
 findstr /C:"org.gradle.caching" "%GRADLE_PROP%" >nul || echo org.gradle.caching=true>>"%GRADLE_PROP%"
 findstr /C:"org.gradle.jvmargs" "%GRADLE_PROP%" >nul || echo org.gradle.jvmargs=-Xmx2560m -XX:+UseParallelGC -XX:MaxMetaspaceSize=512m>>"%GRADLE_PROP%"
 findstr /C:"android.enableJetifier" "%GRADLE_PROP%" >nul || echo android.enableJetifier=false>>"%GRADLE_PROP%"
