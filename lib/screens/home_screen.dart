@@ -1311,18 +1311,20 @@ class _HomeScreenState extends State<HomeScreen> {
                 decoration: BoxDecoration(
                   color: AppTheme.surfaceWhite,
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppTheme.dividerColor),
+                  border: Border.all(
+                    color: AppTheme.primaryPurpleLight,
+                  ),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.03),
-                      blurRadius: 6,
+                      color: AppTheme.primaryPurple.withValues(alpha: 0.08),
+                      blurRadius: 8,
                       offset: const Offset(0, 2),
                     ),
                   ],
                 ),
                 child: IconButton(
                   icon: const Icon(CupertinoIcons.bars,
-                      size: 20, color: AppTheme.textPrimary),
+                      size: 20, color: AppTheme.primaryPurple),
                   tooltip: 'Menu & Navigation',
                   padding: const EdgeInsets.all(8),
                   constraints: const BoxConstraints(),

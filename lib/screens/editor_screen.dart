@@ -2815,7 +2815,6 @@ class _EditorScreenState extends State<EditorScreen>
   }
 
   /// Elegant glassmorphic Top App Bar with Auto-Sync Status & Page Navigation
-  /// Elegant glassmorphic Top App Bar with Full Title & dedicated Action Row (Undo, Redo, Sync)
   Widget _buildTopAppBar(String title, int totalAnnotationsCount) {
     return ClipRRect(
       child: BackdropFilter(
@@ -2828,18 +2827,26 @@ class _EditorScreenState extends State<EditorScreen>
             right: 14,
           ),
           decoration: BoxDecoration(
-            color: AppTheme.surfaceWhite.withValues(alpha: 0.90),
+            gradient: const LinearGradient(
+              colors: [
+                Color(0xF8EDE7FD), // Soft Lilac / Purple tint
+                Color(0xF8F4EFFE), // Soft Iris middle
+                Color(0xF8FDE8EE), // Soft Blush Pink tint
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
             border: Border(
               bottom: BorderSide(
-                color: AppTheme.dividerColor.withValues(alpha: 0.8),
+                color: AppTheme.primaryPurple.withValues(alpha: 0.15),
                 width: 1,
               ),
             ),
             boxShadow: [
               BoxShadow(
-                color: AppTheme.textPrimary.withValues(alpha: 0.04),
-                blurRadius: 10,
-                offset: const Offset(0, 2),
+                color: AppTheme.primaryPurple.withValues(alpha: 0.08),
+                blurRadius: 12,
+                offset: const Offset(0, 3),
               ),
             ],
           ),
@@ -2856,14 +2863,22 @@ class _EditorScreenState extends State<EditorScreen>
                     width: 32,
                     height: 32,
                     decoration: BoxDecoration(
-                      color: AppTheme.primaryPurpleLight.withValues(alpha: 0.6),
+                      gradient: AppTheme.primaryGradient,
                       shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color:
+                              AppTheme.primaryPurple.withValues(alpha: 0.3),
+                          blurRadius: 6,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
                     ),
                     child: IconButton(
                       padding: EdgeInsets.zero,
                       icon: const Icon(
                         CupertinoIcons.chevron_back,
-                        color: AppTheme.primaryPurple,
+                        color: Colors.white,
                         size: 18,
                       ),
                       onPressed: () => Navigator.of(context).pop(),
@@ -2894,7 +2909,7 @@ class _EditorScreenState extends State<EditorScreen>
                     child: Material(
                       color: Colors.transparent,
                       child: InkWell(
-                        borderRadius: BorderRadius.circular(14),
+                        borderRadius: BorderRadius.circular(12),
                         onTap: () {
                           HapticFeedback.selectionClick();
                           setState(() => _isHeaderVisible = false);
@@ -2903,16 +2918,15 @@ class _EditorScreenState extends State<EditorScreen>
                           padding: const EdgeInsets.symmetric(
                               horizontal: 8, vertical: 5),
                           decoration: BoxDecoration(
-                            color: AppTheme.primaryPurpleLight
-                                .withValues(alpha: 0.5),
+                            color: Colors.white.withValues(alpha: 0.75),
                             borderRadius: BorderRadius.circular(12),
                             border: Border.all(
                                 color: AppTheme.primaryPurple
-                                    .withValues(alpha: 0.2)),
+                                    .withValues(alpha: 0.25)),
                           ),
-                          child: Row(
+                          child: const Row(
                             mainAxisSize: MainAxisSize.min,
-                            children: const [
+                            children: [
                               Icon(
                                 CupertinoIcons.chevron_up,
                                 color: AppTheme.primaryPurple,
@@ -2924,7 +2938,7 @@ class _EditorScreenState extends State<EditorScreen>
                                 style: TextStyle(
                                   fontSize: 11,
                                   fontWeight: FontWeight.w700,
-                                  color: AppTheme.primaryPurpleDark,
+                                  color: AppTheme.primaryPurple,
                                 ),
                               ),
                             ],
@@ -2947,16 +2961,23 @@ class _EditorScreenState extends State<EditorScreen>
                       padding: const EdgeInsets.symmetric(
                           horizontal: 8, vertical: 3.5),
                       decoration: BoxDecoration(
-                        color:
-                            AppTheme.primaryPurpleLight.withValues(alpha: 0.5),
+                        gradient: AppTheme.primaryGradient,
                         borderRadius: BorderRadius.circular(8),
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppTheme.primaryPurple
+                                .withValues(alpha: 0.25),
+                            blurRadius: 4,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
                       ),
                       child: Text(
                         'Page $_currentPage of $_pageCount',
                         style: const TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w700,
-                          color: AppTheme.primaryPurpleDark,
+                          color: Colors.white,
                         ),
                       ),
                     )
