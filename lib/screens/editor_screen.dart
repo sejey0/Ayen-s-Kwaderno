@@ -85,6 +85,7 @@ class _EditorScreenState extends State<EditorScreen>
 
   // Slide Orientation State (Default: Vertical)
   PageSlideOrientation _slideOrientation = PageSlideOrientation.vertical;
+  bool _isHeaderVisible = true;
 
   // Per-Page Annotation Storage Maps
   final Map<int, List<Stroke>> _perPageStrokes = {};
@@ -1312,8 +1313,28 @@ class _EditorScreenState extends State<EditorScreen>
               top: 0,
               left: 0,
               right: 0,
-              child: _buildTopAppBar(displayName, totalAnnotationsCount),
+              child: AnimatedSlide(
+                duration: const Duration(milliseconds: 260),
+                curve: Curves.easeOutCubic,
+                offset: _isHeaderVisible ? Offset.zero : const Offset(0, -1.2),
+                child: AnimatedOpacity(
+                  duration: const Duration(milliseconds: 200),
+                  opacity: _isHeaderVisible ? 1.0 : 0.0,
+                  child: IgnorePointer(
+                    ignoring: !_isHeaderVisible,
+                    child: _buildTopAppBar(displayName, totalAnnotationsCount),
+                  ),
+                ),
+              ),
             ),
+
+            // Floating Mini Header Unhide Bubble (when header is collapsed)
+            if (!_isHeaderVisible)
+              Positioned(
+                top: MediaQuery.of(context).padding.top + 8,
+                left: 14,
+                child: _buildFloatingUnhideHeaderButton(),
+              ),
 
             // ==========================================
             // FLOATING TOOLBAR: Bottom Annotation Bar
@@ -1958,6 +1979,53 @@ class _EditorScreenState extends State<EditorScreen>
                       ),
                     ),
                   ),
+                  const SizedBox(width: 8),
+
+                  // Collapse Header Button (Maximize Reading Space)
+                  Tooltip(
+                    message: 'Hide Header (Maximize Reading Space)',
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(14),
+                        onTap: () {
+                          HapticFeedback.selectionClick();
+                          setState(() => _isHeaderVisible = false);
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: AppTheme.primaryPurpleLight
+                                .withValues(alpha: 0.5),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                                color: AppTheme.primaryPurple
+                                    .withValues(alpha: 0.2)),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: const [
+                              Icon(
+                                CupertinoIcons.chevron_up,
+                                color: AppTheme.primaryPurple,
+                                size: 14,
+                              ),
+                              SizedBox(width: 3),
+                              Text(
+                                'Hide',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppTheme.primaryPurpleDark,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
                 ],
               ),
 
@@ -2073,6 +2141,91 @@ class _EditorScreenState extends State<EditorScreen>
                   // Smart Auto-Sync Status Badge / Manual Sync Trigger
                   _buildSyncStatusBadge(),
                 ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Floating Mini Header Unhide Bubble (displayed when top header is hidden)
+  Widget _buildFloatingUnhideHeaderButton() {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(24),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+        child: Container(
+          decoration: BoxDecoration(
+            color: AppTheme.surfaceWhite.withValues(alpha: 0.92),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.8),
+              width: 1.5,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF1E1B4B).withValues(alpha: 0.12),
+                blurRadius: 14,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Back Button
+              IconButton(
+                padding: const EdgeInsets.all(8),
+                constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                icon: const Icon(
+                  CupertinoIcons.chevron_back,
+                  color: AppTheme.primaryPurple,
+                  size: 18,
+                ),
+                tooltip: 'Back',
+                onPressed: () => Navigator.of(context).pop(),
+              ),
+              Container(
+                width: 1,
+                height: 18,
+                color: AppTheme.dividerColor,
+              ),
+              // Show Header Button
+              Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  borderRadius: const BorderRadius.horizontal(
+                    right: Radius.circular(24),
+                  ),
+                  onTap: () {
+                    HapticFeedback.selectionClick();
+                    setState(() => _isHeaderVisible = true);
+                  },
+                  child: Padding(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: const [
+                        Icon(
+                          CupertinoIcons.chevron_down,
+                          color: AppTheme.primaryPurple,
+                          size: 15,
+                        ),
+                        SizedBox(width: 4),
+                        Text(
+                          'Show Header',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: AppTheme.primaryPurpleDark,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               ),
             ],
           ),
