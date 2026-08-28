@@ -10,8 +10,12 @@ import '../widgets/handwriting_canvas.dart';
 /// Service that leverages Google Gemini Multimodal Vision AI for ultra-accurate
 /// handwriting recognition from canvas strokes, formulas, cursive, and notes.
 class GeminiHandwritingService {
-  static const String _geminiEndpoint =
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent';
+  static const List<String> _geminiEndpoints = [
+    'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent',
+    'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent',
+    'https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent',
+    'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-8b:generateContent',
+  ];
 
   static const String _prefKeyGeminiApiKey = 'custom_gemini_api_key';
 
@@ -20,7 +24,8 @@ class GeminiHandwritingService {
     // 1. Check .env file first (source of truth)
     final envKey = dotenv.env['GEMINI_API_KEY'];
     if (envKey != null && envKey.trim().isNotEmpty) {
-      debugPrint('🔑 Using Gemini API key from .env: ${envKey.trim().substring(0, 8)}...');
+      debugPrint(
+          '🔑 Using Gemini API key from .env: ${envKey.trim().substring(0, 8)}...');
       return envKey.trim();
     }
 
@@ -28,7 +33,8 @@ class GeminiHandwritingService {
     final prefs = await SharedPreferences.getInstance();
     final customKey = prefs.getString(_prefKeyGeminiApiKey);
     if (customKey != null && customKey.trim().isNotEmpty) {
-      debugPrint('🔑 Using Gemini API key from SharedPreferences: ${customKey.trim().substring(0, 8)}...');
+      debugPrint(
+          '🔑 Using Gemini API key from SharedPreferences: ${customKey.trim().substring(0, 8)}...');
       return customKey.trim();
     }
 
@@ -40,6 +46,42 @@ class GeminiHandwritingService {
   static Future<void> setCustomApiKey(String key) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_prefKeyGeminiApiKey, key.trim());
+  }
+
+  /// Helper to post to Gemini with automatic model fallback across versions
+  static Future<http.Response?> _postToGemini({
+    required String apiKey,
+    required Map<String, dynamic> requestBody,
+    Duration timeout = const Duration(seconds: 12),
+  }) async {
+    final bodyStr = jsonEncode(requestBody);
+
+    for (final endpoint in _geminiEndpoints) {
+      try {
+        final url = Uri.parse('$endpoint?key=$apiKey');
+        final response = await http
+            .post(
+              url,
+              headers: {'Content-Type': 'application/json'},
+              body: bodyStr,
+            )
+            .timeout(timeout);
+
+        if (response.statusCode == 200) {
+          return response;
+        } else if (response.statusCode == 404) {
+          debugPrint('Notice: $endpoint returned 404, attempting next model...');
+          continue;
+        } else {
+          debugPrint(
+              '⚠️ Gemini API returned HTTP ${response.statusCode}: ${response.body}');
+          return response;
+        }
+      } catch (e) {
+        debugPrint('Gemini network attempt notice on $endpoint: $e');
+      }
+    }
+    return null;
   }
 
   /// Converts vector handwriting strokes into a clean, high-contrast PNG byte array
@@ -135,9 +177,8 @@ class GeminiHandwritingService {
       if (pngBytes == null) return null;
 
       final base64Image = base64Encode(pngBytes);
-      final url = Uri.parse('$_geminiEndpoint?key=$apiKey');
 
-      final requestBody = jsonEncode({
+      final requestBody = {
         "contents": [
           {
             "parts": [
@@ -158,17 +199,15 @@ class GeminiHandwritingService {
           "temperature": 0.1,
           "maxOutputTokens": 1024,
         }
-      });
+      };
 
-      final response = await http
-          .post(
-            url,
-            headers: {'Content-Type': 'application/json'},
-            body: requestBody,
-          )
-          .timeout(const Duration(seconds: 30));
+      final response = await _postToGemini(
+        apiKey: apiKey,
+        requestBody: requestBody,
+        timeout: const Duration(seconds: 15),
+      );
 
-      if (response.statusCode == 200) {
+      if (response != null && response.statusCode == 200) {
         final jsonResponse = jsonDecode(response.body);
         final candidates = jsonResponse['candidates'] as List<dynamic>?;
         if (candidates != null && candidates.isNotEmpty) {
@@ -183,9 +222,6 @@ class GeminiHandwritingService {
             }
           }
         }
-      } else {
-        debugPrint(
-            'Gemini API error: ${response.statusCode} - ${response.body}');
       }
     } catch (e) {
       debugPrint('Gemini handwriting transcription notice: $e');
@@ -207,7 +243,8 @@ class GeminiHandwritingService {
       // 1. Fast GPU Downscale to max 512px width for instant transfer (<50KB payload)
       Uint8List optimizedBytes = imageBytes;
       try {
-        final codec = await ui.instantiateImageCodec(imageBytes, targetWidth: 512);
+        final codec =
+            await ui.instantiateImageCodec(imageBytes, targetWidth: 512);
         final frame = await codec.getNextFrame();
         final img = frame.image;
         final byteData = await img.toByteData(format: ui.ImageByteFormat.png);
@@ -219,9 +256,8 @@ class GeminiHandwritingService {
       }
 
       final base64Image = base64Encode(optimizedBytes);
-      final url = Uri.parse('$_geminiEndpoint?key=$apiKey');
 
-      final requestBody = jsonEncode({
+      final requestBody = {
         "contents": [
           {
             "parts": [
@@ -242,17 +278,15 @@ class GeminiHandwritingService {
           "temperature": 0.1,
           "maxOutputTokens": 512,
         }
-      });
+      };
 
-      final response = await http
-          .post(
-            url,
-            headers: {'Content-Type': 'application/json'},
-            body: requestBody,
-          )
-          .timeout(const Duration(seconds: 30));
+      final response = await _postToGemini(
+        apiKey: apiKey,
+        requestBody: requestBody,
+        timeout: const Duration(seconds: 12),
+      );
 
-      if (response.statusCode == 200) {
+      if (response != null && response.statusCode == 200) {
         final jsonResponse = jsonDecode(response.body);
         final candidates = jsonResponse['candidates'] as List<dynamic>?;
         if (candidates != null && candidates.isNotEmpty) {

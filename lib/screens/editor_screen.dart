@@ -2207,13 +2207,14 @@ class _EditorScreenState extends State<EditorScreen>
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        // 1. Top Action Floating Bar
+        // 1. Top Action Floating Bar (Ultra-Compact & Sleek)
         if (isSelected)
           Container(
             margin: const EdgeInsets.only(bottom: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
             decoration: BoxDecoration(
               color: AppTheme.surfaceWhite,
-              borderRadius: BorderRadius.circular(20),
+              borderRadius: BorderRadius.circular(18),
               border: Border.all(
                 color: isLocked
                     ? const Color(0xFFF59E0B).withValues(alpha: 0.5)
@@ -2225,312 +2226,188 @@ class _EditorScreenState extends State<EditorScreen>
               mainAxisSize: MainAxisSize.min,
               children: [
                 if (!isLocked) ...[
-                  // 1. Active Drag Handle
-                  GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onPanStart: (DragStartDetails details) {
-                      _swipeStartPos = null;
-                      _isDraggingAnnotation = true;
-                      setState(() {
-                        _selectedImageId = annotation.id;
-                        _selectedTextId = null;
-                      });
-                    },
-                    onPanUpdate: (DragUpdateDetails details) {
-                      _swipeStartPos = null;
-                      setState(() {
-                        annotation.position += Offset(
-                          details.delta.dx / scaleX,
-                          details.delta.dy / scaleY,
-                        );
-                        _selectedImageId = annotation.id;
-                        _selectedTextId = null;
-                      });
-                    },
-                    onPanEnd: (_) {
-                      _swipeStartPos = null;
-                      _isDraggingAnnotation = false;
-                      _autoSaveAndSync();
-                    },
-                    onPanCancel: () {
-                      _swipeStartPos = null;
-                      _isDraggingAnnotation = false;
-                    },
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 9, vertical: 5),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: const [
-                          Icon(
-                            CupertinoIcons.move,
-                            size: 13.5,
-                            color: AppTheme.primaryPurple,
-                          ),
-                          SizedBox(width: 3.5),
-                          Text(
-                            'Drag',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
-                              color: AppTheme.primaryPurple,
-                            ),
-                          ),
-                        ],
+                  // 1. Drag Handle
+                  Tooltip(
+                    message: 'Drag Image',
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onPanStart: (DragStartDetails details) {
+                        _swipeStartPos = null;
+                        _isDraggingAnnotation = true;
+                        setState(() {
+                          _selectedImageId = annotation.id;
+                          _selectedTextId = null;
+                        });
+                      },
+                      onPanUpdate: (DragUpdateDetails details) {
+                        _swipeStartPos = null;
+                        setState(() {
+                          annotation.position += Offset(
+                            details.delta.dx / scaleX,
+                            details.delta.dy / scaleY,
+                          );
+                          _selectedImageId = annotation.id;
+                          _selectedTextId = null;
+                        });
+                      },
+                      onPanEnd: (_) {
+                        _swipeStartPos = null;
+                        _isDraggingAnnotation = false;
+                        _autoSaveAndSync();
+                      },
+                      onPanCancel: () {
+                        _swipeStartPos = null;
+                        _isDraggingAnnotation = false;
+                      },
+                      child: const Padding(
+                        padding: EdgeInsets.symmetric(
+                            horizontal: 7, vertical: 4.5),
+                        child: Icon(
+                          CupertinoIcons.move,
+                          size: 14,
+                          color: AppTheme.primaryPurple,
+                        ),
                       ),
                     ),
                   ),
 
                   Container(
                     width: 1,
-                    height: 14,
+                    height: 12,
                     color: AppTheme.dividerColor,
                   ),
 
                   // 2. Crop Image Button
-                  GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: () {
-                      HapticFeedback.selectionClick();
-                      _openImageCropper(annotation);
-                    },
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 5),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: const [
-                          Icon(
-                            CupertinoIcons.crop,
-                            size: 13.5,
-                            color: AppTheme.primaryPurple,
-                          ),
-                          SizedBox(width: 3.5),
-                          Text(
-                            'Crop',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
-                              color: AppTheme.primaryPurple,
-                            ),
-                          ),
-                        ],
+                  Tooltip(
+                    message: 'Crop Image',
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () {
+                        HapticFeedback.selectionClick();
+                        _openImageCropper(annotation);
+                      },
+                      child: const Padding(
+                        padding: EdgeInsets.symmetric(
+                            horizontal: 6.5, vertical: 4.5),
+                        child: Icon(
+                          CupertinoIcons.crop,
+                          size: 14,
+                          color: AppTheme.primaryPurple,
+                        ),
                       ),
                     ),
                   ),
 
                   Container(
                     width: 1,
-                    height: 14,
+                    height: 12,
                     color: AppTheme.dividerColor,
                   ),
 
                   // 3. AI Background Remover Button
-                  GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: () {
-                      HapticFeedback.selectionClick();
-                      _openImageBgRemover(annotation);
-                    },
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 5),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: const [
-                          Icon(
-                            CupertinoIcons.sparkles,
-                            size: 13.5,
-                            color: AppTheme.accentPink,
-                          ),
-                          SizedBox(width: 3.5),
-                          Text(
-                            'AI BG',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
-                              color: AppTheme.accentPink,
-                            ),
-                          ),
-                        ],
+                  Tooltip(
+                    message: 'AI Background Remover',
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () {
+                        HapticFeedback.selectionClick();
+                        _openImageBgRemover(annotation);
+                      },
+                      child: const Padding(
+                        padding: EdgeInsets.symmetric(
+                            horizontal: 6.5, vertical: 4.5),
+                        child: Icon(
+                          CupertinoIcons.sparkles,
+                          size: 14,
+                          color: AppTheme.accentPink,
+                        ),
                       ),
                     ),
                   ),
 
                   Container(
                     width: 1,
-                    height: 14,
+                    height: 12,
                     color: AppTheme.dividerColor,
                   ),
                 ] else ...[
                   // Locked Indicator
-                  Padding(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 8, vertical: 5),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: const [
-                        Icon(
-                          CupertinoIcons.lock_fill,
-                          size: 12.5,
-                          color: Color(0xFFD97706),
-                        ),
-                        SizedBox(width: 3.5),
-                        Text(
-                          'Locked',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                            color: Color(0xFFD97706),
-                          ),
-                        ),
-                      ],
+                  const Tooltip(
+                    message: 'Image is Locked',
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(
+                          horizontal: 7, vertical: 4.5),
+                      child: Icon(
+                        CupertinoIcons.lock_fill,
+                        size: 13,
+                        color: Color(0xFFD97706),
+                      ),
                     ),
                   ),
 
                   Container(
                     width: 1,
-                    height: 14,
+                    height: 12,
                     color: AppTheme.dividerColor,
                   ),
                 ],
 
-                // 3. Shape & Border Styling Button
-                GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () => _openImageStylePicker(annotation),
-                  child: Padding(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: const [
-                        Icon(
-                          CupertinoIcons.paintbrush,
-                          size: 13.5,
-                          color: AppTheme.primaryPurple,
-                        ),
-                        SizedBox(width: 3.5),
-                        Text(
-                          'Shape',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                            color: AppTheme.primaryPurple,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-
-                Container(
-                  width: 1,
-                  height: 14,
-                  color: AppTheme.dividerColor,
-                ),
-
-                // 4. Lock / Unlock Toggle Button
-                GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () {
-                    HapticFeedback.mediumImpact();
-                    setState(() {
-                      annotation.isLocked = !annotation.isLocked;
-                    });
-                    _autoSaveAndSync();
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              annotation.isLocked
-                                  ? CupertinoIcons.lock_fill
-                                  : CupertinoIcons.lock_open_fill,
-                              size: 16,
-                              color: Colors.white,
-                            ),
-                            const SizedBox(width: 8),
-                            Text(annotation.isLocked
-                                ? 'Image locked in place 🔒'
-                                : 'Image unlocked 🔓'),
-                          ],
-                        ),
-                        backgroundColor: annotation.isLocked
-                            ? const Color(0xFF1E293B)
-                            : AppTheme.primaryPurple,
-                        behavior: SnackBarBehavior.floating,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        duration: const Duration(seconds: 2),
+                // 4. Shape & Border Styling Button
+                Tooltip(
+                  message: 'Shape & Border',
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => _openImageStylePicker(annotation),
+                    child: const Padding(
+                      padding: EdgeInsets.symmetric(
+                          horizontal: 6.5, vertical: 4.5),
+                      child: Icon(
+                        CupertinoIcons.paintbrush,
+                        size: 14,
+                        color: AppTheme.primaryPurple,
                       ),
-                    );
-                  },
-                  child: Padding(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          isLocked
-                              ? CupertinoIcons.lock_open
-                              : CupertinoIcons.lock,
-                          size: 13.5,
-                          color: isLocked
-                              ? AppTheme.primaryPurple
-                              : AppTheme.textSecondary,
-                        ),
-                        const SizedBox(width: 3.5),
-                        Text(
-                          isLocked ? 'Unlock' : 'Lock',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                            color: isLocked
-                                ? AppTheme.primaryPurple
-                                : AppTheme.textSecondary,
-                          ),
-                        ),
-                      ],
                     ),
                   ),
                 ),
 
                 Container(
                   width: 1,
-                  height: 14,
+                  height: 12,
                   color: AppTheme.dividerColor,
                 ),
 
-                // 5. Revert / Undo BG Removal Button
-                if (annotation.originalImagePath != null &&
-                    annotation.originalImagePath != annotation.imagePath) ...[
-                  GestureDetector(
+                // 5. Lock / Unlock Toggle Button
+                Tooltip(
+                  message: isLocked ? 'Unlock Image' : 'Lock Image',
+                  child: GestureDetector(
                     behavior: HitTestBehavior.opaque,
                     onTap: () {
                       HapticFeedback.mediumImpact();
                       setState(() {
-                        annotation.imagePath = annotation.originalImagePath!;
-                        if (annotation.originalSize != null) {
-                          annotation.size = annotation.originalSize!;
-                        }
+                        annotation.isLocked = !annotation.isLocked;
                       });
                       _autoSaveAndSync();
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
-                          content: const Row(
+                          content: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(CupertinoIcons.arrow_counterclockwise,
-                                  size: 16, color: Colors.white),
-                              SizedBox(width: 8),
-                              Text('Restored original image ↩️'),
+                              Icon(
+                                annotation.isLocked
+                                    ? CupertinoIcons.lock_fill
+                                    : CupertinoIcons.lock_open_fill,
+                                size: 16,
+                                color: Colors.white,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(annotation.isLocked
+                                  ? 'Image locked in place 🔒'
+                                  : 'Image unlocked 🔓'),
                             ],
                           ),
-                          backgroundColor: AppTheme.primaryPurple,
+                          backgroundColor: annotation.isLocked
+                              ? const Color(0xFF1E293B)
+                              : AppTheme.primaryPurple,
                           behavior: SnackBarBehavior.floating,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(14),
@@ -2541,56 +2418,104 @@ class _EditorScreenState extends State<EditorScreen>
                     },
                     child: Padding(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 5),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: const [
-                          Icon(
-                            CupertinoIcons.arrow_counterclockwise,
-                            size: 13.5,
-                            color: Color(0xFFE11D48),
-                          ),
-                          SizedBox(width: 3.5),
-                          Text(
-                            'Undo BG',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
-                              color: Color(0xFFE11D48),
+                          horizontal: 6.5, vertical: 4.5),
+                      child: Icon(
+                        isLocked
+                            ? CupertinoIcons.lock_open
+                            : CupertinoIcons.lock,
+                        size: 14,
+                        color: isLocked
+                            ? AppTheme.primaryPurple
+                            : AppTheme.textSecondary,
+                      ),
+                    ),
+                  ),
+                ),
+
+                Container(
+                  width: 1,
+                  height: 12,
+                  color: AppTheme.dividerColor,
+                ),
+
+                // 6. Revert / Undo BG Removal Button
+                if (annotation.originalImagePath != null &&
+                    annotation.originalImagePath != annotation.imagePath) ...[
+                  Tooltip(
+                    message: 'Undo BG Removal (Restore Original)',
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () {
+                        HapticFeedback.mediumImpact();
+                        setState(() {
+                          annotation.imagePath = annotation.originalImagePath!;
+                          if (annotation.originalSize != null) {
+                            annotation.size = annotation.originalSize!;
+                          }
+                        });
+                        _autoSaveAndSync();
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(CupertinoIcons.arrow_counterclockwise,
+                                    size: 16, color: Colors.white),
+                                SizedBox(width: 8),
+                                Text('Restored original image ↩️'),
+                              ],
                             ),
+                            backgroundColor: AppTheme.primaryPurple,
+                            behavior: SnackBarBehavior.floating,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            duration: const Duration(seconds: 2),
                           ),
-                        ],
+                        );
+                      },
+                      child: const Padding(
+                        padding: EdgeInsets.symmetric(
+                            horizontal: 6.5, vertical: 4.5),
+                        child: Icon(
+                          CupertinoIcons.arrow_counterclockwise,
+                          size: 14,
+                          color: Color(0xFFE11D48),
+                        ),
                       ),
                     ),
                   ),
 
                   Container(
                     width: 1,
-                    height: 14,
+                    height: 12,
                     color: AppTheme.dividerColor,
                   ),
                 ],
 
-                // 6. Delete Image Button
-                GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () {
-                    HapticFeedback.heavyImpact();
-                    _deleteImageAnnotation(annotation.id);
-                  },
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 8, vertical: 4),
-                    child: Container(
-                      padding: const EdgeInsets.all(4),
-                      decoration: const BoxDecoration(
-                        color: Color(0xFFFEE2E2),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        CupertinoIcons.trash_fill,
-                        size: 13,
-                        color: Color(0xFFEF4444),
+                // 7. Delete Image Button
+                Tooltip(
+                  message: 'Delete Image',
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () {
+                      HapticFeedback.heavyImpact();
+                      _deleteImageAnnotation(annotation.id);
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 5, vertical: 3),
+                      child: Container(
+                        padding: const EdgeInsets.all(3.5),
+                        decoration: const BoxDecoration(
+                          color: Color(0xFFFEE2E2),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          CupertinoIcons.trash_fill,
+                          size: 12,
+                          color: Color(0xFFEF4444),
+                        ),
                       ),
                     ),
                   ),

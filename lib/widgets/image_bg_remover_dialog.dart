@@ -54,6 +54,7 @@ class _ImageBackgroundRemoverDialogState
   ui.Image? _processedUiImage;
   bool _isLoading = true;
   bool _isProcessing = false;
+  bool _isSaving = false;
   bool _showOriginal = false;
   String? _aiSubjectSummary;
   String _aiStatusMessage = 'Loading image...';
@@ -90,7 +91,7 @@ class _ImageBackgroundRemoverDialogState
         _aiStatusMessage = 'Gemini Vision AI is analyzing and isolating subject...';
       });
 
-      // Automatically run AI Background Removal
+      // Automatically run AI Background Removal once on load
       await _runGeminiAiRemoval();
     } catch (e) {
       if (!mounted) return;
@@ -322,10 +323,11 @@ class _ImageBackgroundRemoverDialogState
     });
   }
 
+  /// Explicitly saves the transparent PNG and returns to the editor
   Future<void> _applyAndSave() async {
-    if (_processedUiImage == null) return;
+    if (_processedUiImage == null || _isSaving) return;
 
-    setState(() => _isProcessing = true);
+    setState(() => _isSaving = true);
     HapticFeedback.mediumImpact();
 
     try {
@@ -344,7 +346,7 @@ class _ImageBackgroundRemoverDialogState
       Navigator.of(context).pop(targetFile.path);
     } catch (e) {
       if (!mounted) return;
-      setState(() => _isProcessing = false);
+      setState(() => _isSaving = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Failed to save transparent image: $e')),
       );
@@ -358,9 +360,9 @@ class _ImageBackgroundRemoverDialogState
       body: SafeArea(
         child: Column(
           children: [
-            // 1. Header Bar
+            // 1. Clean Top Header Bar (No duplicate apply)
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               child: Row(
                 children: [
                   // Cancel / Back Button
@@ -374,14 +376,14 @@ class _ImageBackgroundRemoverDialogState
                     onPressed: () => Navigator.of(context).pop(),
                   ),
 
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 10),
 
-                  // Title Badge (Responsive & Fitted)
+                  // Title Badge
                   Expanded(
                     child: Center(
                       child: Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 6),
+                            horizontal: 14, vertical: 7),
                         decoration: BoxDecoration(
                           gradient: const LinearGradient(
                             colors: [
@@ -407,16 +409,16 @@ class _ImageBackgroundRemoverDialogState
                           children: [
                             Icon(
                               CupertinoIcons.sparkles,
-                              size: 13,
+                              size: 14,
                               color: Colors.white,
                             ),
-                            SizedBox(width: 5),
+                            SizedBox(width: 6),
                             Flexible(
                               child: Text(
-                                'AI BG Remover',
+                                'Gemini AI BG Remover',
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
-                                  fontSize: 12,
+                                  fontSize: 12.5,
                                   fontWeight: FontWeight.w800,
                                   color: Colors.white,
                                   letterSpacing: 0.2,
@@ -429,47 +431,8 @@ class _ImageBackgroundRemoverDialogState
                     ),
                   ),
 
-                  const SizedBox(width: 8),
-
-                  // Apply Button
-                  ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.primaryPurple,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 8),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      elevation: 4,
-                    ),
-                    onPressed: (_isProcessing || _processedUiImage == null)
-                        ? null
-                        : _applyAndSave,
-                    child: _isProcessing
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          )
-                        : const Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(CupertinoIcons.checkmark_alt, size: 15),
-                              SizedBox(width: 4),
-                              Text(
-                                'Apply',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ],
-                          ),
-                  ),
+                  // Spacer to perfectly center the title badge
+                  const SizedBox(width: 44),
                 ],
               ),
             ),
@@ -513,8 +476,8 @@ class _ImageBackgroundRemoverDialogState
                           ),
                         ),
 
-                        // AI Processing Overlay Animation
-                        if (_isProcessing)
+                        // AI Processing & Saving Overlay Animation
+                        if (_isProcessing || _isSaving)
                           Positioned.fill(
                             child: Container(
                               color: Colors.black.withValues(alpha: 0.65),
@@ -549,8 +512,10 @@ class _ImageBackgroundRemoverDialogState
                                               ),
                                             ],
                                           ),
-                                          child: const Icon(
-                                            CupertinoIcons.sparkles,
+                                          child: Icon(
+                                            _isSaving
+                                                ? CupertinoIcons.checkmark_seal_fill
+                                                : CupertinoIcons.sparkles,
                                             size: 32,
                                             color: Colors.white,
                                           ),
@@ -580,7 +545,8 @@ class _ImageBackgroundRemoverDialogState
                         // AI Subject Pill Badge
                         if (_aiSubjectSummary != null &&
                             !_showOriginal &&
-                            !_isProcessing)
+                            !_isProcessing &&
+                            !_isSaving)
                           Positioned(
                             top: 14,
                             left: 14,
@@ -627,7 +593,7 @@ class _ImageBackgroundRemoverDialogState
                           ),
 
                         // Before/After Floating Toggle Button
-                        if (!_isProcessing)
+                        if (!_isProcessing && !_isSaving)
                           Positioned(
                             top: 14,
                             right: 14,
@@ -678,93 +644,92 @@ class _ImageBackgroundRemoverDialogState
                     ),
             ),
 
-            // 3. Bottom Action Bar (Re-Analyze & Apply)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-              decoration: BoxDecoration(
-                color: const Color(0xFF1E293B),
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(24),
-                  topRight: Radius.circular(24),
-                ),
-                border: Border(
-                  top: BorderSide(
-                    color: Colors.white.withValues(alpha: 0.08),
+            // 3. Bottom Action Bar (Re-Analyze & Apply Button - Hidden during analysis & saving)
+            if (!_isProcessing && !_isSaving && _processedUiImage != null)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1E293B),
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(24),
+                    topRight: Radius.circular(24),
                   ),
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.3),
-                    blurRadius: 16,
-                    offset: const Offset(0, -4),
-                  ),
-                ],
-              ),
-              child: Row(
-                children: [
-                  // Re-Analyze Button
-                  OutlinedButton.icon(
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.white70,
-                      side: BorderSide(
-                        color: Colors.white.withValues(alpha: 0.2),
-                      ),
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
+                  border: Border(
+                    top: BorderSide(
+                      color: Colors.white.withValues(alpha: 0.08),
                     ),
-                    icon: const Icon(CupertinoIcons.arrow_counterclockwise,
-                        size: 15),
-                    label: const Text(
-                      'Re-Analyze',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    onPressed: _isProcessing ? null : _runGeminiAiRemoval,
                   ),
-
-                  const SizedBox(width: 12),
-
-                  // Apply AI Cutout Button
-                  Expanded(
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 13),
-                        backgroundColor: AppTheme.primaryPurple,
-                        foregroundColor: Colors.white,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.3),
+                      blurRadius: 16,
+                      offset: const Offset(0, -4),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    // Re-Analyze Button
+                    OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.white70,
+                        side: BorderSide(
+                          color: Colors.white.withValues(alpha: 0.2),
+                        ),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 12),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(16),
                         ),
-                        elevation: 4,
                       ),
-                      onPressed: (_isProcessing || _processedUiImage == null)
-                          ? null
-                          : _applyAndSave,
-                      child: const Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(CupertinoIcons.sparkles,
-                              size: 16, color: Colors.white),
-                          SizedBox(width: 8),
-                          Text(
-                            'Apply AI Cutout',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: 0.3,
-                            ),
+                      icon: const Icon(CupertinoIcons.arrow_counterclockwise,
+                          size: 15),
+                      label: const Text(
+                        'Re-Analyze',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      onPressed: _runGeminiAiRemoval,
+                    ),
+
+                    const SizedBox(width: 12),
+
+                    // Apply AI Cutout Button
+                    Expanded(
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 13),
+                          backgroundColor: AppTheme.primaryPurple,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
                           ),
-                        ],
+                          elevation: 4,
+                        ),
+                        onPressed: _applyAndSave,
+                        child: const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(CupertinoIcons.sparkles,
+                                size: 16, color: Colors.white),
+                            SizedBox(width: 8),
+                            Text(
+                              'Apply AI Cutout',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 0.3,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
           ],
         ),
       ),
