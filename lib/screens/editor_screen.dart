@@ -1608,6 +1608,8 @@ class _EditorScreenState extends State<EditorScreen>
     final displayName = widget.fileName ?? 'Study Document';
     final totalAnnotationsCount =
         _strokes.length + _textAnnotations.length + _imageAnnotations.length;
+    final isLandscape =
+        MediaQuery.of(context).orientation == Orientation.landscape;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF3F4F6),
@@ -1830,25 +1832,32 @@ class _EditorScreenState extends State<EditorScreen>
             // (Ultra-compact 1-tap toggle, anchored by default per file, freely draggable)
             // ==========================================
             Positioned(
-              left: _navPillPosition?.dx.clamp(
-                8.0,
-                (MediaQuery.of(context).size.width - 65)
-                    .clamp(8.0, MediaQuery.of(context).size.width),
-              ),
-              right: _navPillPosition == null ? 14.0 : null,
+              left: _navPillPosition != null
+                  ? _navPillPosition!.dx.clamp(
+                      8.0,
+                      (MediaQuery.of(context).size.width - 65)
+                          .clamp(8.0, MediaQuery.of(context).size.width),
+                    )
+                  : (isLandscape ? 16.0 : null),
+              right: _navPillPosition == null
+                  ? (isLandscape ? null : 14.0)
+                  : null,
               top: _navPillPosition?.dy.clamp(
                 MediaQuery.of(context).padding.top + 8,
                 (MediaQuery.of(context).size.height - 60)
                     .clamp(10.0, MediaQuery.of(context).size.height),
               ),
               bottom: _navPillPosition == null
-                  ? (_isToolbarVisible
-                      ? ((_activeTool == AnnotationTool.highlighter ||
-                                  _activeTool == AnnotationTool.straightLine ||
-                                  _activeTool == AnnotationTool.eraser)
-                              ? 135.0
-                              : 84.0)
-                      : 80.0)
+                  ? (isLandscape
+                      ? 20.0
+                      : (_isToolbarVisible
+                          ? ((_activeTool == AnnotationTool.highlighter ||
+                                      _activeTool ==
+                                          AnnotationTool.straightLine ||
+                                      _activeTool == AnnotationTool.eraser)
+                                  ? 135.0
+                                  : 84.0)
+                          : 80.0))
                   : null,
               child: GestureDetector(
                 onDoubleTap: () {
@@ -1858,7 +1867,7 @@ class _EditorScreenState extends State<EditorScreen>
                 onPanUpdate: (DragUpdateDetails details) {
                   final screen = MediaQuery.of(context).size;
                   final currentX = _navPillPosition?.dx ??
-                      (screen.width - 80);
+                      (isLandscape ? 20.0 : (screen.width - 80));
                   final currentY = _navPillPosition?.dy ??
                       (screen.height -
                           (_isToolbarVisible ? 150.0 : 90.0));
@@ -1877,63 +1886,131 @@ class _EditorScreenState extends State<EditorScreen>
             ),
 
             // ==========================================
-            // FLOATING TOOLBAR: Bottom Annotation Bar
+            // FLOATING TOOLBAR: Bottom (Portrait) / Side (Landscape)
             // ==========================================
-            Positioned(
-              bottom: 24,
-              left: 0,
-              right: 0,
-              child: AnimatedSlide(
-                duration: const Duration(milliseconds: 260),
-                curve: Curves.easeOutCubic,
-                offset: _isToolbarVisible ? Offset.zero : const Offset(0, 1.3),
-                child: AnimatedOpacity(
-                  duration: const Duration(milliseconds: 200),
-                  opacity: _isToolbarVisible ? 1.0 : 0.0,
-                  child: IgnorePointer(
-                    ignoring: !_isToolbarVisible,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        // 1. Floating Eraser Options Bubble (Floats on top of the icons)
-                        if (_activeTool == AnnotationTool.eraser &&
-                            _isEraserMenuExpanded) ...[
-                          _buildFloatingEraserOptionsBubble(),
-                          const SizedBox(height: 8),
-                        ],
+            if (isLandscape) ...[
+              // LANDSCAPE: Docked on the right side
+              Positioned(
+                right: 14,
+                top: MediaQuery.of(context).padding.top + 8,
+                bottom: 14,
+                child: Align(
+                  alignment: Alignment.centerRight,
+                  child: AnimatedSlide(
+                    duration: const Duration(milliseconds: 260),
+                    curve: Curves.easeOutCubic,
+                    offset:
+                        _isToolbarVisible ? Offset.zero : const Offset(1.3, 0),
+                    child: AnimatedOpacity(
+                      duration: const Duration(milliseconds: 200),
+                      opacity: _isToolbarVisible ? 1.0 : 0.0,
+                      child: IgnorePointer(
+                        ignoring: !_isToolbarVisible,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            // 1. Floating Eraser Options Bubble (Vertical)
+                            if (_activeTool == AnnotationTool.eraser &&
+                                _isEraserMenuExpanded) ...[
+                              _buildFloatingEraserOptionsBubble(isVertical: true),
+                              const SizedBox(width: 8),
+                            ],
 
-                        // 2. Floating Thickness Options Bubble (Floats on top of Highlighter/Pen icons)
-                        if ((_activeTool == AnnotationTool.highlighter ||
-                                _activeTool == AnnotationTool.straightLine) &&
-                            _isThicknessMenuExpanded) ...[
-                          _buildFloatingThicknessOptionsBubble(),
-                          const SizedBox(height: 8),
-                        ],
+                            // 2. Floating Thickness Options Bubble (Vertical)
+                            if ((_activeTool == AnnotationTool.highlighter ||
+                                    _activeTool ==
+                                        AnnotationTool.straightLine) &&
+                                _isThicknessMenuExpanded) ...[
+                              _buildFloatingThicknessOptionsBubble(isVertical: true),
+                              const SizedBox(width: 8),
+                            ],
 
-                        // 3. Secondary Color/Stroke Palette (with Ballpen, Highlighter, Eraser)
-                        if (_activeTool == AnnotationTool.highlighter ||
-                            _activeTool == AnnotationTool.straightLine ||
-                            _activeTool == AnnotationTool.eraser)
-                          _buildColorPickerSubBar(),
+                            // 3. Secondary Color/Stroke Palette (Vertical)
+                            if (_activeTool == AnnotationTool.highlighter ||
+                                _activeTool == AnnotationTool.straightLine ||
+                                _activeTool == AnnotationTool.eraser) ...[
+                              _buildColorPickerSubBar(isVertical: true),
+                              const SizedBox(width: 8),
+                            ],
 
-                        const SizedBox(height: 10),
-
-                        // 4. Main Floating Annotation Toolbar
-                        _buildFloatingBottomToolbar(),
-                      ],
+                            // 4. Main Floating Side Toolbar (Vertical)
+                            _buildFloatingBottomToolbar(isVertical: true),
+                          ],
+                        ),
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
 
-            // Floating Mini Tools Unhide Pill (when bottom toolbar is collapsed)
-            if (!_isToolbarVisible)
+              // Mini Tools Unhide Pill in Landscape
+              if (!_isToolbarVisible)
+                Positioned(
+                  bottom: 16,
+                  right: 14,
+                  child: _buildFloatingUnhideToolbarButton(),
+                ),
+            ] else ...[
+              // PORTRAIT: Floating at the bottom
               Positioned(
                 bottom: 24,
-                right: 16,
-                child: _buildFloatingUnhideToolbarButton(),
+                left: 0,
+                right: 0,
+                child: AnimatedSlide(
+                  duration: const Duration(milliseconds: 260),
+                  curve: Curves.easeOutCubic,
+                  offset:
+                      _isToolbarVisible ? Offset.zero : const Offset(0, 1.3),
+                  child: AnimatedOpacity(
+                    duration: const Duration(milliseconds: 200),
+                    opacity: _isToolbarVisible ? 1.0 : 0.0,
+                    child: IgnorePointer(
+                      ignoring: !_isToolbarVisible,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          // 1. Floating Eraser Options Bubble
+                          if (_activeTool == AnnotationTool.eraser &&
+                              _isEraserMenuExpanded) ...[
+                            _buildFloatingEraserOptionsBubble(),
+                            const SizedBox(height: 8),
+                          ],
+
+                          // 2. Floating Thickness Options Bubble
+                          if ((_activeTool == AnnotationTool.highlighter ||
+                                  _activeTool ==
+                                      AnnotationTool.straightLine) &&
+                              _isThicknessMenuExpanded) ...[
+                            _buildFloatingThicknessOptionsBubble(),
+                            const SizedBox(height: 8),
+                          ],
+
+                          // 3. Secondary Color/Stroke Palette (Horizontal)
+                          if (_activeTool == AnnotationTool.highlighter ||
+                              _activeTool == AnnotationTool.straightLine ||
+                              _activeTool == AnnotationTool.eraser)
+                            _buildColorPickerSubBar(isVertical: false),
+
+                          const SizedBox(height: 10),
+
+                          // 4. Main Floating Annotation Toolbar (Horizontal)
+                          _buildFloatingBottomToolbar(isVertical: false),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
               ),
+
+              // Mini Tools Unhide Pill in Portrait
+              if (!_isToolbarVisible)
+                Positioned(
+                  bottom: 24,
+                  right: 16,
+                  child: _buildFloatingUnhideToolbarButton(),
+                ),
+            ],
           ],
         ),
       ),
@@ -3432,106 +3509,146 @@ class _EditorScreenState extends State<EditorScreen>
     );
   }
 
-  /// Floating Annotation Toolbar at bottom
-  Widget _buildFloatingBottomToolbar() {
-    return Center(
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 8),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(36),
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
-              decoration: BoxDecoration(
-                color: AppTheme.surfaceWhite.withValues(alpha: 0.96),
-                borderRadius: BorderRadius.circular(36),
-                border: Border.all(
-                  color: AppTheme.primaryPurple.withValues(alpha: 0.55),
-                  width: 1.6,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: AppTheme.primaryPurple.withValues(alpha: 0.18),
-                    blurRadius: 12,
-                    offset: const Offset(0, 4),
-                  ),
-                  BoxShadow(
-                    color: const Color(0xFF1E1B4B).withValues(alpha: 0.12),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
+  /// Floating Annotation Toolbar (Horizontal at bottom for Portrait, Vertical at side for Landscape)
+  Widget _buildFloatingBottomToolbar({bool isVertical = false}) {
+    return Container(
+      margin: EdgeInsets.symmetric(
+        horizontal: isVertical ? 0 : 8,
+        vertical: isVertical ? 6 : 0,
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(36),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+          child: Container(
+            padding: EdgeInsets.symmetric(
+              horizontal: isVertical ? 5 : 6,
+              vertical: isVertical ? 6 : 5,
+            ),
+            decoration: BoxDecoration(
+              color: AppTheme.surfaceWhite.withValues(alpha: 0.96),
+              borderRadius: BorderRadius.circular(36),
+              border: Border.all(
+                color: AppTheme.primaryPurple.withValues(alpha: 0.55),
+                width: 1.6,
               ),
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                physics: const BouncingScrollPhysics(),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // 1. Freehand Pen / Highlighter
-                    _buildToolButton(
-                      tool: AnnotationTool.highlighter,
-                      icon: _penSubTool == PenSubTool.ballpen
-                          ? CupertinoIcons.pen
-                          : CupertinoIcons.pencil_outline,
-                      label: _penSubTool == PenSubTool.ballpen
-                          ? 'Ballpen'
-                          : 'Highlighter',
-                      tooltip: _penSubTool == PenSubTool.ballpen
-                          ? 'Freehand Ballpen Drawing'
-                          : 'Freehand Highlighter',
+              boxShadow: [
+                BoxShadow(
+                  color: AppTheme.primaryPurple.withValues(alpha: 0.18),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+                BoxShadow(
+                  color: const Color(0xFF1E1B4B).withValues(alpha: 0.12),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: SingleChildScrollView(
+              scrollDirection: isVertical ? Axis.vertical : Axis.horizontal,
+              physics: const BouncingScrollPhysics(),
+              child: Flex(
+                direction: isVertical ? Axis.vertical : Axis.horizontal,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // 1. Freehand Pen / Highlighter
+                  _buildToolButton(
+                    tool: AnnotationTool.highlighter,
+                    icon: _penSubTool == PenSubTool.ballpen
+                        ? CupertinoIcons.pen
+                        : CupertinoIcons.pencil_outline,
+                    label: _penSubTool == PenSubTool.ballpen
+                        ? 'Ballpen'
+                        : 'Highlighter',
+                    tooltip: _penSubTool == PenSubTool.ballpen
+                        ? 'Freehand Ballpen Drawing'
+                        : 'Freehand Highlighter',
+                    isVertical: isVertical,
+                  ),
+
+                  SizedBox(width: isVertical ? 0 : 2, height: isVertical ? 2 : 0),
+
+                  // 2. Straight Line
+                  _buildToolButton(
+                    tool: AnnotationTool.straightLine,
+                    icon: CupertinoIcons.line_horizontal_3_decrease,
+                    label: 'Line',
+                    tooltip: _penSubTool == PenSubTool.ballpen
+                        ? 'Auto-Straightened Ballpen Line'
+                        : 'Auto-Straightened Highlighter Line',
+                    isVertical: isVertical,
+                  ),
+
+                  SizedBox(width: isVertical ? 0 : 2, height: isVertical ? 2 : 0),
+                  isVertical ? _buildHorizontalDivider() : _buildVerticalDivider(),
+                  SizedBox(width: isVertical ? 0 : 2, height: isVertical ? 2 : 0),
+
+                  // 3. Add Image (Gallery Picker + Resize)
+                  _buildToolButton(
+                    tool: AnnotationTool.addImage,
+                    icon: CupertinoIcons.photo,
+                    label: 'Image',
+                    tooltip: 'Insert Image / Screenshot',
+                    isVertical: isVertical,
+                  ),
+
+                  SizedBox(width: isVertical ? 0 : 2, height: isVertical ? 2 : 0),
+                  isVertical ? _buildHorizontalDivider() : _buildVerticalDivider(),
+                  SizedBox(width: isVertical ? 0 : 2, height: isVertical ? 2 : 0),
+
+                  // Screen Orientation Switcher (Portrait / Landscape)
+                  Tooltip(
+                    message: MediaQuery.of(context).orientation ==
+                            Orientation.landscape
+                        ? 'Landscape Mode (Tap to rotate)'
+                        : 'Portrait Mode (Tap to rotate)',
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(28),
+                        onTap: _toggleScreenOrientation,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 7,
+                            vertical: 6,
+                          ),
+                          child: Icon(
+                            MediaQuery.of(context).orientation ==
+                                    Orientation.landscape
+                                ? CupertinoIcons.device_phone_landscape
+                                : CupertinoIcons.device_phone_portrait,
+                            size: 18,
+                            color: AppTheme.textSecondary,
+                          ),
+                        ),
+                      ),
                     ),
+                  ),
 
-                    const SizedBox(width: 2),
-
-                    // 2. Straight Line
-                    _buildToolButton(
-                      tool: AnnotationTool.straightLine,
-                      icon: CupertinoIcons.line_horizontal_3_decrease,
-                      label: 'Line',
-                      tooltip: _penSubTool == PenSubTool.ballpen
-                          ? 'Auto-Straightened Ballpen Line'
-                          : 'Auto-Straightened Highlighter Line',
-                    ),
-
-                    const SizedBox(width: 2),
-                    _buildVerticalDivider(),
-                    const SizedBox(width: 2),
-
-                    // 3. Add Image (Gallery Picker + Resize)
-                    _buildToolButton(
-                      tool: AnnotationTool.addImage,
-                      icon: CupertinoIcons.photo,
-                      label: 'Image',
-                      tooltip: 'Insert Image / Screenshot',
-                    ),
-
-                    const SizedBox(width: 2),
-                    _buildVerticalDivider(),
-                    const SizedBox(width: 2),
-
-                    // Screen Orientation Switcher (Portrait / Landscape)
+                  // Multi-page Slide Direction Switcher (Positioned on the outer edge)
+                  if (_pageCount > 1) ...[
+                    SizedBox(width: isVertical ? 0 : 2, height: isVertical ? 2 : 0),
                     Tooltip(
-                      message: MediaQuery.of(context).orientation ==
-                              Orientation.landscape
-                          ? 'Landscape Mode (Tap to rotate)'
-                          : 'Portrait Mode (Tap to rotate)',
+                      message: _slideOrientation ==
+                              PageSlideOrientation.vertical
+                          ? 'Vertical Scroll (Tap for Horizontal)'
+                          : 'Horizontal Slide (Tap for Vertical)',
                       child: Material(
                         color: Colors.transparent,
                         child: InkWell(
                           borderRadius: BorderRadius.circular(28),
-                          onTap: _toggleScreenOrientation,
+                          onTap: _toggleSlideOrientation,
                           child: Padding(
                             padding: const EdgeInsets.symmetric(
                               horizontal: 7,
                               vertical: 6,
                             ),
                             child: Icon(
-                              MediaQuery.of(context).orientation ==
-                                      Orientation.landscape
-                                  ? CupertinoIcons.device_phone_landscape
-                                  : CupertinoIcons.device_phone_portrait,
+                              _slideOrientation ==
+                                      PageSlideOrientation.vertical
+                                  ? CupertinoIcons.arrow_up_down
+                                  : CupertinoIcons.arrow_left_right,
                               size: 18,
                               color: AppTheme.textSecondary,
                             ),
@@ -3539,70 +3656,40 @@ class _EditorScreenState extends State<EditorScreen>
                         ),
                       ),
                     ),
+                  ],
 
-                    // Multi-page Slide Direction Switcher (Positioned on the outer edge)
-                    if (_pageCount > 1) ...[
-                      const SizedBox(width: 2),
-                      Tooltip(
-                        message: _slideOrientation ==
-                                PageSlideOrientation.vertical
-                            ? 'Vertical Scroll (Tap for Horizontal)'
-                            : 'Horizontal Slide (Tap for Vertical)',
-                        child: Material(
-                          color: Colors.transparent,
-                          child: InkWell(
-                            borderRadius: BorderRadius.circular(28),
-                            onTap: _toggleSlideOrientation,
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 7,
-                                vertical: 6,
-                              ),
-                              child: Icon(
-                                _slideOrientation ==
-                                        PageSlideOrientation.vertical
-                                    ? CupertinoIcons.arrow_up_down
-                                    : CupertinoIcons.arrow_left_right,
-                                size: 18,
-                                color: AppTheme.textSecondary,
-                              ),
-                            ),
+                  SizedBox(width: isVertical ? 0 : 2, height: isVertical ? 2 : 0),
+                  isVertical ? _buildHorizontalDivider() : _buildVerticalDivider(),
+                  SizedBox(width: isVertical ? 0 : 2, height: isVertical ? 2 : 0),
+
+                  // Hide / Collapse Toolbar Button (Maximize Canvas Space)
+                  Tooltip(
+                    message: 'Hide Tools (Maximize Canvas Space)',
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(28),
+                        onTap: () {
+                          HapticFeedback.selectionClick();
+                          setState(() => _isToolbarVisible = false);
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 6,
                           ),
-                        ),
-                      ),
-                    ],
-
-                    const SizedBox(width: 2),
-                    _buildVerticalDivider(),
-                    const SizedBox(width: 2),
-
-                    // Hide / Collapse Toolbar Button (Maximize Canvas Space)
-                    Tooltip(
-                      message: 'Hide Tools (Maximize Canvas Space)',
-                      child: Material(
-                        color: Colors.transparent,
-                        child: InkWell(
-                          borderRadius: BorderRadius.circular(28),
-                          onTap: () {
-                            HapticFeedback.selectionClick();
-                            setState(() => _isToolbarVisible = false);
-                          },
-                          child: const Padding(
-                            padding: EdgeInsets.symmetric(
-                              horizontal: 6,
-                              vertical: 6,
-                            ),
-                            child: Icon(
-                              CupertinoIcons.chevron_down,
-                              size: 16,
-                              color: AppTheme.textSecondary,
-                            ),
+                          child: Icon(
+                            isVertical
+                                ? CupertinoIcons.chevron_right
+                                : CupertinoIcons.chevron_down,
+                            size: 16,
+                            color: AppTheme.textSecondary,
                           ),
                         ),
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -3876,6 +3963,7 @@ class _EditorScreenState extends State<EditorScreen>
     required IconData icon,
     required String label,
     required String tooltip,
+    bool isVertical = false,
   }) {
     final isSelected = _activeTool == tool ||
         (_activeTool == AnnotationTool.eraser && tool == _previousDrawingTool);
@@ -3891,8 +3979,8 @@ class _EditorScreenState extends State<EditorScreen>
             duration: const Duration(milliseconds: 220),
             curve: Curves.easeOutCubic,
             padding: EdgeInsets.symmetric(
-              horizontal: isSelected ? 10 : 7,
-              vertical: 6,
+              horizontal: isVertical ? (isSelected ? 8 : 6) : (isSelected ? 10 : 7),
+              vertical: isVertical ? (isSelected ? 8 : 6) : 6,
             ),
             decoration: BoxDecoration(
               gradient: isSelected ? AppTheme.primaryGradientDiagonal : null,
@@ -3916,7 +4004,7 @@ class _EditorScreenState extends State<EditorScreen>
                   size: 18,
                   color: isSelected ? Colors.white : AppTheme.textSecondary,
                 ),
-                if (isSelected) ...[
+                if (isSelected && !isVertical) ...[
                   const SizedBox(width: 4),
                   Text(
                     label,
@@ -3937,7 +4025,7 @@ class _EditorScreenState extends State<EditorScreen>
   }
 
   /// Floating options bubble that sits directly on top of the Highlighter/Pen icon (Stroke Thickness)
-  Widget _buildFloatingThicknessOptionsBubble() {
+  Widget _buildFloatingThicknessOptionsBubble({bool isVertical = false}) {
     final isPen = _penSubTool == PenSubTool.ballpen;
     final activeWidth = isPen ? _ballpenWidth : _highlighterWidth;
 
@@ -3961,7 +4049,10 @@ class _EditorScreenState extends State<EditorScreen>
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+          padding: EdgeInsets.symmetric(
+            horizontal: isVertical ? 6 : 8,
+            vertical: isVertical ? 8 : 5,
+          ),
           decoration: BoxDecoration(
             color: AppTheme.surfaceWhite.withValues(alpha: 0.96),
             borderRadius: BorderRadius.circular(20),
@@ -3983,14 +4074,18 @@ class _EditorScreenState extends State<EditorScreen>
             ],
           ),
           child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
+            scrollDirection: isVertical ? Axis.vertical : Axis.horizontal,
             physics: const BouncingScrollPhysics(),
-            child: Row(
+            child: Flex(
+              direction: isVertical ? Axis.vertical : Axis.horizontal,
               mainAxisSize: MainAxisSize.min,
               children: [
                 // Tool Name & Current Thickness Live Badge
                 Padding(
-                  padding: const EdgeInsets.only(left: 3, right: 4),
+                  padding: EdgeInsets.symmetric(
+                    horizontal: isVertical ? 2 : 4,
+                    vertical: isVertical ? 2 : 0,
+                  ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -4014,8 +4109,9 @@ class _EditorScreenState extends State<EditorScreen>
                   ),
                 ),
 
-                _buildVerticalDivider(),
-                const SizedBox(width: 3),
+                SizedBox(width: isVertical ? 0 : 3, height: isVertical ? 3 : 0),
+                isVertical ? _buildHorizontalDivider() : _buildVerticalDivider(),
+                SizedBox(width: isVertical ? 0 : 3, height: isVertical ? 3 : 0),
 
                 // Thickness Preset Pills
                 ...thicknessPresets.map((preset) {
@@ -4024,7 +4120,10 @@ class _EditorScreenState extends State<EditorScreen>
                   final isSelected = (activeWidth - width).abs() < 1.0;
 
                   return Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 1.5),
+                    padding: EdgeInsets.symmetric(
+                      horizontal: isVertical ? 0 : 1.5,
+                      vertical: isVertical ? 2.0 : 0,
+                    ),
                     child: Tooltip(
                       message:
                           '$label (${width % 1 == 0 ? width.toInt() : width}px)',
@@ -4096,9 +4195,9 @@ class _EditorScreenState extends State<EditorScreen>
                   );
                 }),
 
-                const SizedBox(width: 3),
-                _buildVerticalDivider(),
-                const SizedBox(width: 2),
+                SizedBox(width: isVertical ? 0 : 3, height: isVertical ? 3 : 0),
+                isVertical ? _buildHorizontalDivider() : _buildVerticalDivider(),
+                SizedBox(width: isVertical ? 0 : 2, height: isVertical ? 2 : 0),
 
                 // Collapse / Close Button
                 Tooltip(
@@ -4117,8 +4216,10 @@ class _EditorScreenState extends State<EditorScreen>
                           color: Color(0xFFF3F4F6),
                           shape: BoxShape.circle,
                         ),
-                        child: const Icon(
-                          CupertinoIcons.chevron_down,
+                        child: Icon(
+                          isVertical
+                              ? CupertinoIcons.chevron_right
+                              : CupertinoIcons.chevron_down,
                           size: 12,
                           color: AppTheme.textSecondary,
                         ),
@@ -4135,13 +4236,16 @@ class _EditorScreenState extends State<EditorScreen>
   }
 
   /// Floating options bubble that sits directly on top of the Eraser icon
-  Widget _buildFloatingEraserOptionsBubble() {
+  Widget _buildFloatingEraserOptionsBubble({bool isVertical = false}) {
     return ClipRRect(
       borderRadius: BorderRadius.circular(20),
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          padding: EdgeInsets.symmetric(
+            horizontal: isVertical ? 6 : 10,
+            vertical: isVertical ? 8 : 6,
+          ),
           decoration: BoxDecoration(
             color: AppTheme.surfaceWhite.withValues(alpha: 0.96),
             borderRadius: BorderRadius.circular(20),
@@ -4163,9 +4267,10 @@ class _EditorScreenState extends State<EditorScreen>
             ],
           ),
           child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
+            scrollDirection: isVertical ? Axis.vertical : Axis.horizontal,
             physics: const BouncingScrollPhysics(),
-            child: Row(
+            child: Flex(
+              direction: isVertical ? Axis.vertical : Axis.horizontal,
               mainAxisSize: MainAxisSize.min,
               children: [
                 // 1. Draw Erase (Precision carving)
@@ -4176,7 +4281,7 @@ class _EditorScreenState extends State<EditorScreen>
                   tooltip: 'Precision: Erase only what you draw across',
                 ),
 
-                const SizedBox(width: 4),
+                SizedBox(width: isVertical ? 0 : 4, height: isVertical ? 4 : 0),
 
                 // 2. Wipe Erase (Whole line wiping)
                 _buildEraserModePill(
@@ -4186,9 +4291,9 @@ class _EditorScreenState extends State<EditorScreen>
                   tooltip: 'Wipe: Erase whole line on contact',
                 ),
 
-                const SizedBox(width: 6),
-                _buildVerticalDivider(),
-                const SizedBox(width: 3),
+                SizedBox(width: isVertical ? 0 : 6, height: isVertical ? 4 : 0),
+                isVertical ? _buildHorizontalDivider() : _buildVerticalDivider(),
+                SizedBox(width: isVertical ? 0 : 3, height: isVertical ? 4 : 0),
 
                 // 3. Collapse / Close Button
                 Tooltip(
@@ -4207,8 +4312,10 @@ class _EditorScreenState extends State<EditorScreen>
                           color: Color(0xFFF3F4F6),
                           shape: BoxShape.circle,
                         ),
-                        child: const Icon(
-                          CupertinoIcons.chevron_down,
+                        child: Icon(
+                          isVertical
+                              ? CupertinoIcons.chevron_right
+                              : CupertinoIcons.chevron_down,
                           size: 13,
                           color: AppTheme.textSecondary,
                         ),
@@ -4380,7 +4487,7 @@ class _EditorScreenState extends State<EditorScreen>
   }
 
   /// Secondary floating color palette & tool presets picker
-  Widget _buildColorPickerSubBar() {
+  Widget _buildColorPickerSubBar({bool isVertical = false}) {
     // List of active dots: 5 presets + optional active custom color
     final List<Color> activeColorDots = [
       ...AppTheme.highlighterColors,
@@ -4396,7 +4503,10 @@ class _EditorScreenState extends State<EditorScreen>
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          padding: EdgeInsets.symmetric(
+            horizontal: isVertical ? 6 : 12,
+            vertical: isVertical ? 10 : 8,
+          ),
           decoration: BoxDecoration(
             color: AppTheme.surfaceWhite.withValues(alpha: 0.96),
             borderRadius: BorderRadius.circular(24),
@@ -4418,9 +4528,10 @@ class _EditorScreenState extends State<EditorScreen>
             ],
           ),
           child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
+            scrollDirection: isVertical ? Axis.vertical : Axis.horizontal,
             physics: const BouncingScrollPhysics(),
-            child: Row(
+            child: Flex(
+              direction: isVertical ? Axis.vertical : Axis.horizontal,
               mainAxisSize: MainAxisSize.min,
               children: [
                 // Color Dots
@@ -4440,9 +4551,12 @@ class _EditorScreenState extends State<EditorScreen>
                       });
                     },
                     child: Container(
-                      margin: const EdgeInsets.symmetric(horizontal: 3.5),
-                      width: 25,
-                      height: 25,
+                      margin: EdgeInsets.symmetric(
+                        horizontal: isVertical ? 0 : 3.5,
+                        vertical: isVertical ? 3.0 : 0,
+                      ),
+                      width: 24,
+                      height: 24,
                       decoration: BoxDecoration(
                         color: color.withValues(alpha: 1.0),
                         shape: BoxShape.circle,
@@ -4469,9 +4583,12 @@ class _EditorScreenState extends State<EditorScreen>
                   child: GestureDetector(
                     onTap: _openCustomColorPicker,
                     child: Container(
-                      margin: const EdgeInsets.symmetric(horizontal: 3.5),
-                      width: 25,
-                      height: 25,
+                      margin: EdgeInsets.symmetric(
+                        horizontal: isVertical ? 0 : 3.5,
+                        vertical: isVertical ? 3.0 : 0,
+                      ),
+                      width: 24,
+                      height: 24,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         gradient: const SweepGradient(
@@ -4495,8 +4612,8 @@ class _EditorScreenState extends State<EditorScreen>
                       ),
                       child: Center(
                         child: Container(
-                          width: 13,
-                          height: 13,
+                          width: 12,
+                          height: 12,
                           decoration: const BoxDecoration(
                             color: Colors.white,
                             shape: BoxShape.circle,
@@ -4512,9 +4629,9 @@ class _EditorScreenState extends State<EditorScreen>
                   ),
                 ),
 
-                const SizedBox(width: 5),
-                _buildVerticalDivider(),
-                const SizedBox(width: 5),
+                SizedBox(width: isVertical ? 0 : 4, height: isVertical ? 4 : 0),
+                isVertical ? _buildHorizontalDivider() : _buildVerticalDivider(),
+                SizedBox(width: isVertical ? 0 : 4, height: isVertical ? 4 : 0),
 
                 // 1. Ballpen Icon (Independent Ballpen tool)
                 _buildSubBarPresetIcon(
@@ -4704,6 +4821,15 @@ class _EditorScreenState extends State<EditorScreen>
     return Container(
       width: 1,
       height: 22,
+      color: AppTheme.dividerColor,
+    );
+  }
+
+  Widget _buildHorizontalDivider() {
+    return Container(
+      width: 22,
+      height: 1,
+      margin: const EdgeInsets.symmetric(vertical: 3),
       color: AppTheme.dividerColor,
     );
   }
