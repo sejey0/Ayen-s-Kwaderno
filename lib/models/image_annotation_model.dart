@@ -4,8 +4,10 @@ import 'package:flutter/material.dart';
 class ImageAnnotation {
   final String id;
   String imagePath;
+  String? originalImagePath;
   Offset position;
   Size size;
+  Size? originalSize;
   bool isLocked;
   String shape; // 'rounded', 'rectangle', 'pill', 'circle', 'polaroid'
   String border; // 'white', 'purple', 'none', 'dark'
@@ -13,18 +15,24 @@ class ImageAnnotation {
   ImageAnnotation({
     String? id,
     required this.imagePath,
+    String? originalImagePath,
     required this.position,
     this.size = const Size(200.0, 200.0),
+    Size? originalSize,
     this.isLocked = false,
     this.shape = 'rounded',
     this.border = 'white',
-  }) : id = id ?? UniqueKey().toString();
+  })  : id = id ?? UniqueKey().toString(),
+        originalImagePath = originalImagePath ?? imagePath,
+        originalSize = originalSize ?? size;
 
   ImageAnnotation copyWith({
     String? id,
     String? imagePath,
+    String? originalImagePath,
     Offset? position,
     Size? size,
+    Size? originalSize,
     bool? isLocked,
     String? shape,
     String? border,
@@ -32,8 +40,10 @@ class ImageAnnotation {
     return ImageAnnotation(
       id: id ?? this.id,
       imagePath: imagePath ?? this.imagePath,
+      originalImagePath: originalImagePath ?? this.originalImagePath,
       position: position ?? this.position,
       size: size ?? this.size,
+      originalSize: originalSize ?? this.originalSize,
       isLocked: isLocked ?? this.isLocked,
       shape: shape ?? this.shape,
       border: border ?? this.border,
@@ -45,10 +55,13 @@ class ImageAnnotation {
     return {
       'id': id,
       'imagePath': imagePath,
+      'originalImagePath': originalImagePath,
       'x': position.dx,
       'y': position.dy,
       'width': size.width,
       'height': size.height,
+      'originalWidth': originalSize?.width,
+      'originalHeight': originalSize?.height,
       'isLocked': isLocked,
       'shape': shape,
       'border': border,
@@ -57,17 +70,21 @@ class ImageAnnotation {
 
   /// Deserializes ImageAnnotation from Supabase / JSON map
   factory ImageAnnotation.fromJson(Map<String, dynamic> json) {
+    final width = (json['width'] as num?)?.toDouble() ?? 200.0;
+    final height = (json['height'] as num?)?.toDouble() ?? 200.0;
+    final origW = (json['originalWidth'] as num?)?.toDouble() ?? width;
+    final origH = (json['originalHeight'] as num?)?.toDouble() ?? height;
+
     return ImageAnnotation(
       id: json['id'] as String?,
       imagePath: json['imagePath'] as String? ?? '',
+      originalImagePath: json['originalImagePath'] as String?,
       position: Offset(
         (json['x'] as num?)?.toDouble() ?? 100.0,
         (json['y'] as num?)?.toDouble() ?? 100.0,
       ),
-      size: Size(
-        (json['width'] as num?)?.toDouble() ?? 200.0,
-        (json['height'] as num?)?.toDouble() ?? 200.0,
-      ),
+      size: Size(width, height),
+      originalSize: Size(origW, origH),
       isLocked: json['isLocked'] as bool? ?? false,
       shape: json['shape'] as String? ?? 'rounded',
       border: json['border'] as String? ?? 'white',

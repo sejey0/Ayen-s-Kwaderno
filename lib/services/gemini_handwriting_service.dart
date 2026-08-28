@@ -193,4 +193,89 @@ class GeminiHandwritingService {
 
     return null;
   }
+
+  /// Analyzes an image with Google Gemini Vision AI to determine optimal background removal parameters
+  static Future<Map<String, dynamic>?> analyzeImageForBackgroundRemoval(
+      Uint8List imageBytes) async {
+    final apiKey = await getActiveApiKey();
+    if (apiKey == null || apiKey.isEmpty) {
+      debugPrint('No Gemini API key found for background analysis.');
+      return null;
+    }
+
+    try {
+      // 1. Fast GPU Downscale to max 512px width for instant transfer (<50KB payload)
+      Uint8List optimizedBytes = imageBytes;
+      try {
+        final codec = await ui.instantiateImageCodec(imageBytes, targetWidth: 512);
+        final frame = await codec.getNextFrame();
+        final img = frame.image;
+        final byteData = await img.toByteData(format: ui.ImageByteFormat.png);
+        if (byteData != null) {
+          optimizedBytes = byteData.buffer.asUint8List();
+        }
+      } catch (e) {
+        debugPrint('Image downscale notice: $e');
+      }
+
+      final base64Image = base64Encode(optimizedBytes);
+      final url = Uri.parse('$_geminiEndpoint?key=$apiKey');
+
+      final requestBody = jsonEncode({
+        "contents": [
+          {
+            "parts": [
+              {
+                "text":
+                    "You are a computer vision expert assistant. Analyze this image to identify the main foreground subject and remove the background cleanly. Output ONLY a valid JSON object (no markdown, no backticks) with this structure: {\"dominantBackgroundColorHex\": \"#FFFFFF\", \"recommendedSensitivity\": 0.18, \"recommendedSmoothness\": 0.08, \"mode\": \"edgeFloodFill\", \"subjectSummary\": \"brief description\"}. Valid modes are 'edgeFloodFill' (for isolated objects), 'whitePaperClean' (for scanned paper/notes/diagrams), or 'globalColor' (for simple solid color backgrounds)."
+              },
+              {
+                "inline_data": {
+                  "mime_type": "image/png",
+                  "data": base64Image
+                }
+              }
+            ]
+          }
+        ],
+        "generationConfig": {
+          "temperature": 0.1,
+          "maxOutputTokens": 512,
+        }
+      });
+
+      final response = await http
+          .post(
+            url,
+            headers: {'Content-Type': 'application/json'},
+            body: requestBody,
+          )
+          .timeout(const Duration(seconds: 30));
+
+      if (response.statusCode == 200) {
+        final jsonResponse = jsonDecode(response.body);
+        final candidates = jsonResponse['candidates'] as List<dynamic>?;
+        if (candidates != null && candidates.isNotEmpty) {
+          final content = candidates.first['content'] as Map<String, dynamic>?;
+          final parts = content?['parts'] as List<dynamic>?;
+          if (parts != null && parts.isNotEmpty) {
+            String text = (parts.first['text'] as String?)?.trim() ?? '';
+            if (text.startsWith('```')) {
+              text = text
+                  .replaceAll(RegExp(r'^```(json)?'), '')
+                  .replaceAll(RegExp(r'```$'), '')
+                  .trim();
+            }
+            final data = jsonDecode(text) as Map<String, dynamic>;
+            debugPrint('🧠 Gemini Vision BG Analysis: $data');
+            return data;
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('Gemini BG analysis notice: $e');
+    }
+
+    return null;
+  }
 }

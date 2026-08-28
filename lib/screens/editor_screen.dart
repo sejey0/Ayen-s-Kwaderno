@@ -16,6 +16,7 @@ import '../services/document_storage_service.dart';
 import '../services/user_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/image_cropper_dialog.dart';
+import '../widgets/image_bg_remover_dialog.dart';
 
 /// Supported annotation tool types in document editor
 enum AnnotationTool {
@@ -1117,9 +1118,50 @@ class _EditorScreenState extends State<EditorScreen>
         }
       } catch (e) {
         setState(() {
+          annotation.originalImagePath ??= annotation.imagePath;
+          annotation.originalSize ??= annotation.size;
           annotation.imagePath = croppedPath;
         });
         _autoSaveAndSync();
+      }
+    }
+  }
+
+  /// Opens the interactive Gemini AI Background Remover Studio for an image sticker
+  Future<void> _openImageBgRemover(ImageAnnotation annotation) async {
+    // ALWAYS use the original source image so opening BG remover never compounds or degrades repetitively
+    final sourcePath = annotation.originalImagePath ?? annotation.imagePath;
+    final cleanPath =
+        await ImageBackgroundRemoverDialog.show(context, sourcePath);
+
+    if (cleanPath != null && mounted) {
+      setState(() {
+        annotation.originalImagePath ??= annotation.imagePath;
+        annotation.originalSize ??= annotation.size;
+        annotation.imagePath = cleanPath;
+        annotation.border = 'none';
+      });
+      _autoSaveAndSync();
+      HapticFeedback.mediumImpact();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(CupertinoIcons.sparkles, size: 16, color: Colors.white),
+                SizedBox(width: 8),
+                Text('Gemini AI background removed ✨'),
+              ],
+            ),
+            backgroundColor: AppTheme.primaryPurple,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+            ),
+            duration: const Duration(seconds: 2),
+          ),
+        );
       }
     }
   }
@@ -2282,6 +2324,44 @@ class _EditorScreenState extends State<EditorScreen>
                     height: 14,
                     color: AppTheme.dividerColor,
                   ),
+
+                  // 3. AI Background Remover Button
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () {
+                      HapticFeedback.selectionClick();
+                      _openImageBgRemover(annotation);
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 5),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: const [
+                          Icon(
+                            CupertinoIcons.sparkles,
+                            size: 13.5,
+                            color: AppTheme.accentPink,
+                          ),
+                          SizedBox(width: 3.5),
+                          Text(
+                            'AI BG',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: AppTheme.accentPink,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  Container(
+                    width: 1,
+                    height: 14,
+                    color: AppTheme.dividerColor,
+                  ),
                 ] else ...[
                   // Locked Indicator
                   Padding(
@@ -2425,7 +2505,73 @@ class _EditorScreenState extends State<EditorScreen>
                   color: AppTheme.dividerColor,
                 ),
 
-                // 5. Delete Image Button
+                // 5. Revert / Undo BG Removal Button
+                if (annotation.originalImagePath != null &&
+                    annotation.originalImagePath != annotation.imagePath) ...[
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () {
+                      HapticFeedback.mediumImpact();
+                      setState(() {
+                        annotation.imagePath = annotation.originalImagePath!;
+                        if (annotation.originalSize != null) {
+                          annotation.size = annotation.originalSize!;
+                        }
+                      });
+                      _autoSaveAndSync();
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(CupertinoIcons.arrow_counterclockwise,
+                                  size: 16, color: Colors.white),
+                              SizedBox(width: 8),
+                              Text('Restored original image ↩️'),
+                            ],
+                          ),
+                          backgroundColor: AppTheme.primaryPurple,
+                          behavior: SnackBarBehavior.floating,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          duration: const Duration(seconds: 2),
+                        ),
+                      );
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 5),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: const [
+                          Icon(
+                            CupertinoIcons.arrow_counterclockwise,
+                            size: 13.5,
+                            color: Color(0xFFE11D48),
+                          ),
+                          SizedBox(width: 3.5),
+                          Text(
+                            'Undo BG',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFFE11D48),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  Container(
+                    width: 1,
+                    height: 14,
+                    color: AppTheme.dividerColor,
+                  ),
+                ],
+
+                // 6. Delete Image Button
                 GestureDetector(
                   behavior: HitTestBehavior.opaque,
                   onTap: () {
