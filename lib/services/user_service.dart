@@ -158,18 +158,48 @@ class UserService {
     String? effectiveAvatarUrl = avatarUrl;
     String? effectiveImagePath = avatarImagePath;
 
-    if (!clearCustomImage && avatarImagePath != null && avatarImagePath.trim().isNotEmpty) {
+    if (!clearCustomImage &&
+        avatarImagePath != null &&
+        avatarImagePath.trim().isNotEmpty) {
       final trimmed = avatarImagePath.trim();
-      if (trimmed.startsWith('data:image') || trimmed.startsWith('http')) {
+      if (trimmed.startsWith('http')) {
         effectiveAvatarUrl = trimmed;
         effectiveImagePath = trimmed;
       } else {
         try {
-          final file = File(trimmed);
-          if (file.existsSync()) {
-            final bytes = await file.readAsBytes();
-            effectiveAvatarUrl = 'data:image/jpeg;base64,${base64Encode(bytes)}';
-            effectiveImagePath = trimmed;
+          Uint8List? imageBytes;
+          if (trimmed.startsWith('data:image')) {
+            final raw =
+                trimmed.contains(',') ? trimmed.split(',').last : trimmed;
+            imageBytes = base64Decode(raw);
+          } else {
+            final file = File(trimmed);
+            if (file.existsSync()) {
+              imageBytes = await file.readAsBytes();
+            }
+          }
+
+          if (imageBytes != null && imageBytes.isNotEmpty) {
+            final targetId = current.supabaseUserId ?? current.id;
+            try {
+              final client = Supabase.instance.client;
+              final storagePath = '$targetId/avatar.jpg';
+              await client.storage.from('avatars').uploadBinary(
+                    storagePath,
+                    imageBytes,
+                    fileOptions: const FileOptions(
+                        upsert: true, contentType: 'image/jpeg'),
+                  );
+              final publicUrl =
+                  client.storage.from('avatars').getPublicUrl(storagePath);
+              effectiveAvatarUrl = publicUrl;
+              effectiveImagePath = trimmed;
+            } catch (e) {
+              debugPrint('Notice uploading avatar in updateProfile: $e');
+              effectiveAvatarUrl =
+                  'data:image/jpeg;base64,${base64Encode(imageBytes)}';
+              effectiveImagePath = trimmed;
+            }
           }
         } catch (_) {}
       }
@@ -193,7 +223,8 @@ class UserService {
     if (updated.isCloudLinked) {
       try {
         final client = Supabase.instance.client;
-        final targetId = updated.supabaseUserId ?? client.auth.currentUser?.id ?? updated.id;
+        final targetId =
+            updated.supabaseUserId ?? client.auth.currentUser?.id ?? updated.id;
         final profilePayload = <String, dynamic>{
           'id': targetId,
           'name': updated.name,
@@ -291,15 +322,43 @@ class UserService {
     final isPreviousOffline = currentUser?.isCloudLinked != true;
     final previousId = currentUser?.id;
 
-    // If avatarImagePath is a local file, convert to base64 data URI
+    // If avatarImagePath is a local file, upload to Supabase Storage avatars bucket
+    String? effectiveAvatarUrl = avatarImagePath;
     if (avatarImagePath != null && avatarImagePath.trim().isNotEmpty) {
       final trimmed = avatarImagePath.trim();
-      if (!trimmed.startsWith('data:image') && !trimmed.startsWith('http')) {
+      if (trimmed.startsWith('http')) {
+        effectiveAvatarUrl = trimmed;
+      } else {
         try {
-          final file = File(trimmed);
-          if (file.existsSync()) {
-            final bytes = await file.readAsBytes();
-            avatarImagePath = 'data:image/jpeg;base64,${base64Encode(bytes)}';
+          Uint8List? imageBytes;
+          if (trimmed.startsWith('data:image')) {
+            final raw =
+                trimmed.contains(',') ? trimmed.split(',').last : trimmed;
+            imageBytes = base64Decode(raw);
+          } else {
+            final file = File(trimmed);
+            if (file.existsSync()) {
+              imageBytes = await file.readAsBytes();
+            }
+          }
+
+          if (imageBytes != null && imageBytes.isNotEmpty) {
+            try {
+              final storagePath = '${user.id}/avatar.jpg';
+              await client.storage.from('avatars').uploadBinary(
+                    storagePath,
+                    imageBytes,
+                    fileOptions: const FileOptions(
+                        upsert: true, contentType: 'image/jpeg'),
+                  );
+              final publicUrl =
+                  client.storage.from('avatars').getPublicUrl(storagePath);
+              effectiveAvatarUrl = publicUrl;
+            } catch (e) {
+              debugPrint('Notice uploading avatar in linkSupabaseAccount: $e');
+              effectiveAvatarUrl =
+                  'data:image/jpeg;base64,${base64Encode(imageBytes)}';
+            }
           }
         } catch (_) {}
       }
@@ -311,7 +370,7 @@ class UserService {
       name: displayName,
       avatarEmoji: avatarEmoji,
       avatarImagePath: avatarImagePath,
-      avatarUrl: avatarImagePath,
+      avatarUrl: effectiveAvatarUrl,
       avatarColorIndex: avatarColorIndex,
       email: user.email ?? email.trim(),
       isCloudLinked: true,
