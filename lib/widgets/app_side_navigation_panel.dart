@@ -787,22 +787,87 @@ class SwitchAccountBottomSheet extends StatelessWidget {
       ),
     );
 
-    if (confirmed == true) {
+    if (confirmed == true && context.mounted) {
+      // Show progress indicator dialog
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => PopScope(
+          canPop: false,
+          child: Center(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Colors.black26,
+                    blurRadius: 16,
+                  ),
+                ],
+              ),
+              child: const Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(
+                    strokeWidth: 3,
+                    color: AppTheme.primaryPurple,
+                  ),
+                  SizedBox(height: 16),
+                  Text(
+                    'Re-syncing from Cloud...',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: AppTheme.textPrimary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+
       await DocumentStorageService.deleteAllUserData(user.id);
       await AutoSyncService.instance.syncAllToCloud();
       UserService.instance.currentUserNotifier.value = user;
-      if (context.mounted && Navigator.of(context).canPop()) {
-        Navigator.of(context).pop();
-      }
+
+      final restoredDocs =
+          await DocumentStorageService.loadSavedDocuments(user.id);
+      final restoredNotes =
+          await DocumentStorageService.loadHandwritingNotes(user.id);
+
       if (context.mounted) {
+        // Pop loading dialog
+        Navigator.of(context, rootNavigator: true).pop();
+
+        // Pop drawer if open
+        if (Navigator.of(context).canPop()) {
+          Navigator.of(context).pop();
+        }
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(
-                'Local cache reset for ${user.name}. Fresh cloud sync complete.'),
-            backgroundColor: const Color(0xFF2E7D32),
+            content: Row(
+              children: [
+                const Icon(CupertinoIcons.checkmark_circle_fill,
+                    color: Color(0xFF10B981), size: 18),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Re-synced for ${user.name}: ${restoredDocs.length} ${restoredDocs.length == 1 ? 'document' : 'documents'} and ${restoredNotes.length} ${restoredNotes.length == 1 ? 'note' : 'notes'} restored!',
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: AppTheme.primaryPurpleDark,
             behavior: SnackBarBehavior.floating,
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12)),
+            duration: const Duration(seconds: 3),
           ),
         );
       }

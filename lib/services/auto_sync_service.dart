@@ -98,7 +98,7 @@ class AutoSyncService {
 
     final user = UserService.instance.currentUser;
     final isAuthUser = Supabase.instance.client.auth.currentUser != null;
-    final isCloudActive = (user?.isCloudLinked == true) || isAuthUser;
+    final isCloudActive = user != null || isAuthUser;
 
     // Check connectivity first
     try {
@@ -117,7 +117,7 @@ class AutoSyncService {
       // If connectivity check fails, continue and let Supabase network call verify
     }
 
-    // If not online or not cloud enabled, mark synced locally
+    // If no active user, mark synced locally
     if (!isCloudActive) {
       statusNotifier.value = AutoSyncStatus.synced;
       return;
@@ -135,7 +135,7 @@ class AutoSyncService {
       // -------------------------------------------------------------
       // 0. AUTO-UPLOAD / SYNC USER PROFILE TO SUPABASE
       // -------------------------------------------------------------
-      if (user != null && user.isCloudLinked) {
+      if (user != null) {
         try {
           final targetId =
               user.supabaseUserId ?? client.auth.currentUser?.id ?? user.id;
