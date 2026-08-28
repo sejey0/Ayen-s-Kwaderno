@@ -1474,7 +1474,7 @@ class HandwritingCanvasPainter extends CustomPainter {
     // 2. Render active stroke
     if (!isEraser && currentStrokePoints.isNotEmpty) {
       final activePaint = Paint()
-        ..color = (currentColor == const Color(0xFFFACC15))
+        ..color = (currentStrokeWidth >= 8.0 || currentColor.a < 0.95)
             ? currentColor.withValues(alpha: 0.4)
             : currentColor
         ..strokeCap = StrokeCap.round

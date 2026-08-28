@@ -2130,12 +2130,14 @@ class _EditorScreenState extends State<EditorScreen>
                               final isPen = _penSubTool == PenSubTool.ballpen;
                               final activeWidth =
                                   isPen ? _ballpenWidth : _highlighterWidth;
+                              final strokeColor = isPen
+                                  ? _selectedColor.withValues(alpha: 1.0)
+                                  : _selectedColor.withValues(alpha: 0.38);
+
                               setState(() {
                                 _currentStroke = Stroke(
                                   points: [refPoint],
-                                  color: isPen
-                                      ? _selectedColor.withValues(alpha: 1.0)
-                                      : _selectedColor,
+                                  color: strokeColor,
                                   strokeWidth: activeWidth,
                                   isStraightLine:
                                       _activeTool == AnnotationTool.straightLine,
@@ -4080,8 +4082,8 @@ class _EditorScreenState extends State<EditorScreen>
         filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
         child: Container(
           padding: EdgeInsets.symmetric(
-            horizontal: isVertical ? 6 : 8,
-            vertical: isVertical ? 8 : 5,
+            horizontal: isVertical ? 4 : 8,
+            vertical: isVertical ? 6 : 5,
           ),
           decoration: BoxDecoration(
             color: AppTheme.surfaceWhite.withValues(alpha: 0.96),
@@ -4113,30 +4115,52 @@ class _EditorScreenState extends State<EditorScreen>
                 // Tool Name & Current Thickness Live Badge
                 Padding(
                   padding: EdgeInsets.symmetric(
-                    horizontal: isVertical ? 2 : 4,
+                    horizontal: isVertical ? 1 : 4,
                     vertical: isVertical ? 2 : 0,
                   ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        isPen
-                            ? CupertinoIcons.pen
-                            : CupertinoIcons.pencil_outline,
-                        size: 13,
-                        color: AppTheme.primaryPurple,
-                      ),
-                      const SizedBox(width: 3.5),
-                      Text(
-                        '${activeWidth % 1 == 0 ? activeWidth.toInt() : activeWidth}px',
-                        style: const TextStyle(
-                          fontSize: 11.5,
-                          fontWeight: FontWeight.w800,
-                          color: AppTheme.primaryPurple,
+                  child: isVertical
+                      ? Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              isPen
+                                  ? CupertinoIcons.pen
+                                  : CupertinoIcons.pencil_outline,
+                              size: 12,
+                              color: AppTheme.primaryPurple,
+                            ),
+                            const SizedBox(height: 1.5),
+                            Text(
+                              '${activeWidth % 1 == 0 ? activeWidth.toInt() : activeWidth}',
+                              style: const TextStyle(
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.w800,
+                                color: AppTheme.primaryPurple,
+                              ),
+                            ),
+                          ],
+                        )
+                      : Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              isPen
+                                  ? CupertinoIcons.pen
+                                  : CupertinoIcons.pencil_outline,
+                              size: 13,
+                              color: AppTheme.primaryPurple,
+                            ),
+                            const SizedBox(width: 3.5),
+                            Text(
+                              '${activeWidth % 1 == 0 ? activeWidth.toInt() : activeWidth}px',
+                              style: const TextStyle(
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w800,
+                                color: AppTheme.primaryPurple,
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
-                    ],
-                  ),
                 ),
 
                 SizedBox(width: isVertical ? 0 : 3, height: isVertical ? 3 : 0),
@@ -4172,8 +4196,10 @@ class _EditorScreenState extends State<EditorScreen>
                         child: AnimatedContainer(
                           duration: const Duration(milliseconds: 180),
                           curve: Curves.easeOutCubic,
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 7.5, vertical: 4),
+                          padding: EdgeInsets.symmetric(
+                            horizontal: isVertical ? 4.5 : 7.5,
+                            vertical: isVertical ? 3.5 : 4,
+                          ),
                           decoration: BoxDecoration(
                             color: isSelected
                                 ? AppTheme.primaryPurple
@@ -4190,35 +4216,46 @@ class _EditorScreenState extends State<EditorScreen>
                                   ]
                                 : null,
                           ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              // Visual Dot
-                              Container(
-                                width: (width / (isPen ? 1.5 : 3.5))
-                                    .clamp(3.0, 7.5),
-                                height: (width / (isPen ? 1.5 : 3.5))
-                                    .clamp(3.0, 7.5),
-                                decoration: BoxDecoration(
-                                  color: isSelected
-                                      ? Colors.white
-                                      : AppTheme.textPrimary,
-                                  shape: BoxShape.circle,
+                          child: isVertical
+                              ? Text(
+                                  '${width % 1 == 0 ? width.toInt() : width}',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w800,
+                                    color: isSelected
+                                        ? Colors.white
+                                        : AppTheme.textPrimary,
+                                  ),
+                                )
+                              : Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    // Visual Dot
+                                    Container(
+                                      width: (width / (isPen ? 1.5 : 3.5))
+                                          .clamp(3.0, 7.5),
+                                      height: (width / (isPen ? 1.5 : 3.5))
+                                          .clamp(3.0, 7.5),
+                                      decoration: BoxDecoration(
+                                        color: isSelected
+                                            ? Colors.white
+                                            : AppTheme.textPrimary,
+                                        shape: BoxShape.circle,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 3.5),
+                                    Text(
+                                      label,
+                                      style: TextStyle(
+                                        fontSize: 10.5,
+                                        fontWeight: FontWeight.w700,
+                                        color: isSelected
+                                            ? Colors.white
+                                            : AppTheme.textPrimary,
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                              ),
-                              const SizedBox(width: 3.5),
-                              Text(
-                                label,
-                                style: TextStyle(
-                                  fontSize: 10.5,
-                                  fontWeight: FontWeight.w700,
-                                  color: isSelected
-                                      ? Colors.white
-                                      : AppTheme.textPrimary,
-                                ),
-                              ),
-                            ],
-                          ),
                         ),
                       ),
                     ),
@@ -4241,7 +4278,7 @@ class _EditorScreenState extends State<EditorScreen>
                         setState(() => _isThicknessMenuExpanded = false);
                       },
                       child: Container(
-                        padding: const EdgeInsets.all(4.5),
+                        padding: EdgeInsets.all(isVertical ? 3.5 : 4.5),
                         decoration: const BoxDecoration(
                           color: Color(0xFFF3F4F6),
                           shape: BoxShape.circle,
@@ -4250,7 +4287,7 @@ class _EditorScreenState extends State<EditorScreen>
                           isVertical
                               ? CupertinoIcons.chevron_right
                               : CupertinoIcons.chevron_down,
-                          size: 12,
+                          size: isVertical ? 11 : 12,
                           color: AppTheme.textSecondary,
                         ),
                       ),
@@ -4273,8 +4310,8 @@ class _EditorScreenState extends State<EditorScreen>
         filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
         child: Container(
           padding: EdgeInsets.symmetric(
-            horizontal: isVertical ? 6 : 10,
-            vertical: isVertical ? 8 : 6,
+            horizontal: isVertical ? 4 : 10,
+            vertical: isVertical ? 6 : 6,
           ),
           decoration: BoxDecoration(
             color: AppTheme.surfaceWhite.withValues(alpha: 0.96),
@@ -4309,9 +4346,10 @@ class _EditorScreenState extends State<EditorScreen>
                   icon: CupertinoIcons.scribble,
                   label: 'Draw Erase',
                   tooltip: 'Precision: Erase only what you draw across',
+                  isVertical: isVertical,
                 ),
 
-                SizedBox(width: isVertical ? 0 : 4, height: isVertical ? 4 : 0),
+                SizedBox(width: isVertical ? 0 : 4, height: isVertical ? 3 : 0),
 
                 // 2. Wipe Erase (Whole line wiping)
                 _buildEraserModePill(
@@ -4319,11 +4357,12 @@ class _EditorScreenState extends State<EditorScreen>
                   icon: CupertinoIcons.trash_fill,
                   label: 'Wipe Erase',
                   tooltip: 'Wipe: Erase whole line on contact',
+                  isVertical: isVertical,
                 ),
 
-                SizedBox(width: isVertical ? 0 : 6, height: isVertical ? 4 : 0),
+                SizedBox(width: isVertical ? 0 : 6, height: isVertical ? 3 : 0),
                 isVertical ? _buildHorizontalDivider() : _buildVerticalDivider(),
-                SizedBox(width: isVertical ? 0 : 3, height: isVertical ? 4 : 0),
+                SizedBox(width: isVertical ? 0 : 3, height: isVertical ? 3 : 0),
 
                 // 3. Collapse / Close Button
                 Tooltip(
@@ -4337,7 +4376,7 @@ class _EditorScreenState extends State<EditorScreen>
                         setState(() => _isEraserMenuExpanded = false);
                       },
                       child: Container(
-                        padding: const EdgeInsets.all(5),
+                        padding: EdgeInsets.all(isVertical ? 3.5 : 5),
                         decoration: const BoxDecoration(
                           color: Color(0xFFF3F4F6),
                           shape: BoxShape.circle,
@@ -4346,7 +4385,7 @@ class _EditorScreenState extends State<EditorScreen>
                           isVertical
                               ? CupertinoIcons.chevron_right
                               : CupertinoIcons.chevron_down,
-                          size: 13,
+                          size: isVertical ? 11 : 13,
                           color: AppTheme.textSecondary,
                         ),
                       ),
@@ -5063,6 +5102,7 @@ class _EditorScreenState extends State<EditorScreen>
     required IconData icon,
     required String label,
     required String tooltip,
+    bool isVertical = false,
   }) {
     final isSelected = _eraserMode == mode;
 
@@ -5077,7 +5117,10 @@ class _EditorScreenState extends State<EditorScreen>
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 180),
           curve: Curves.easeOutCubic,
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          padding: EdgeInsets.symmetric(
+            horizontal: isVertical ? 6 : 10,
+            vertical: isVertical ? 6 : 6,
+          ),
           decoration: BoxDecoration(
             color: isSelected
                 ? const Color(0xFFEF4444)
@@ -5093,25 +5136,31 @@ class _EditorScreenState extends State<EditorScreen>
                   ]
                 : null,
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                icon,
-                size: 13,
-                color: isSelected ? Colors.white : AppTheme.textPrimary,
-              ),
-              const SizedBox(width: 5),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
+          child: isVertical
+              ? Icon(
+                  icon,
+                  size: 13,
                   color: isSelected ? Colors.white : AppTheme.textPrimary,
+                )
+              : Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      icon,
+                      size: 13,
+                      color: isSelected ? Colors.white : AppTheme.textPrimary,
+                    ),
+                    const SizedBox(width: 5),
+                    Text(
+                      label,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: isSelected ? Colors.white : AppTheme.textPrimary,
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-            ],
-          ),
         ),
       ),
     );
@@ -5342,8 +5391,14 @@ class BaseAnnotationPainter extends CustomPainter {
   void _renderStroke(Canvas canvas, Stroke stroke) {
     if (stroke.points.isEmpty) return;
 
+    // Detect if this stroke is a highlighter (either translucent alpha or width >= 9.0)
+    final isHighlighter = stroke.color.a < 0.95 || stroke.strokeWidth >= 9.0;
+    final paintColor = isHighlighter
+        ? stroke.color.withValues(alpha: 0.38)
+        : stroke.color;
+
     final paint = Paint()
-      ..color = stroke.color
+      ..color = paintColor
       ..strokeWidth = stroke.strokeWidth
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round
