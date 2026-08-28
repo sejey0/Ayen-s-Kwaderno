@@ -256,7 +256,7 @@ class _UploadDocumentDialogState extends State<UploadDocumentDialog> {
 
     return Container(
       constraints: BoxConstraints(
-        maxHeight: MediaQuery.of(context).size.height * 0.85 + bottomInset,
+        maxHeight: MediaQuery.of(context).size.height * 0.88 + bottomInset,
       ),
       decoration: const BoxDecoration(
         color: AppTheme.surfaceWhite,
@@ -285,7 +285,7 @@ class _UploadDocumentDialogState extends State<UploadDocumentDialog> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 14),
 
                   // Title Row
                   Row(
@@ -294,32 +294,56 @@ class _UploadDocumentDialogState extends State<UploadDocumentDialog> {
                       Row(
                         children: [
                           Container(
-                            width: 38,
-                            height: 38,
+                            width: 42,
+                            height: 42,
                             decoration: BoxDecoration(
                               gradient: const LinearGradient(
                                 colors: [
                                   AppTheme.primaryPurple,
-                                  AppTheme.accentPink,
+                                  Color(0xFF9E8AF0),
                                 ],
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
                               ),
-                              borderRadius: BorderRadius.circular(12),
+                              borderRadius: BorderRadius.circular(14),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: AppTheme.primaryPurple
+                                      .withValues(alpha: 0.3),
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 3),
+                                ),
+                              ],
                             ),
                             child: const Icon(
                               CupertinoIcons.cloud_upload_fill,
                               color: Colors.white,
-                              size: 20,
+                              size: 22,
                             ),
                           ),
-                          const SizedBox(width: 12),
-                          const Text(
-                            'Upload Document or Image',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w700,
-                              color: AppTheme.textPrimary,
-                              letterSpacing: -0.2,
-                            ),
+                          const SizedBox(width: 14),
+                          const Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Upload Document',
+                                style: TextStyle(
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.w800,
+                                  color: AppTheme.textPrimary,
+                                  letterSpacing: -0.3,
+                                ),
+                              ),
+                              SizedBox(height: 2),
+                              Text(
+                                'Import PDF or image to annotate',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                  color: AppTheme.textMuted,
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),
@@ -357,10 +381,10 @@ class _UploadDocumentDialogState extends State<UploadDocumentDialog> {
                             color: AppTheme.textPrimary,
                           ),
                         ),
-                        const SizedBox(width: 6),
+                        const SizedBox(width: 8),
                         Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 2),
+                              horizontal: 7, vertical: 2.5),
                           decoration: BoxDecoration(
                             color: AppTheme.primaryPurpleLight,
                             borderRadius: BorderRadius.circular(6),
@@ -368,22 +392,24 @@ class _UploadDocumentDialogState extends State<UploadDocumentDialog> {
                           child: const Text(
                             'OPTIONAL',
                             style: TextStyle(
-                              fontSize: 9,
+                              fontSize: 9.5,
                               fontWeight: FontWeight.w800,
                               color: AppTheme.primaryPurpleDark,
+                              letterSpacing: 0.3,
                             ),
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 8),
                     Container(
-                      height: 46,
+                      height: 48,
                       decoration: BoxDecoration(
                         color: const Color(0xFFF8FAFC),
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(14),
                         border: Border.all(
-                          color: AppTheme.primaryPurple.withValues(alpha: 0.3),
+                          color: AppTheme.primaryPurple.withValues(alpha: 0.35),
+                          width: 1.2,
                         ),
                       ),
                       child: TextField(
@@ -393,21 +419,36 @@ class _UploadDocumentDialogState extends State<UploadDocumentDialog> {
                             _userManuallyEditedTitle = true;
                           }
                         },
-                        decoration: const InputDecoration(
+                        decoration: InputDecoration(
                           hintText:
                               'e.g., Biology Reviewer, Anatomy Chapter 1...',
-                          hintStyle: TextStyle(
-                            fontSize: 12.5,
+                          hintStyle: const TextStyle(
+                            fontSize: 13,
                             color: AppTheme.textMuted,
                           ),
-                          prefixIcon: Icon(
+                          prefixIcon: const Icon(
                             CupertinoIcons.pencil,
-                            size: 16,
+                            size: 18,
                             color: AppTheme.primaryPurple,
                           ),
+                          suffixIcon: _titleController.text.isNotEmpty
+                              ? IconButton(
+                                  icon: const Icon(
+                                    CupertinoIcons.clear_circled_solid,
+                                    size: 16,
+                                    color: AppTheme.textMuted,
+                                  ),
+                                  onPressed: () {
+                                    setState(() {
+                                      _titleController.clear();
+                                      _userManuallyEditedTitle = false;
+                                    });
+                                  },
+                                )
+                              : null,
                           border: InputBorder.none,
-                          contentPadding: EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 12),
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 14),
                         ),
                         style: const TextStyle(
                           fontSize: 13.5,
@@ -416,7 +457,7 @@ class _UploadDocumentDialogState extends State<UploadDocumentDialog> {
                         ),
                       ),
                     ),
-                    const SizedBox(height: 14),
+                    const SizedBox(height: 16),
 
                     // 2. Dropzone / Real Content Preview
                     if (hasFile)
@@ -424,7 +465,7 @@ class _UploadDocumentDialogState extends State<UploadDocumentDialog> {
                     else
                       _buildUploadPickerArea(),
 
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 14),
                   ],
                 ),
               ),
@@ -435,7 +476,7 @@ class _UploadDocumentDialogState extends State<UploadDocumentDialog> {
               padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
               child: SizedBox(
                 width: double.infinity,
-                height: 50,
+                height: 52,
                 child: ElevatedButton(
                   onPressed: hasFile ? _uploadAndOpenDocument : null,
                   style: ElevatedButton.styleFrom(
@@ -449,7 +490,16 @@ class _UploadDocumentDialogState extends State<UploadDocumentDialog> {
                   ),
                   child: Ink(
                     decoration: BoxDecoration(
-                      gradient: hasFile ? AppTheme.primaryGradient : null,
+                      gradient: hasFile
+                          ? const LinearGradient(
+                              colors: [
+                                AppTheme.primaryPurple,
+                                Color(0xFF8B6DF0),
+                              ],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            )
+                          : null,
                       color: hasFile ? null : const Color(0xFFE2E8F0),
                       borderRadius: BorderRadius.circular(16),
                       boxShadow: hasFile
@@ -457,7 +507,7 @@ class _UploadDocumentDialogState extends State<UploadDocumentDialog> {
                               BoxShadow(
                                 color: AppTheme.primaryPurple
                                     .withValues(alpha: 0.35),
-                                blurRadius: 10,
+                                blurRadius: 12,
                                 offset: const Offset(0, 4),
                               ),
                             ]
@@ -470,7 +520,7 @@ class _UploadDocumentDialogState extends State<UploadDocumentDialog> {
                         children: [
                           Icon(
                             CupertinoIcons.arrow_up_doc_fill,
-                            size: 18,
+                            size: 19,
                             color: hasFile ? Colors.white : AppTheme.textMuted,
                           ),
                           const SizedBox(width: 8),
@@ -479,7 +529,7 @@ class _UploadDocumentDialogState extends State<UploadDocumentDialog> {
                             style: TextStyle(
                               color:
                                   hasFile ? Colors.white : AppTheme.textMuted,
-                              fontSize: 14.5,
+                              fontSize: 15,
                               fontWeight: FontWeight.w700,
                               letterSpacing: 0.1,
                             ),
@@ -508,7 +558,7 @@ class _UploadDocumentDialogState extends State<UploadDocumentDialog> {
             width: double.infinity,
             height: 200,
             decoration: BoxDecoration(
-              color: const Color(0xFFF8FAFC),
+              color: AppTheme.primaryPurpleLight.withValues(alpha: 0.25),
               borderRadius: BorderRadius.circular(20),
               border: Border.all(
                 color: AppTheme.primaryPurple.withValues(alpha: 0.4),
@@ -539,11 +589,19 @@ class _UploadDocumentDialogState extends State<UploadDocumentDialog> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Container(
-                          width: 60,
-                          height: 60,
-                          decoration: const BoxDecoration(
+                          width: 62,
+                          height: 62,
+                          decoration: BoxDecoration(
                             color: AppTheme.primaryPurpleLight,
                             shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: AppTheme.primaryPurple
+                                    .withValues(alpha: 0.15),
+                                blurRadius: 8,
+                                offset: const Offset(0, 3),
+                              ),
+                            ],
                           ),
                           child: const Icon(
                             CupertinoIcons.arrow_down_doc_fill,
@@ -565,7 +623,26 @@ class _UploadDocumentDialogState extends State<UploadDocumentDialog> {
                           'Supported formats: PDF, PNG, JPG, JPEG, WEBP',
                           style: TextStyle(
                             fontSize: 11.5,
+                            fontWeight: FontWeight.w500,
                             color: AppTheme.textMuted,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: AppTheme.primaryPurpleLight
+                                .withValues(alpha: 0.6),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: const Text(
+                            'Max file size: 50 MB for Cloud Sync',
+                            style: TextStyle(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w700,
+                              color: AppTheme.primaryPurpleDark,
+                            ),
                           ),
                         ),
                       ],
@@ -575,23 +652,25 @@ class _UploadDocumentDialogState extends State<UploadDocumentDialog> {
         ),
         const SizedBox(height: 12),
 
-        // Quick Pick Action Chips (Files, Gallery, Camera)
+        // Quick Pick Action Chips (Files, Gallery, Camera) - Unified Single Color Palette
         Row(
           children: [
             Expanded(
               child: OutlinedButton.icon(
                 onPressed: _isPicking ? null : _pickFile,
-                icon: const Icon(CupertinoIcons.folder, size: 16),
+                icon: const Icon(CupertinoIcons.folder_fill, size: 16),
                 label: const Text('Files (PDF)'),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: AppTheme.primaryPurpleDark,
-                  side: const BorderSide(color: AppTheme.primaryPurpleLight),
+                  side: BorderSide(
+                    color: AppTheme.primaryPurple.withValues(alpha: 0.35),
+                  ),
                   backgroundColor:
                       AppTheme.primaryPurpleLight.withValues(alpha: 0.4),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(14),
                   ),
-                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  padding: const EdgeInsets.symmetric(vertical: 11),
                 ),
               ),
             ),
@@ -600,17 +679,19 @@ class _UploadDocumentDialogState extends State<UploadDocumentDialog> {
               child: OutlinedButton.icon(
                 onPressed:
                     _isPicking ? null : () => _pickImage(ImageSource.gallery),
-                icon: const Icon(CupertinoIcons.photo, size: 16),
+                icon: const Icon(CupertinoIcons.photo_fill, size: 16),
                 label: const Text('Gallery'),
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: AppTheme.accentPinkDark,
-                  side: const BorderSide(color: AppTheme.accentPinkLight),
-                  backgroundColor:
-                      AppTheme.accentPinkLight.withValues(alpha: 0.4),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+                  foregroundColor: AppTheme.primaryPurpleDark,
+                  side: BorderSide(
+                    color: AppTheme.primaryPurple.withValues(alpha: 0.35),
                   ),
-                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  backgroundColor:
+                      AppTheme.primaryPurpleLight.withValues(alpha: 0.4),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  padding: const EdgeInsets.symmetric(vertical: 11),
                 ),
               ),
             ),
@@ -619,17 +700,19 @@ class _UploadDocumentDialogState extends State<UploadDocumentDialog> {
               child: OutlinedButton.icon(
                 onPressed:
                     _isPicking ? null : () => _pickImage(ImageSource.camera),
-                icon: const Icon(CupertinoIcons.camera, size: 16),
+                icon: const Icon(CupertinoIcons.camera_fill, size: 16),
                 label: const Text('Camera'),
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: const Color(0xFF0284C7),
-                  side: const BorderSide(color: Color(0xFFBAE6FD)),
-                  backgroundColor:
-                      const Color(0xFFE0F2FE).withValues(alpha: 0.5),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+                  foregroundColor: AppTheme.primaryPurpleDark,
+                  side: BorderSide(
+                    color: AppTheme.primaryPurple.withValues(alpha: 0.35),
                   ),
-                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  backgroundColor:
+                      AppTheme.primaryPurpleLight.withValues(alpha: 0.4),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  padding: const EdgeInsets.symmetric(vertical: 11),
                 ),
               ),
             ),
@@ -714,26 +797,62 @@ class _UploadDocumentDialogState extends State<UploadDocumentDialog> {
                     ),
                   ),
 
-                // Format Badge
+                // Format & Size Badges
                 Positioned(
                   top: 10,
                   left: 10,
-                  child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.65),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      _isImage ? 'IMAGE' : 'PDF DOCUMENT',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 0.5,
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.65),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          _isImage ? 'IMAGE' : 'PDF DOCUMENT',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
                       ),
-                    ),
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: fileSize > 50 * 1024 * 1024
+                              ? const Color(0xFFF59E0B)
+                              : AppTheme.primaryPurple,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              fileSize > 50 * 1024 * 1024
+                                  ? CupertinoIcons.device_phone_portrait
+                                  : CupertinoIcons.cloud_fill,
+                              size: 11,
+                              color: Colors.white,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              _formatFileSize(fileSize),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
                 ),
 
@@ -782,18 +901,36 @@ class _UploadDocumentDialogState extends State<UploadDocumentDialog> {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: AppTheme.textSecondary,
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w700,
+                      color: AppTheme.textPrimary,
                     ),
                   ),
-                  const SizedBox(height: 2),
-                  Text(
-                    _formatFileSize(fileSize),
-                    style: const TextStyle(
-                      fontSize: 11,
-                      color: AppTheme.textMuted,
-                    ),
+                  const SizedBox(height: 3),
+                  Row(
+                    children: [
+                      Text(
+                        'Size: ${_formatFileSize(fileSize)}',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: AppTheme.primaryPurpleDark,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        fileSize > 50 * 1024 * 1024
+                            ? '• Local Storage'
+                            : '• Cloud Sync Ready',
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w600,
+                          color: fileSize > 50 * 1024 * 1024
+                              ? const Color(0xFFD97706)
+                              : const Color(0xFF16A34A),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
