@@ -86,6 +86,7 @@ class _EditorScreenState extends State<EditorScreen>
   // Slide Orientation State (Default: Vertical)
   PageSlideOrientation _slideOrientation = PageSlideOrientation.vertical;
   bool _isHeaderVisible = true;
+  bool _isToolbarVisible = true;
 
   // Per-Page Annotation Storage Maps
   final Map<int, List<Stroke>> _perPageStrokes = {};
@@ -1343,37 +1344,57 @@ class _EditorScreenState extends State<EditorScreen>
               bottom: 24,
               left: 0,
               right: 0,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // 1. Floating Eraser Options Bubble (Floats on top of the icons)
-                  if (_activeTool == AnnotationTool.eraser &&
-                      _isEraserMenuExpanded) ...[
-                    _buildFloatingEraserOptionsBubble(),
-                    const SizedBox(height: 8),
-                  ],
+              child: AnimatedSlide(
+                duration: const Duration(milliseconds: 260),
+                curve: Curves.easeOutCubic,
+                offset: _isToolbarVisible ? Offset.zero : const Offset(0, 1.3),
+                child: AnimatedOpacity(
+                  duration: const Duration(milliseconds: 200),
+                  opacity: _isToolbarVisible ? 1.0 : 0.0,
+                  child: IgnorePointer(
+                    ignoring: !_isToolbarVisible,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // 1. Floating Eraser Options Bubble (Floats on top of the icons)
+                        if (_activeTool == AnnotationTool.eraser &&
+                            _isEraserMenuExpanded) ...[
+                          _buildFloatingEraserOptionsBubble(),
+                          const SizedBox(height: 8),
+                        ],
 
-                  // 2. Floating Thickness Options Bubble (Floats on top of Highlighter/Pen icons)
-                  if ((_activeTool == AnnotationTool.highlighter ||
-                          _activeTool == AnnotationTool.straightLine) &&
-                      _isThicknessMenuExpanded) ...[
-                    _buildFloatingThicknessOptionsBubble(),
-                    const SizedBox(height: 8),
-                  ],
+                        // 2. Floating Thickness Options Bubble (Floats on top of Highlighter/Pen icons)
+                        if ((_activeTool == AnnotationTool.highlighter ||
+                                _activeTool == AnnotationTool.straightLine) &&
+                            _isThicknessMenuExpanded) ...[
+                          _buildFloatingThicknessOptionsBubble(),
+                          const SizedBox(height: 8),
+                        ],
 
-                  // 3. Secondary Color/Stroke Palette (with Ballpen, Highlighter, Eraser)
-                  if (_activeTool == AnnotationTool.highlighter ||
-                      _activeTool == AnnotationTool.straightLine ||
-                      _activeTool == AnnotationTool.eraser)
-                    _buildColorPickerSubBar(),
+                        // 3. Secondary Color/Stroke Palette (with Ballpen, Highlighter, Eraser)
+                        if (_activeTool == AnnotationTool.highlighter ||
+                            _activeTool == AnnotationTool.straightLine ||
+                            _activeTool == AnnotationTool.eraser)
+                          _buildColorPickerSubBar(),
 
-                  const SizedBox(height: 10),
+                        const SizedBox(height: 10),
 
-                  // 4. Main Floating Annotation Toolbar
-                  _buildFloatingBottomToolbar(),
-                ],
+                        // 4. Main Floating Annotation Toolbar
+                        _buildFloatingBottomToolbar(),
+                      ],
+                    ),
+                  ),
+                ),
               ),
             ),
+
+            // Floating Mini Tools Unhide Pill (when bottom toolbar is collapsed)
+            if (!_isToolbarVisible)
+              Positioned(
+                bottom: 24,
+                right: 16,
+                child: _buildFloatingUnhideToolbarButton(),
+              ),
           ],
         ),
       ),
@@ -2327,135 +2348,291 @@ class _EditorScreenState extends State<EditorScreen>
   /// Floating Annotation Toolbar at bottom
   Widget _buildFloatingBottomToolbar() {
     return Center(
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(36),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-            decoration: BoxDecoration(
-              color: AppTheme.surfaceWhite.withValues(alpha: 0.92),
-              borderRadius: BorderRadius.circular(36),
-              border: Border.all(
-                color: Colors.white.withValues(alpha: 0.8),
-                width: 1.5,
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 8),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(36),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
+              decoration: BoxDecoration(
+                color: AppTheme.surfaceWhite.withValues(alpha: 0.94),
+                borderRadius: BorderRadius.circular(36),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.8),
+                  width: 1.5,
+                ),
+                boxShadow: AppTheme.floatingToolbarShadow,
               ),
-              boxShadow: AppTheme.floatingToolbarShadow,
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                physics: const BouncingScrollPhysics(),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Scroll / Pan Mode (Hand)
+                    _buildToolButton(
+                      tool: AnnotationTool.none,
+                      icon: CupertinoIcons.hand_draw,
+                      label: 'Navigate',
+                      tooltip: 'Pan & Pinch Zoom Document',
+                    ),
+
+                    const SizedBox(width: 2),
+                    _buildVerticalDivider(),
+                    const SizedBox(width: 2),
+
+                    // 1. Freehand Pen / Highlighter
+                    _buildToolButton(
+                      tool: AnnotationTool.highlighter,
+                      icon: _penSubTool == PenSubTool.ballpen
+                          ? CupertinoIcons.pen
+                          : CupertinoIcons.pencil_outline,
+                      label: _penSubTool == PenSubTool.ballpen
+                          ? 'Ballpen'
+                          : 'Highlighter',
+                      tooltip: _penSubTool == PenSubTool.ballpen
+                          ? 'Freehand Ballpen Drawing'
+                          : 'Freehand Highlighter',
+                    ),
+
+                    const SizedBox(width: 2),
+
+                    // 2. Straight Line
+                    _buildToolButton(
+                      tool: AnnotationTool.straightLine,
+                      icon: CupertinoIcons.line_horizontal_3_decrease,
+                      label: 'Line',
+                      tooltip: _penSubTool == PenSubTool.ballpen
+                          ? 'Auto-Straightened Ballpen Line'
+                          : 'Auto-Straightened Highlighter Line',
+                    ),
+
+                    const SizedBox(width: 2),
+                    _buildVerticalDivider(),
+                    const SizedBox(width: 2),
+
+                    // 3. Add Image (Gallery Picker + Resize)
+                    _buildToolButton(
+                      tool: AnnotationTool.addImage,
+                      icon: CupertinoIcons.photo,
+                      label: 'Image',
+                      tooltip: 'Insert Image / Screenshot',
+                    ),
+
+                    const SizedBox(width: 2),
+                    _buildVerticalDivider(),
+                    const SizedBox(width: 2),
+
+                    // Screen Orientation Switcher (Portrait 📱 / Landscape 🔄)
+                    Tooltip(
+                      message: MediaQuery.of(context).orientation ==
+                              Orientation.landscape
+                          ? 'Switch to Portrait Mode (📱)'
+                          : 'Switch to Landscape Mode (🔄)',
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(28),
+                          onTap: _toggleScreenOrientation,
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 6,
+                            ),
+                            child: Icon(
+                              MediaQuery.of(context).orientation ==
+                                      Orientation.landscape
+                                  ? CupertinoIcons.device_phone_portrait
+                                  : CupertinoIcons.device_phone_landscape,
+                              size: 18,
+                              color: AppTheme.textSecondary,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    // Multi-page Slide Direction Switcher (Positioned on the outer edge)
+                    if (_pageCount > 1) ...[
+                      const SizedBox(width: 2),
+                      Tooltip(
+                        message: _slideOrientation ==
+                                PageSlideOrientation.vertical
+                            ? 'Vertical Scroll Mode (Tap for Horizontal ↔)'
+                            : 'Horizontal Slide Mode (Tap for Vertical ↕)',
+                        child: Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(28),
+                            onTap: _toggleSlideOrientation,
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 6,
+                              ),
+                              child: Icon(
+                                _slideOrientation ==
+                                        PageSlideOrientation.vertical
+                                    ? CupertinoIcons.arrow_up_down
+                                    : CupertinoIcons.arrow_left_right,
+                                size: 18,
+                                color: AppTheme.textSecondary,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+
+                    const SizedBox(width: 2),
+                    _buildVerticalDivider(),
+                    const SizedBox(width: 2),
+
+                    // Hide / Collapse Toolbar Button (Maximize Canvas Space)
+                    Tooltip(
+                      message: 'Hide Tools (Maximize Canvas Space)',
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(28),
+                          onTap: () {
+                            HapticFeedback.selectionClick();
+                            setState(() => _isToolbarVisible = false);
+                          },
+                          child: const Padding(
+                            padding: EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 6,
+                            ),
+                            child: Icon(
+                              CupertinoIcons.chevron_down,
+                              size: 16,
+                              color: AppTheme.textSecondary,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Scroll / Pan Mode (Hand)
-                _buildToolButton(
-                  tool: AnnotationTool.none,
-                  icon: CupertinoIcons.hand_draw,
-                  label: 'Navigate',
-                  tooltip: 'Pan & Pinch Zoom Document',
-                ),
+          ),
+        ),
+      ),
+    );
+  }
 
-                const SizedBox(width: 4),
-                _buildVerticalDivider(),
-                const SizedBox(width: 4),
+  /// Floating Mini Tools Unhide Pill (displayed when bottom toolbar is collapsed)
+  Widget _buildFloatingUnhideToolbarButton() {
+    IconData activeIcon = CupertinoIcons.hand_draw;
+    String activeName = 'Navigate';
+    if (_activeTool == AnnotationTool.highlighter) {
+      activeIcon = _penSubTool == PenSubTool.ballpen
+          ? CupertinoIcons.pen
+          : CupertinoIcons.pencil_outline;
+      activeName =
+          _penSubTool == PenSubTool.ballpen ? 'Ballpen' : 'Highlighter';
+    } else if (_activeTool == AnnotationTool.straightLine) {
+      activeIcon = CupertinoIcons.line_horizontal_3_decrease;
+      activeName = 'Line';
+    } else if (_activeTool == AnnotationTool.eraser) {
+      activeIcon = CupertinoIcons.scribble;
+      activeName = 'Eraser';
+    } else if (_activeTool == AnnotationTool.addImage) {
+      activeIcon = CupertinoIcons.photo;
+      activeName = 'Image';
+    }
 
-                // 1. Freehand Pen / Highlighter
-                _buildToolButton(
-                  tool: AnnotationTool.highlighter,
-                  icon: _penSubTool == PenSubTool.ballpen
-                      ? CupertinoIcons.pen
-                      : CupertinoIcons.pencil_outline,
-                  label: _penSubTool == PenSubTool.ballpen
-                      ? 'Ballpen'
-                      : 'Highlighter',
-                  tooltip: _penSubTool == PenSubTool.ballpen
-                      ? 'Freehand Ballpen Drawing'
-                      : 'Freehand Highlighter',
-                ),
+    final isDrawing = _activeTool == AnnotationTool.highlighter ||
+        _activeTool == AnnotationTool.straightLine;
 
-                const SizedBox(width: 4),
-
-                // 2. Straight Line
-                _buildToolButton(
-                  tool: AnnotationTool.straightLine,
-                  icon: CupertinoIcons.line_horizontal_3_decrease,
-                  label: 'Straight Line',
-                  tooltip: _penSubTool == PenSubTool.ballpen
-                      ? 'Auto-Straightened Ballpen Line'
-                      : 'Auto-Straightened Highlighter Line',
-                ),
-
-                const SizedBox(width: 4),
-                _buildVerticalDivider(),
-                const SizedBox(width: 4),
-
-                // 3. Add Image (Gallery Picker + Resize)
-                _buildToolButton(
-                  tool: AnnotationTool.addImage,
-                  icon: CupertinoIcons.photo,
-                  label: 'Add Image',
-                  tooltip: 'Insert Image / Screenshot',
-                ),
-
-                const SizedBox(width: 4),
-                _buildVerticalDivider(),
-                const SizedBox(width: 2),
-
-                // Screen Orientation Switcher (Portrait 📱 / Landscape 🔄)
-                Tooltip(
-                  message: MediaQuery.of(context).orientation == Orientation.landscape
-                      ? 'Switch to Portrait Mode (📱)'
-                      : 'Switch to Landscape Mode (🔄)',
-                  child: Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(28),
-                      onTap: _toggleScreenOrientation,
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 8,
-                        ),
-                        child: Icon(
-                          MediaQuery.of(context).orientation == Orientation.landscape
-                              ? CupertinoIcons.device_phone_portrait
-                              : CupertinoIcons.device_phone_landscape,
-                          size: 20,
-                          color: AppTheme.textSecondary,
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(24),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+        child: Container(
+          decoration: BoxDecoration(
+            color: AppTheme.surfaceWhite.withValues(alpha: 0.92),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.8),
+              width: 1.5,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF1E1B4B).withValues(alpha: 0.14),
+                blurRadius: 14,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(24),
+              onTap: () {
+                HapticFeedback.selectionClick();
+                setState(() => _isToolbarVisible = true);
+              },
+              child: Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (isDrawing) ...[
+                      Container(
+                        width: 11,
+                        height: 11,
+                        decoration: BoxDecoration(
+                          color: _selectedColor,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white, width: 1.5),
                         ),
                       ),
+                      const SizedBox(width: 6),
+                    ],
+                    Icon(
+                      activeIcon,
+                      color: AppTheme.primaryPurple,
+                      size: 16,
                     ),
-                  ),
-                ),
-
-                // Multi-page Slide Direction Switcher (Positioned on the outer edge)
-                if (_pageCount > 1) ...[
-                  const SizedBox(width: 2),
-                  Tooltip(
-                    message: _slideOrientation == PageSlideOrientation.vertical
-                        ? 'Vertical Scroll Mode (Tap for Horizontal ↔)'
-                        : 'Horizontal Slide Mode (Tap for Vertical ↕)',
-                    child: Material(
-                      color: Colors.transparent,
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(28),
-                        onTap: _toggleSlideOrientation,
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 8,
-                          ),
-                          child: Icon(
-                            _slideOrientation == PageSlideOrientation.vertical
-                                ? CupertinoIcons.arrow_up_down
-                                : CupertinoIcons.arrow_left_right,
-                            size: 20,
-                            color: AppTheme.textSecondary,
-                          ),
-                        ),
+                    const SizedBox(width: 6),
+                    Text(
+                      activeName,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.primaryPurpleDark,
                       ),
                     ),
-                  ),
-                ],
-              ],
+                    const SizedBox(width: 8),
+                    Container(
+                      width: 1,
+                      height: 14,
+                      color: AppTheme.dividerColor,
+                    ),
+                    const SizedBox(width: 8),
+                    const Icon(
+                      CupertinoIcons.chevron_up,
+                      color: AppTheme.primaryPurple,
+                      size: 14,
+                    ),
+                    const SizedBox(width: 3),
+                    const Text(
+                      'Tools',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.primaryPurpleDark,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
         ),
@@ -2484,8 +2661,8 @@ class _EditorScreenState extends State<EditorScreen>
             duration: const Duration(milliseconds: 220),
             curve: Curves.easeOutCubic,
             padding: EdgeInsets.symmetric(
-              horizontal: isSelected ? 14 : 10,
-              vertical: 8,
+              horizontal: isSelected ? 10 : 7,
+              vertical: 6,
             ),
             decoration: BoxDecoration(
               gradient: isSelected
@@ -2512,15 +2689,15 @@ class _EditorScreenState extends State<EditorScreen>
               children: [
                 Icon(
                   icon,
-                  size: 20,
+                  size: 18,
                   color: isSelected ? Colors.white : AppTheme.textSecondary,
                 ),
                 if (isSelected) ...[
-                  const SizedBox(width: 6),
+                  const SizedBox(width: 4),
                   Text(
                     label,
                     style: const TextStyle(
-                      fontSize: 12,
+                      fontSize: 11.5,
                       fontWeight: FontWeight.w700,
                       color: Colors.white,
                       letterSpacing: -0.1,
@@ -2581,148 +2758,152 @@ class _EditorScreenState extends State<EditorScreen>
               ),
             ],
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Tool Name & Current Thickness Live Badge
-              Padding(
-                padding: const EdgeInsets.only(left: 3, right: 4),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      isPen
-                          ? CupertinoIcons.pen
-                          : CupertinoIcons.pencil_outline,
-                      size: 13,
-                      color: AppTheme.primaryPurple,
-                    ),
-                    const SizedBox(width: 3.5),
-                    Text(
-                      '${activeWidth % 1 == 0 ? activeWidth.toInt() : activeWidth}px',
-                      style: const TextStyle(
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w800,
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            physics: const BouncingScrollPhysics(),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Tool Name & Current Thickness Live Badge
+                Padding(
+                  padding: const EdgeInsets.only(left: 3, right: 4),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        isPen
+                            ? CupertinoIcons.pen
+                            : CupertinoIcons.pencil_outline,
+                        size: 13,
                         color: AppTheme.primaryPurple,
                       ),
-                    ),
-                  ],
+                      const SizedBox(width: 3.5),
+                      Text(
+                        '${activeWidth % 1 == 0 ? activeWidth.toInt() : activeWidth}px',
+                        style: const TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w800,
+                          color: AppTheme.primaryPurple,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
 
-              _buildVerticalDivider(),
-              const SizedBox(width: 3),
+                _buildVerticalDivider(),
+                const SizedBox(width: 3),
 
-              // Thickness Preset Pills
-              ...thicknessPresets.map((preset) {
-                final double width = preset['width'] as double;
-                final String label = preset['label'] as String;
-                final isSelected = (activeWidth - width).abs() < 1.0;
+                // Thickness Preset Pills
+                ...thicknessPresets.map((preset) {
+                  final double width = preset['width'] as double;
+                  final String label = preset['label'] as String;
+                  final isSelected = (activeWidth - width).abs() < 1.0;
 
-                return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 1.5),
-                  child: Tooltip(
-                    message:
-                        '$label (${width % 1 == 0 ? width.toInt() : width}px)',
-                    child: GestureDetector(
-                      behavior: HitTestBehavior.opaque,
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 1.5),
+                    child: Tooltip(
+                      message:
+                          '$label (${width % 1 == 0 ? width.toInt() : width}px)',
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () {
+                          HapticFeedback.selectionClick();
+                          setState(() {
+                            if (isPen) {
+                              _ballpenWidth = width;
+                            } else {
+                              _highlighterWidth = width;
+                            }
+                          });
+                        },
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 180),
+                          curve: Curves.easeOutCubic,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 7.5, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: isSelected
+                                ? AppTheme.primaryPurple
+                                : const Color(0xFFF3F4F6),
+                            borderRadius: BorderRadius.circular(12),
+                            boxShadow: isSelected
+                                ? [
+                                    BoxShadow(
+                                      color: AppTheme.primaryPurple
+                                          .withValues(alpha: 0.35),
+                                      blurRadius: 6,
+                                      offset: const Offset(0, 2),
+                                    ),
+                                  ]
+                                : null,
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              // Visual Dot
+                              Container(
+                                width: (width / (isPen ? 1.5 : 3.5))
+                                    .clamp(3.0, 7.5),
+                                height: (width / (isPen ? 1.5 : 3.5))
+                                    .clamp(3.0, 7.5),
+                                decoration: BoxDecoration(
+                                  color: isSelected
+                                      ? Colors.white
+                                      : AppTheme.textPrimary,
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                              const SizedBox(width: 3.5),
+                              Text(
+                                label,
+                                style: TextStyle(
+                                  fontSize: 10.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: isSelected
+                                      ? Colors.white
+                                      : AppTheme.textPrimary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                }),
+
+                const SizedBox(width: 3),
+                _buildVerticalDivider(),
+                const SizedBox(width: 2),
+
+                // Collapse / Close Button
+                Tooltip(
+                  message: 'Collapse Thickness Options',
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(14),
                       onTap: () {
-                        HapticFeedback.selectionClick();
-                        setState(() {
-                          if (isPen) {
-                            _ballpenWidth = width;
-                          } else {
-                            _highlighterWidth = width;
-                          }
-                        });
+                        HapticFeedback.lightImpact();
+                        setState(() => _isThicknessMenuExpanded = false);
                       },
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 180),
-                        curve: Curves.easeOutCubic,
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 7.5, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: isSelected
-                              ? AppTheme.primaryPurple
-                              : const Color(0xFFF3F4F6),
-                          borderRadius: BorderRadius.circular(12),
-                          boxShadow: isSelected
-                              ? [
-                                  BoxShadow(
-                                    color: AppTheme.primaryPurple
-                                        .withValues(alpha: 0.35),
-                                    blurRadius: 6,
-                                    offset: const Offset(0, 2),
-                                  ),
-                                ]
-                              : null,
+                      child: Container(
+                        padding: const EdgeInsets.all(4.5),
+                        decoration: const BoxDecoration(
+                          color: Color(0xFFF3F4F6),
+                          shape: BoxShape.circle,
                         ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            // Visual Dot
-                            Container(
-                              width: (width / (isPen ? 1.5 : 3.5))
-                                  .clamp(3.0, 7.5),
-                              height: (width / (isPen ? 1.5 : 3.5))
-                                  .clamp(3.0, 7.5),
-                              decoration: BoxDecoration(
-                                color: isSelected
-                                    ? Colors.white
-                                    : AppTheme.textPrimary,
-                                shape: BoxShape.circle,
-                              ),
-                            ),
-                            const SizedBox(width: 3.5),
-                            Text(
-                              label,
-                              style: TextStyle(
-                                fontSize: 10.5,
-                                fontWeight: FontWeight.w700,
-                                color: isSelected
-                                    ? Colors.white
-                                    : AppTheme.textPrimary,
-                              ),
-                            ),
-                          ],
+                        child: const Icon(
+                          CupertinoIcons.chevron_down,
+                          size: 12,
+                          color: AppTheme.textSecondary,
                         ),
-                      ),
-                    ),
-                  ),
-                );
-              }),
-
-              const SizedBox(width: 3),
-              _buildVerticalDivider(),
-              const SizedBox(width: 2),
-
-              // Collapse / Close Button
-              Tooltip(
-                message: 'Collapse Thickness Options',
-                child: Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(14),
-                    onTap: () {
-                      HapticFeedback.lightImpact();
-                      setState(() => _isThicknessMenuExpanded = false);
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.all(4.5),
-                      decoration: const BoxDecoration(
-                        color: Color(0xFFF3F4F6),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        CupertinoIcons.chevron_down,
-                        size: 12,
-                        color: AppTheme.textSecondary,
                       ),
                     ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -2757,58 +2938,62 @@ class _EditorScreenState extends State<EditorScreen>
               ),
             ],
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // 1. Draw Erase (Precision carving)
-              _buildEraserModePill(
-                mode: EraserMode.drawErase,
-                icon: CupertinoIcons.scribble,
-                label: 'Draw Erase',
-                tooltip: 'Precision: Erase only what you draw across',
-              ),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            physics: const BouncingScrollPhysics(),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // 1. Draw Erase (Precision carving)
+                _buildEraserModePill(
+                  mode: EraserMode.drawErase,
+                  icon: CupertinoIcons.scribble,
+                  label: 'Draw Erase',
+                  tooltip: 'Precision: Erase only what you draw across',
+                ),
 
-              const SizedBox(width: 4),
+                const SizedBox(width: 4),
 
-              // 2. Wipe Erase (Whole line wiping)
-              _buildEraserModePill(
-                mode: EraserMode.wipeStroke,
-                icon: CupertinoIcons.trash_fill,
-                label: 'Wipe Erase',
-                tooltip: 'Wipe: Erase whole line on contact',
-              ),
+                // 2. Wipe Erase (Whole line wiping)
+                _buildEraserModePill(
+                  mode: EraserMode.wipeStroke,
+                  icon: CupertinoIcons.trash_fill,
+                  label: 'Wipe Erase',
+                  tooltip: 'Wipe: Erase whole line on contact',
+                ),
 
-              const SizedBox(width: 6),
-              _buildVerticalDivider(),
-              const SizedBox(width: 3),
+                const SizedBox(width: 6),
+                _buildVerticalDivider(),
+                const SizedBox(width: 3),
 
-              // 3. Collapse / Close Button
-              Tooltip(
-                message: 'Collapse Options',
-                child: Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(14),
-                    onTap: () {
-                      HapticFeedback.lightImpact();
-                      setState(() => _isEraserMenuExpanded = false);
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.all(5),
-                      decoration: const BoxDecoration(
-                        color: Color(0xFFF3F4F6),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        CupertinoIcons.chevron_down,
-                        size: 13,
-                        color: AppTheme.textSecondary,
+                // 3. Collapse / Close Button
+                Tooltip(
+                  message: 'Collapse Options',
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(14),
+                      onTap: () {
+                        HapticFeedback.lightImpact();
+                        setState(() => _isEraserMenuExpanded = false);
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.all(5),
+                        decoration: const BoxDecoration(
+                          color: Color(0xFFF3F4F6),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          CupertinoIcons.chevron_down,
+                          size: 13,
+                          color: AppTheme.textSecondary,
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -2994,175 +3179,180 @@ class _EditorScreenState extends State<EditorScreen>
             border: Border.all(color: AppTheme.dividerColor),
             boxShadow: AppTheme.softShadow,
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Color Dots
-              ...activeColorDots.map((color) {
-                final isSelected =
-                    (_selectedColor.toARGB32() & 0x00FFFFFF) ==
-                            (color.toARGB32() & 0x00FFFFFF) &&
-                        _activeTool != AnnotationTool.eraser;
-                return GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      _selectedColor = color;
-                      if (_activeTool == AnnotationTool.eraser) {
-                        _activeTool = _previousDrawingTool;
-                        _isThicknessMenuExpanded = true;
-                      }
-                    });
-                  },
-                  child: Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 3.5),
-                    width: 25,
-                    height: 25,
-                    decoration: BoxDecoration(
-                      color: color.withValues(alpha: 1.0),
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: isSelected ? AppTheme.textPrimary : Colors.white,
-                        width: isSelected ? 2.5 : 1.5,
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.08),
-                          blurRadius: 4,
-                          offset: const Offset(0, 2),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            physics: const BouncingScrollPhysics(),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Color Dots
+                ...activeColorDots.map((color) {
+                  final isSelected =
+                      (_selectedColor.toARGB32() & 0x00FFFFFF) ==
+                              (color.toARGB32() & 0x00FFFFFF) &&
+                          _activeTool != AnnotationTool.eraser;
+                  return GestureDetector(
+                    onTap: () {
+                      setState(() {
+                        _selectedColor = color;
+                        if (_activeTool == AnnotationTool.eraser) {
+                          _activeTool = _previousDrawingTool;
+                          _isThicknessMenuExpanded = true;
+                        }
+                      });
+                    },
+                    child: Container(
+                      margin: const EdgeInsets.symmetric(horizontal: 3.5),
+                      width: 25,
+                      height: 25,
+                      decoration: BoxDecoration(
+                        color: color.withValues(alpha: 1.0),
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color:
+                              isSelected ? AppTheme.textPrimary : Colors.white,
+                          width: isSelected ? 2.5 : 1.5,
                         ),
-                      ],
-                    ),
-                  ),
-                );
-              }),
-
-              // Custom Rainbow Color Wheel Button
-              Tooltip(
-                message: 'Custom Color Palette',
-                child: GestureDetector(
-                  onTap: _openCustomColorPicker,
-                  child: Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 3.5),
-                    width: 25,
-                    height: 25,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      gradient: const SweepGradient(
-                        colors: [
-                          Color(0xFFEF4444),
-                          Color(0xFFF59E0B),
-                          Color(0xFF10B981),
-                          Color(0xFF06B6D4),
-                          Color(0xFF6366F1),
-                          Color(0xFFEC4899),
-                          Color(0xFFEF4444),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.08),
+                            blurRadius: 4,
+                            offset: const Offset(0, 2),
+                          ),
                         ],
                       ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.1),
-                          blurRadius: 4,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
                     ),
-                    child: Center(
-                      child: Container(
-                        width: 13,
-                        height: 13,
-                        decoration: const BoxDecoration(
-                          color: Colors.white,
-                          shape: BoxShape.circle,
+                  );
+                }),
+
+                // Custom Rainbow Color Wheel Button
+                Tooltip(
+                  message: 'Custom Color Palette',
+                  child: GestureDetector(
+                    onTap: _openCustomColorPicker,
+                    child: Container(
+                      margin: const EdgeInsets.symmetric(horizontal: 3.5),
+                      width: 25,
+                      height: 25,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: const SweepGradient(
+                          colors: [
+                            Color(0xFFEF4444),
+                            Color(0xFFF59E0B),
+                            Color(0xFF10B981),
+                            Color(0xFF06B6D4),
+                            Color(0xFF6366F1),
+                            Color(0xFFEC4899),
+                            Color(0xFFEF4444),
+                          ],
                         ),
-                        child: const Icon(
-                          CupertinoIcons.plus,
-                          size: 9,
-                          color: AppTheme.textPrimary,
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.1),
+                            blurRadius: 4,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: Center(
+                        child: Container(
+                          width: 13,
+                          height: 13,
+                          decoration: const BoxDecoration(
+                            color: Colors.white,
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            CupertinoIcons.plus,
+                            size: 9,
+                            color: AppTheme.textPrimary,
+                          ),
                         ),
                       ),
                     ),
                   ),
                 ),
-              ),
 
-              const SizedBox(width: 5),
-              _buildVerticalDivider(),
-              const SizedBox(width: 5),
+                const SizedBox(width: 5),
+                _buildVerticalDivider(),
+                const SizedBox(width: 5),
 
-              // 1. Ballpen Icon (Independent Ballpen tool)
-              _buildSubBarPresetIcon(
-                icon: CupertinoIcons.pen,
-                tooltip: _activeTool == AnnotationTool.straightLine
-                    ? 'Straight Ballpen (Fine Pen)'
-                    : 'Ballpen (Fine Pen Stroke)',
-                isSelected: _activeTool != AnnotationTool.eraser &&
-                    _penSubTool == PenSubTool.ballpen,
-                onTap: () {
-                  setState(() {
-                    if (_activeTool == AnnotationTool.eraser) {
-                      _activeTool = _previousDrawingTool;
-                      _penSubTool = PenSubTool.ballpen;
-                      _isThicknessMenuExpanded = true;
-                    } else if (_penSubTool == PenSubTool.ballpen) {
-                      _isThicknessMenuExpanded = !_isThicknessMenuExpanded;
-                    } else {
-                      _penSubTool = PenSubTool.ballpen;
-                      _isThicknessMenuExpanded = true;
-                    }
-                  });
-                },
-              ),
-
-              // 2. Highlighter Icon (Independent Highlighter tool)
-              _buildSubBarPresetIcon(
-                icon: CupertinoIcons.pencil_outline,
-                tooltip: _activeTool == AnnotationTool.straightLine
-                    ? 'Straight Highlighter (Marker)'
-                    : 'Highlighter (Marker Stroke)',
-                isSelected: _activeTool != AnnotationTool.eraser &&
-                    _penSubTool == PenSubTool.highlighter,
-                onTap: () {
-                  setState(() {
-                    if (_activeTool == AnnotationTool.eraser) {
-                      _activeTool = _previousDrawingTool;
-                      _penSubTool = PenSubTool.highlighter;
-                      _isThicknessMenuExpanded = true;
-                    } else if (_penSubTool == PenSubTool.highlighter) {
-                      _isThicknessMenuExpanded = !_isThicknessMenuExpanded;
-                    } else {
-                      _penSubTool = PenSubTool.highlighter;
-                      _isThicknessMenuExpanded = true;
-                    }
-                  });
-                },
-              ),
-
-              // 3. Eraser Icon (Toggles / Expands floating options above)
-              _buildSubBarPresetIcon(
-                icon: CupertinoIcons.bandage,
-                tooltip: _activeTool == AnnotationTool.eraser
-                    ? (_isEraserMenuExpanded
-                        ? 'Collapse Eraser Options'
-                        : 'Expand Eraser Options')
-                    : 'Eraser (Open Options)',
-                isSelected: _activeTool == AnnotationTool.eraser,
-                selectedColor: const Color(0xFFEF4444),
-                onTap: () {
-                  setState(() {
-                    if (_activeTool == AnnotationTool.eraser) {
-                      _isEraserMenuExpanded = !_isEraserMenuExpanded;
-                    } else {
-                      if (_activeTool == AnnotationTool.highlighter ||
-                          _activeTool == AnnotationTool.straightLine) {
-                        _previousDrawingTool = _activeTool;
+                // 1. Ballpen Icon (Independent Ballpen tool)
+                _buildSubBarPresetIcon(
+                  icon: CupertinoIcons.pen,
+                  tooltip: _activeTool == AnnotationTool.straightLine
+                      ? 'Straight Ballpen (Fine Pen)'
+                      : 'Ballpen (Fine Pen Stroke)',
+                  isSelected: _activeTool != AnnotationTool.eraser &&
+                      _penSubTool == PenSubTool.ballpen,
+                  onTap: () {
+                    setState(() {
+                      if (_activeTool == AnnotationTool.eraser) {
+                        _activeTool = _previousDrawingTool;
+                        _penSubTool = PenSubTool.ballpen;
+                        _isThicknessMenuExpanded = true;
+                      } else if (_penSubTool == PenSubTool.ballpen) {
+                        _isThicknessMenuExpanded = !_isThicknessMenuExpanded;
+                      } else {
+                        _penSubTool = PenSubTool.ballpen;
+                        _isThicknessMenuExpanded = true;
                       }
-                      _activeTool = AnnotationTool.eraser;
-                      _isEraserMenuExpanded = true;
-                    }
-                  });
-                },
-              ),
-            ],
+                    });
+                  },
+                ),
+
+                // 2. Highlighter Icon (Independent Highlighter tool)
+                _buildSubBarPresetIcon(
+                  icon: CupertinoIcons.pencil_outline,
+                  tooltip: _activeTool == AnnotationTool.straightLine
+                      ? 'Straight Highlighter (Marker)'
+                      : 'Highlighter (Marker Stroke)',
+                  isSelected: _activeTool != AnnotationTool.eraser &&
+                      _penSubTool == PenSubTool.highlighter,
+                  onTap: () {
+                    setState(() {
+                      if (_activeTool == AnnotationTool.eraser) {
+                        _activeTool = _previousDrawingTool;
+                        _penSubTool = PenSubTool.highlighter;
+                        _isThicknessMenuExpanded = true;
+                      } else if (_penSubTool == PenSubTool.highlighter) {
+                        _isThicknessMenuExpanded = !_isThicknessMenuExpanded;
+                      } else {
+                        _penSubTool = PenSubTool.highlighter;
+                        _isThicknessMenuExpanded = true;
+                      }
+                    });
+                  },
+                ),
+
+                // 3. Eraser Icon (Toggles / Expands floating options above)
+                _buildSubBarPresetIcon(
+                  icon: CupertinoIcons.bandage,
+                  tooltip: _activeTool == AnnotationTool.eraser
+                      ? (_isEraserMenuExpanded
+                          ? 'Collapse Eraser Options'
+                          : 'Expand Eraser Options')
+                      : 'Eraser (Open Options)',
+                  isSelected: _activeTool == AnnotationTool.eraser,
+                  selectedColor: const Color(0xFFEF4444),
+                  onTap: () {
+                    setState(() {
+                      if (_activeTool == AnnotationTool.eraser) {
+                        _isEraserMenuExpanded = !_isEraserMenuExpanded;
+                      } else {
+                        if (_activeTool == AnnotationTool.highlighter ||
+                            _activeTool == AnnotationTool.straightLine) {
+                          _previousDrawingTool = _activeTool;
+                        }
+                        _activeTool = AnnotationTool.eraser;
+                        _isEraserMenuExpanded = true;
+                      }
+                    });
+                  },
+                ),
+              ],
+            ),
           ),
         ),
       ),
