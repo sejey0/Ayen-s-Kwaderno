@@ -16,11 +16,11 @@ findstr /C:"org.gradle.daemon" "%GRADLE_PROP%" >nul || echo org.gradle.daemon=tr
 findstr /C:"org.gradle.parallel" "%GRADLE_PROP%" >nul || echo org.gradle.parallel=true>>"%GRADLE_PROP%"
 findstr /C:"org.gradle.configuration-cache" "%GRADLE_PROP%" >nul || echo org.gradle.configuration-cache=false>>"%GRADLE_PROP%"
 findstr /C:"org.gradle.caching" "%GRADLE_PROP%" >nul || echo org.gradle.caching=true>>"%GRADLE_PROP%"
-findstr /C:"org.gradle.jvmargs" "%GRADLE_PROP%" >nul || echo org.gradle.jvmargs=-Xmx2560m -XX:+UseParallelGC -XX:MaxMetaspaceSize=512m>>"%GRADLE_PROP%"
+findstr /C:"org.gradle.jvmargs" "%GRADLE_PROP%" >nul || echo org.gradle.jvmargs=-Xmx4g -XX:+UseG1GC -XX:MaxMetaspaceSize=512m -XX:ReservedCodeCacheSize=256m -XX:+HeapDumpOnOutOfMemoryError>>"%GRADLE_PROP%"
 findstr /C:"android.enableJetifier" "%GRADLE_PROP%" >nul || echo android.enableJetifier=false>>"%GRADLE_PROP%"
 findstr /C:"android.newDsl" "%GRADLE_PROP%" >nul || echo android.newDsl=false>>"%GRADLE_PROP%"
 findstr /C:"android.builtInKotlin" "%GRADLE_PROP%" >nul || echo android.builtInKotlin=false>>"%GRADLE_PROP%"
-echo [OK] Gradle optimized for 8GB RAM (heap capped at 2.5GB).
+echo [OK] Gradle optimized (heap 4GB, G1GC, caching enabled).
 goto GRADLE_DONE
 
 :SKIP_GRADLE

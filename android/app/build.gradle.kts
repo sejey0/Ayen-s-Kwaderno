@@ -33,7 +33,18 @@ android {
     buildTypes {
         release {
             signingConfig = signingConfigs.getByName("debug")
+
+            // Disable PNG compression during release builds — saves minutes on
+            // asset-heavy projects.  Images should be pre-optimized or use WebP.
+            isCrunchPngs = false
         }
+    }
+
+    // Skip lint during assembleRelease; run it separately via `flutter analyze`
+    // or `./gradlew lint` when needed.
+    lint {
+        checkReleaseBuilds = false
+        abortOnError = false
     }
 }
 
