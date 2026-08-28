@@ -956,85 +956,52 @@ class _HomeScreenState extends State<HomeScreen> {
                             ],
                           ],
                         ),
-                        Row(
-                          children: [
-                            if (_documents.isNotEmpty) ...[
-                              GestureDetector(
-                                onTap: _isSelectionMode
-                                    ? _exitSelectionMode
-                                    : _enterSelectionMode,
-                                child: Container(
-                                  margin: const EdgeInsets.only(right: 8),
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 10, vertical: 5),
-                                  decoration: BoxDecoration(
-                                    color: _isSelectionMode
-                                        ? AppTheme.primaryPurple
-                                        : AppTheme.surfaceWhite,
-                                    borderRadius: BorderRadius.circular(10),
-                                    border: Border.all(
-                                      color: _isSelectionMode
-                                          ? AppTheme.primaryPurple
-                                          : AppTheme.dividerColor,
-                                    ),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(
-                                        _isSelectionMode
-                                            ? CupertinoIcons.xmark
-                                            : CupertinoIcons.checkmark_circle,
-                                        size: 13,
-                                        color: _isSelectionMode
-                                            ? Colors.white
-                                            : AppTheme.primaryPurple,
-                                      ),
-                                      const SizedBox(width: 4),
-                                      Text(
-                                        _isSelectionMode ? 'Cancel' : 'Select',
-                                        style: TextStyle(
-                                          fontSize: 11.5,
-                                          fontWeight: FontWeight.w700,
-                                          color: _isSelectionMode
-                                              ? Colors.white
-                                              : AppTheme.primaryPurple,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
+                        if (_documents.isNotEmpty)
+                          GestureDetector(
+                            onTap: _isSelectionMode
+                                ? _exitSelectionMode
+                                : _enterSelectionMode,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 5),
+                              decoration: BoxDecoration(
+                                color: _isSelectionMode
+                                    ? AppTheme.primaryPurple
+                                    : AppTheme.surfaceWhite,
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(
+                                  color: _isSelectionMode
+                                      ? AppTheme.primaryPurple
+                                      : AppTheme.dividerColor,
                                 ),
                               ),
-                            ],
-                            GestureDetector(
-                              onTap: _pickAndOpenDocument,
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 10, vertical: 5),
-                                decoration: BoxDecoration(
-                                  color: AppTheme.primaryPurpleLight,
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                child: const Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(CupertinoIcons.cloud_upload_fill,
-                                        size: 13, color: AppTheme.primaryPurple),
-                                    SizedBox(width: 4),
-                                    Text(
-                                      'Upload',
-                                      style: TextStyle(
-                                        fontSize: 11.5,
-                                        fontWeight: FontWeight.w700,
-                                        color: AppTheme.primaryPurpleDark,
-                                      ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    _isSelectionMode
+                                        ? CupertinoIcons.xmark
+                                        : CupertinoIcons.checkmark_circle,
+                                    size: 13,
+                                    color: _isSelectionMode
+                                        ? Colors.white
+                                        : AppTheme.primaryPurple,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    _isSelectionMode ? 'Cancel' : 'Select',
+                                    style: TextStyle(
+                                      fontSize: 11.5,
+                                      fontWeight: FontWeight.w700,
+                                      color: _isSelectionMode
+                                          ? Colors.white
+                                          : AppTheme.primaryPurple,
                                     ),
-                                  ],
-                                ),
+                                  ),
+                                ],
                               ),
                             ),
-                          ],
-                        ),
+                          ),
                       ],
                     ),
                   ),
@@ -1095,85 +1062,52 @@ class _HomeScreenState extends State<HomeScreen> {
                             ),
                           ),
                         ),
-                        Row(
-                          children: [
-                            if (_handwritingNotes.isNotEmpty) ...[
-                              GestureDetector(
-                                onTap: _isSelectionMode
-                                    ? _exitSelectionMode
-                                    : _enterSelectionMode,
-                                child: Container(
-                                  margin: const EdgeInsets.only(right: 8),
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 10, vertical: 5),
-                                  decoration: BoxDecoration(
-                                    color: _isSelectionMode
-                                        ? AppTheme.accentPink
-                                        : AppTheme.surfaceWhite,
-                                    borderRadius: BorderRadius.circular(10),
-                                    border: Border.all(
-                                      color: _isSelectionMode
-                                          ? AppTheme.accentPink
-                                          : AppTheme.dividerColor,
-                                    ),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(
-                                        _isSelectionMode
-                                            ? CupertinoIcons.xmark
-                                            : CupertinoIcons.checkmark_circle,
-                                        size: 13,
-                                        color: _isSelectionMode
-                                            ? Colors.white
-                                            : AppTheme.accentPinkDark,
-                                      ),
-                                      const SizedBox(width: 4),
-                                      Text(
-                                        _isSelectionMode ? 'Cancel' : 'Select',
-                                        style: TextStyle(
-                                          fontSize: 11.5,
-                                          fontWeight: FontWeight.w700,
-                                          color: _isSelectionMode
-                                              ? Colors.white
-                                              : AppTheme.accentPinkDark,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
+                        if (_handwritingNotes.isNotEmpty)
+                          GestureDetector(
+                            onTap: _isSelectionMode
+                                ? _exitSelectionMode
+                                : _enterSelectionMode,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 5),
+                              decoration: BoxDecoration(
+                                color: _isSelectionMode
+                                    ? AppTheme.accentPink
+                                    : AppTheme.surfaceWhite,
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(
+                                  color: _isSelectionMode
+                                      ? AppTheme.accentPink
+                                      : AppTheme.dividerColor,
                                 ),
                               ),
-                            ],
-                            GestureDetector(
-                              onTap: _launchHandwritingToText,
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 10, vertical: 5),
-                                decoration: BoxDecoration(
-                                  color: AppTheme.accentPinkLight,
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                child: const Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(CupertinoIcons.pencil,
-                                        size: 13, color: AppTheme.accentPinkDark),
-                                    SizedBox(width: 3),
-                                    Text(
-                                      'Write Note',
-                                      style: TextStyle(
-                                        fontSize: 11.5,
-                                        fontWeight: FontWeight.w700,
-                                        color: AppTheme.accentPinkDark,
-                                      ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    _isSelectionMode
+                                        ? CupertinoIcons.xmark
+                                        : CupertinoIcons.checkmark_circle,
+                                    size: 13,
+                                    color: _isSelectionMode
+                                        ? Colors.white
+                                        : AppTheme.accentPinkDark,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    _isSelectionMode ? 'Cancel' : 'Select',
+                                    style: TextStyle(
+                                      fontSize: 11.5,
+                                      fontWeight: FontWeight.w700,
+                                      color: _isSelectionMode
+                                          ? Colors.white
+                                          : AppTheme.accentPinkDark,
                                     ),
-                                  ],
-                                ),
+                                  ),
+                                ],
                               ),
                             ),
-                          ],
-                        ),
+                          ),
                       ],
                     ),
                   ),
