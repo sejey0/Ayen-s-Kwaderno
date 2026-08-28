@@ -1124,6 +1124,352 @@ class _EditorScreenState extends State<EditorScreen>
     }
   }
 
+  /// Opens a modern styling sheet for Image Shape and Border styles
+  void _openImageStylePicker(ImageAnnotation annotation) {
+    HapticFeedback.selectionClick();
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setSheetState) {
+            return Container(
+              margin: const EdgeInsets.all(16),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+              decoration: BoxDecoration(
+                color: AppTheme.surfaceWhite,
+                borderRadius: BorderRadius.circular(28),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF1E1B4B).withValues(alpha: 0.18),
+                    blurRadius: 24,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Header
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: const [
+                          Icon(CupertinoIcons.paintbrush_fill,
+                              size: 18, color: AppTheme.primaryPurple),
+                          SizedBox(width: 8),
+                          Text(
+                            'Image Shape & Border',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w800,
+                              color: AppTheme.textPrimary,
+                            ),
+                          ),
+                        ],
+                      ),
+                      IconButton(
+                        icon: const Icon(CupertinoIcons.xmark_circle_fill,
+                            color: AppTheme.textMuted, size: 22),
+                        onPressed: () => Navigator.pop(ctx),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+
+                  // Section 1: Shape Styles
+                  const Text(
+                    'Border Shape',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: AppTheme.textSecondary,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    physics: const BouncingScrollPhysics(),
+                    child: Row(
+                      children: [
+                        _buildShapeOptionPill(
+                          label: 'Rounded',
+                          icon: CupertinoIcons.square_fill_line_vertical_square,
+                          shapeKey: 'rounded',
+                          currentShape: annotation.shape,
+                          onSelect: () {
+                            setState(() => annotation.shape = 'rounded');
+                            setSheetState(() {});
+                            _autoSaveAndSync();
+                          },
+                        ),
+                        const SizedBox(width: 8),
+                        _buildShapeOptionPill(
+                          label: 'Sharp',
+                          icon: CupertinoIcons.square,
+                          shapeKey: 'rectangle',
+                          currentShape: annotation.shape,
+                          onSelect: () {
+                            setState(() => annotation.shape = 'rectangle');
+                            setSheetState(() {});
+                            _autoSaveAndSync();
+                          },
+                        ),
+                        const SizedBox(width: 8),
+                        _buildShapeOptionPill(
+                          label: 'Pill',
+                          icon: CupertinoIcons.capsule,
+                          shapeKey: 'pill',
+                          currentShape: annotation.shape,
+                          onSelect: () {
+                            setState(() => annotation.shape = 'pill');
+                            setSheetState(() {});
+                            _autoSaveAndSync();
+                          },
+                        ),
+                        const SizedBox(width: 8),
+                        _buildShapeOptionPill(
+                          label: 'Circle',
+                          icon: CupertinoIcons.circle,
+                          shapeKey: 'circle',
+                          currentShape: annotation.shape,
+                          onSelect: () {
+                            setState(() => annotation.shape = 'circle');
+                            setSheetState(() {});
+                            _autoSaveAndSync();
+                          },
+                        ),
+                        const SizedBox(width: 8),
+                        _buildShapeOptionPill(
+                          label: 'Polaroid',
+                          icon: CupertinoIcons.photo,
+                          shapeKey: 'polaroid',
+                          currentShape: annotation.shape,
+                          onSelect: () {
+                            setState(() => annotation.shape = 'polaroid');
+                            setSheetState(() {});
+                            _autoSaveAndSync();
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  // Section 2: Border Styles
+                  const Text(
+                    'Border Outline',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: AppTheme.textSecondary,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    physics: const BouncingScrollPhysics(),
+                    child: Row(
+                      children: [
+                        _buildBorderOptionPill(
+                          label: 'White',
+                          color: Colors.white,
+                          borderKey: 'white',
+                          currentBorder: annotation.border,
+                          onSelect: () {
+                            setState(() => annotation.border = 'white');
+                            setSheetState(() {});
+                            _autoSaveAndSync();
+                          },
+                        ),
+                        const SizedBox(width: 8),
+                        _buildBorderOptionPill(
+                          label: 'Purple',
+                          color: AppTheme.primaryPurple,
+                          borderKey: 'purple',
+                          currentBorder: annotation.border,
+                          onSelect: () {
+                            setState(() => annotation.border = 'purple');
+                            setSheetState(() {});
+                            _autoSaveAndSync();
+                          },
+                        ),
+                        const SizedBox(width: 8),
+                        _buildBorderOptionPill(
+                          label: 'Dark',
+                          color: const Color(0xFF1E293B),
+                          borderKey: 'dark',
+                          currentBorder: annotation.border,
+                          onSelect: () {
+                            setState(() => annotation.border = 'dark');
+                            setSheetState(() {});
+                            _autoSaveAndSync();
+                          },
+                        ),
+                        const SizedBox(width: 8),
+                        _buildBorderOptionPill(
+                          label: 'None',
+                          color: Colors.transparent,
+                          borderKey: 'none',
+                          currentBorder: annotation.border,
+                          onSelect: () {
+                            setState(() => annotation.border = 'none');
+                            setSheetState(() {});
+                            _autoSaveAndSync();
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildShapeOptionPill({
+    required String label,
+    required IconData icon,
+    required String shapeKey,
+    required String currentShape,
+    required VoidCallback onSelect,
+  }) {
+    final isSelected = currentShape == shapeKey;
+    return GestureDetector(
+      onTap: () {
+        HapticFeedback.selectionClick();
+        onSelect();
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? AppTheme.primaryPurple
+              : const Color(0xFFF3F4F6),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isSelected
+                ? AppTheme.accentPink
+                : AppTheme.dividerColor,
+            width: isSelected ? 1.5 : 1.0,
+          ),
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: AppTheme.primaryPurple.withValues(alpha: 0.3),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ]
+              : null,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 14,
+              color: isSelected ? Colors.white : AppTheme.textPrimary,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
+                color: isSelected ? Colors.white : AppTheme.textPrimary,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBorderOptionPill({
+    required String label,
+    required Color color,
+    required String borderKey,
+    required String currentBorder,
+    required VoidCallback onSelect,
+  }) {
+    final isSelected = currentBorder == borderKey;
+    return GestureDetector(
+      onTap: () {
+        HapticFeedback.selectionClick();
+        onSelect();
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? AppTheme.primaryPurple
+              : const Color(0xFFF3F4F6),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isSelected
+                ? AppTheme.accentPink
+                : AppTheme.dividerColor,
+            width: isSelected ? 1.5 : 1.0,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 14,
+              height: 14,
+              decoration: BoxDecoration(
+                color: color == Colors.transparent ? Colors.transparent : color,
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: isSelected ? Colors.white : Colors.black26,
+                  width: 1.5,
+                ),
+              ),
+              child: color == Colors.transparent
+                  ? const Icon(CupertinoIcons.slash_circle,
+                      size: 10, color: AppTheme.textMuted)
+                  : null,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
+                color: isSelected ? Colors.white : AppTheme.textPrimary,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildImagePlaceholder() {
+    return Container(
+      color: AppTheme.primaryPurpleLight,
+      child: const Center(
+        child: Icon(
+          Icons.broken_image_rounded,
+          color: AppTheme.textMuted,
+          size: 32,
+        ),
+      ),
+    );
+  }
+
   /// Deletes a specific digital text note
   void _deleteTextAnnotation(String id) {
     setState(() {
@@ -1662,17 +2008,68 @@ class _EditorScreenState extends State<EditorScreen>
               })
             else
               ...pageImages.map((annotation) {
+                final isCircle = annotation.shape == 'circle';
+                final isPolaroid = annotation.shape == 'polaroid';
+                BorderRadius radius = BorderRadius.circular(16);
+                if (annotation.shape == 'rectangle') {
+                  radius = BorderRadius.circular(2);
+                } else if (annotation.shape == 'pill') {
+                  radius = BorderRadius.circular(32);
+                } else if (isPolaroid) {
+                  radius = BorderRadius.circular(6);
+                }
+
+                Border? border;
+                if (annotation.border == 'purple') {
+                  border = Border.all(color: AppTheme.primaryPurple, width: 2.5);
+                } else if (annotation.border == 'dark') {
+                  border = Border.all(color: const Color(0xFF1E293B), width: 2.0);
+                } else if (annotation.border == 'white') {
+                  border = Border.all(color: Colors.white, width: 2.0);
+                }
+
                 return Positioned(
                   left: annotation.position.dx * scaleX,
                   top: annotation.position.dy * scaleY,
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(14),
-                    child: Image.file(
-                      File(annotation.imagePath),
-                      width: (annotation.size.width * scaleX).clamp(20.0, 1200.0),
-                      height: (annotation.size.height * scaleY).clamp(20.0, 1200.0),
-                      fit: BoxFit.cover,
+                  child: Container(
+                    width: (annotation.size.width * scaleX).clamp(20.0, 1200.0),
+                    height: (annotation.size.height * scaleY).clamp(20.0, 1200.0),
+                    padding: isPolaroid
+                        ? const EdgeInsets.fromLTRB(6, 6, 6, 22)
+                        : EdgeInsets.zero,
+                    decoration: BoxDecoration(
+                      color: isPolaroid ? Colors.white : Colors.transparent,
+                      shape: isCircle ? BoxShape.circle : BoxShape.rectangle,
+                      borderRadius: isCircle ? null : radius,
+                      border: border,
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFF2D2640).withValues(alpha: 0.12),
+                          blurRadius: 8,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
                     ),
+                    child: isCircle
+                        ? ClipOval(
+                            child: Image.file(
+                              File(annotation.imagePath),
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) =>
+                                  _buildImagePlaceholder(),
+                            ),
+                          )
+                        : ClipRRect(
+                            borderRadius: isPolaroid
+                                ? BorderRadius.circular(4)
+                                : radius,
+                            child: Image.file(
+                              File(annotation.imagePath),
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) =>
+                                  _buildImagePlaceholder(),
+                            ),
+                          ),
                   ),
                 );
               }),
@@ -1702,69 +2099,240 @@ class _EditorScreenState extends State<EditorScreen>
     required double scaleY,
   }) {
     final isSelected = _selectedImageId == annotation.id;
+    final isLocked = annotation.isLocked;
+
+    // Determine shape styling
+    BorderRadius borderRadius;
+    BoxShape boxShape = BoxShape.rectangle;
+    bool isCircle = false;
+    bool isPolaroid = false;
+
+    switch (annotation.shape) {
+      case 'circle':
+        boxShape = BoxShape.circle;
+        borderRadius = BorderRadius.zero;
+        isCircle = true;
+        break;
+      case 'rectangle':
+        borderRadius = BorderRadius.circular(2);
+        break;
+      case 'pill':
+        borderRadius = BorderRadius.circular(32);
+        break;
+      case 'polaroid':
+        borderRadius = BorderRadius.circular(6);
+        isPolaroid = true;
+        break;
+      case 'rounded':
+      default:
+        borderRadius = BorderRadius.circular(16);
+        break;
+    }
+
+    // Determine border styling
+    Border? border;
+    switch (annotation.border) {
+      case 'purple':
+        border = Border.all(
+          color: AppTheme.primaryPurple,
+          width: isSelected ? 3.5 : 2.5,
+        );
+        break;
+      case 'dark':
+        border = Border.all(
+          color: isSelected ? AppTheme.primaryPurple : const Color(0xFF1E293B),
+          width: isSelected ? 3.0 : 2.0,
+        );
+        break;
+      case 'none':
+        border = isSelected
+            ? Border.all(
+                color: AppTheme.primaryPurple.withValues(alpha: 0.8),
+                width: 2.0,
+              )
+            : null;
+        break;
+      case 'white':
+      default:
+        border = Border.all(
+          color: isSelected ? AppTheme.primaryPurple : Colors.white,
+          width: isSelected ? 3.0 : 2.0,
+        );
+        break;
+    }
 
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        // 1. Top Action Floating Bar (Drag handle + Delete button)
+        // 1. Top Action Floating Bar
         if (isSelected)
           Container(
             margin: const EdgeInsets.only(bottom: 6),
             decoration: BoxDecoration(
               color: AppTheme.surfaceWhite,
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: AppTheme.dividerColor),
+              border: Border.all(
+                color: isLocked
+                    ? const Color(0xFFF59E0B).withValues(alpha: 0.5)
+                    : AppTheme.dividerColor,
+              ),
               boxShadow: AppTheme.softShadow,
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Active Drag Handle (Drag the entire image by its top bar!)
-                GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onPanStart: (DragStartDetails details) {
-                    _swipeStartPos = null;
-                    _isDraggingAnnotation = true;
-                    setState(() {
-                      _selectedImageId = annotation.id;
-                      _selectedTextId = null;
-                    });
-                  },
-                  onPanUpdate: (DragUpdateDetails details) {
-                    _swipeStartPos = null;
-                    setState(() {
-                      annotation.position += Offset(
-                        details.delta.dx / scaleX,
-                        details.delta.dy / scaleY,
-                      );
-                      _selectedImageId = annotation.id;
-                      _selectedTextId = null;
-                    });
-                  },
-                  onPanEnd: (_) {
-                    _swipeStartPos = null;
-                    _isDraggingAnnotation = false;
-                    _autoSaveAndSync();
-                  },
-                  onPanCancel: () {
-                    _swipeStartPos = null;
-                    _isDraggingAnnotation = false;
-                  },
-                  child: Padding(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                if (!isLocked) ...[
+                  // 1. Active Drag Handle
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onPanStart: (DragStartDetails details) {
+                      _swipeStartPos = null;
+                      _isDraggingAnnotation = true;
+                      setState(() {
+                        _selectedImageId = annotation.id;
+                        _selectedTextId = null;
+                      });
+                    },
+                    onPanUpdate: (DragUpdateDetails details) {
+                      _swipeStartPos = null;
+                      setState(() {
+                        annotation.position += Offset(
+                          details.delta.dx / scaleX,
+                          details.delta.dy / scaleY,
+                        );
+                        _selectedImageId = annotation.id;
+                        _selectedTextId = null;
+                      });
+                    },
+                    onPanEnd: (_) {
+                      _swipeStartPos = null;
+                      _isDraggingAnnotation = false;
+                      _autoSaveAndSync();
+                    },
+                    onPanCancel: () {
+                      _swipeStartPos = null;
+                      _isDraggingAnnotation = false;
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 9, vertical: 5),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: const [
+                          Icon(
+                            CupertinoIcons.move,
+                            size: 13.5,
+                            color: AppTheme.primaryPurple,
+                          ),
+                          SizedBox(width: 3.5),
+                          Text(
+                            'Drag',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: AppTheme.primaryPurple,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  Container(
+                    width: 1,
+                    height: 14,
+                    color: AppTheme.dividerColor,
+                  ),
+
+                  // 2. Crop Image Button
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () {
+                      HapticFeedback.selectionClick();
+                      _openImageCropper(annotation);
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 5),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: const [
+                          Icon(
+                            CupertinoIcons.crop,
+                            size: 13.5,
+                            color: AppTheme.primaryPurple,
+                          ),
+                          SizedBox(width: 3.5),
+                          Text(
+                            'Crop',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: AppTheme.primaryPurple,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  Container(
+                    width: 1,
+                    height: 14,
+                    color: AppTheme.dividerColor,
+                  ),
+                ] else ...[
+                  // Locked Indicator
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 5),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: const [
                         Icon(
-                          CupertinoIcons.move,
+                          CupertinoIcons.lock_fill,
+                          size: 12.5,
+                          color: Color(0xFFD97706),
+                        ),
+                        SizedBox(width: 3.5),
+                        Text(
+                          'Locked',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFFD97706),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  Container(
+                    width: 1,
+                    height: 14,
+                    color: AppTheme.dividerColor,
+                  ),
+                ],
+
+                // 3. Shape & Border Styling Button
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => _openImageStylePicker(annotation),
+                  child: Padding(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: const [
+                        Icon(
+                          CupertinoIcons.paintbrush,
                           size: 13.5,
                           color: AppTheme.primaryPurple,
                         ),
-                        SizedBox(width: 4),
+                        SizedBox(width: 3.5),
                         Text(
-                          'Drag',
+                          'Shape',
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w700,
@@ -1782,31 +2350,68 @@ class _EditorScreenState extends State<EditorScreen>
                   color: AppTheme.dividerColor,
                 ),
 
-                // Crop Image Button
+                // 4. Lock / Unlock Toggle Button
                 GestureDetector(
                   behavior: HitTestBehavior.opaque,
                   onTap: () {
-                    HapticFeedback.selectionClick();
-                    _openImageCropper(annotation);
+                    HapticFeedback.mediumImpact();
+                    setState(() {
+                      annotation.isLocked = !annotation.isLocked;
+                    });
+                    _autoSaveAndSync();
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              annotation.isLocked
+                                  ? CupertinoIcons.lock_fill
+                                  : CupertinoIcons.lock_open_fill,
+                              size: 16,
+                              color: Colors.white,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(annotation.isLocked
+                                ? 'Image locked in place 🔒'
+                                : 'Image unlocked 🔓'),
+                          ],
+                        ),
+                        backgroundColor: annotation.isLocked
+                            ? const Color(0xFF1E293B)
+                            : AppTheme.primaryPurple,
+                        behavior: SnackBarBehavior.floating,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        duration: const Duration(seconds: 2),
+                      ),
+                    );
                   },
                   child: Padding(
                     padding:
-                        const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
-                      children: const [
+                      children: [
                         Icon(
-                          CupertinoIcons.crop,
+                          isLocked
+                              ? CupertinoIcons.lock_open
+                              : CupertinoIcons.lock,
                           size: 13.5,
-                          color: AppTheme.primaryPurple,
+                          color: isLocked
+                              ? AppTheme.primaryPurple
+                              : AppTheme.textSecondary,
                         ),
-                        SizedBox(width: 4),
+                        const SizedBox(width: 3.5),
                         Text(
-                          'Crop',
+                          isLocked ? 'Unlock' : 'Lock',
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w700,
-                            color: AppTheme.primaryPurple,
+                            color: isLocked
+                                ? AppTheme.primaryPurple
+                                : AppTheme.textSecondary,
                           ),
                         ),
                       ],
@@ -1820,7 +2425,7 @@ class _EditorScreenState extends State<EditorScreen>
                   color: AppTheme.dividerColor,
                 ),
 
-                // Delete Image Button
+                // 5. Delete Image Button
                 GestureDetector(
                   behavior: HitTestBehavior.opaque,
                   onTap: () {
@@ -1854,34 +2459,42 @@ class _EditorScreenState extends State<EditorScreen>
           children: [
             GestureDetector(
               behavior: HitTestBehavior.opaque,
-              onPanStart: (DragStartDetails details) {
-                _swipeStartPos = null;
-                _isDraggingAnnotation = true;
-                setState(() {
-                  _selectedImageId = annotation.id;
-                  _selectedTextId = null;
-                });
-              },
-              onPanUpdate: (DragUpdateDetails details) {
-                _swipeStartPos = null;
-                setState(() {
-                  annotation.position += Offset(
-                    details.delta.dx / scaleX,
-                    details.delta.dy / scaleY,
-                  );
-                  _selectedImageId = annotation.id;
-                  _selectedTextId = null;
-                });
-              },
-              onPanEnd: (_) {
-                _swipeStartPos = null;
-                _isDraggingAnnotation = false;
-                _autoSaveAndSync();
-              },
-              onPanCancel: () {
-                _swipeStartPos = null;
-                _isDraggingAnnotation = false;
-              },
+              onPanStart: isLocked
+                  ? null
+                  : (DragStartDetails details) {
+                      _swipeStartPos = null;
+                      _isDraggingAnnotation = true;
+                      setState(() {
+                        _selectedImageId = annotation.id;
+                        _selectedTextId = null;
+                      });
+                    },
+              onPanUpdate: isLocked
+                  ? null
+                  : (DragUpdateDetails details) {
+                      _swipeStartPos = null;
+                      setState(() {
+                        annotation.position += Offset(
+                          details.delta.dx / scaleX,
+                          details.delta.dy / scaleY,
+                        );
+                        _selectedImageId = annotation.id;
+                        _selectedTextId = null;
+                      });
+                    },
+              onPanEnd: isLocked
+                  ? null
+                  : (_) {
+                      _swipeStartPos = null;
+                      _isDraggingAnnotation = false;
+                      _autoSaveAndSync();
+                    },
+              onPanCancel: isLocked
+                  ? null
+                  : () {
+                      _swipeStartPos = null;
+                      _isDraggingAnnotation = false;
+                    },
               onTap: () {
                 setState(() {
                   _selectedImageId = isSelected ? null : annotation.id;
@@ -1892,46 +2505,49 @@ class _EditorScreenState extends State<EditorScreen>
                 duration: const Duration(milliseconds: 80),
                 width: (annotation.size.width * scaleX).clamp(30.0, 1200.0),
                 height: (annotation.size.height * scaleY).clamp(30.0, 1200.0),
+                padding: isPolaroid
+                    ? const EdgeInsets.fromLTRB(6, 6, 6, 22)
+                    : EdgeInsets.zero,
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: isSelected
-                        ? AppTheme.primaryPurple
-                        : Colors.white.withValues(alpha: 0.9),
-                    width: isSelected ? 2.5 : 1.5,
-                  ),
+                  color: isPolaroid ? Colors.white : Colors.transparent,
+                  shape: boxShape,
+                  borderRadius: isCircle ? null : borderRadius,
+                  border: border,
                   boxShadow: [
                     BoxShadow(
                       color: isSelected
                           ? AppTheme.primaryPurple.withValues(alpha: 0.35)
-                          : const Color(0xFF2D2640).withValues(alpha: 0.12),
+                          : const Color(0xFF2D2640).withValues(alpha: 0.14),
                       blurRadius: isSelected ? 16 : 8,
                       offset: const Offset(0, 4),
                     ),
                   ],
                 ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(14),
-                  child: Image.file(
-                    File(annotation.imagePath),
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) => Container(
-                      color: AppTheme.primaryPurpleLight,
-                      child: const Center(
-                        child: Icon(
-                          Icons.broken_image_rounded,
-                          color: AppTheme.textMuted,
-                          size: 32,
+                child: isCircle
+                    ? ClipOval(
+                        child: Image.file(
+                          File(annotation.imagePath),
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) =>
+                              _buildImagePlaceholder(),
+                        ),
+                      )
+                    : ClipRRect(
+                        borderRadius: isPolaroid
+                            ? BorderRadius.circular(4)
+                            : borderRadius,
+                        child: Image.file(
+                          File(annotation.imagePath),
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) =>
+                              _buildImagePlaceholder(),
                         ),
                       ),
-                    ),
-                  ),
-                ),
               ),
             ),
 
-            // Bottom-Right Corner Resize Grip Handle
-            if (isSelected)
+            // Bottom-Right Corner Resize Grip Handle (Hidden if Locked)
+            if (isSelected && !isLocked)
               Positioned(
                 right: -10,
                 bottom: -10,
