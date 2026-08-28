@@ -423,24 +423,30 @@ class AutoSyncService {
                 .from('document_annotations')
                 .upsert(payload, onConflict: 'document_name');
 
-            // Upload document file binary to Supabase Storage
+            // Upload document file binary to Supabase Storage (if <= 50MB)
             if (local.filePath != null && File(local.filePath!).existsSync()) {
-              final fileBytes = await File(local.filePath!).readAsBytes();
-              final storagePath = 'u_$activeUserId/${local.fileName}';
-              try {
-                await client.storage.from('documents').uploadBinary(
-                      storagePath,
-                      fileBytes,
-                      fileOptions: const FileOptions(upsert: true),
-                    );
-              } catch (_) {
+              final file = File(local.filePath!);
+              final fileSize = await file.length();
+              const maxUploadLimit = 50 * 1024 * 1024; // 50 MB
+
+              if (fileSize <= maxUploadLimit) {
+                final fileBytes = await file.readAsBytes();
+                final storagePath = 'u_$activeUserId/${local.fileName}';
                 try {
-                  await client.storage.from('user_documents').uploadBinary(
+                  await client.storage.from('documents').uploadBinary(
                         storagePath,
                         fileBytes,
                         fileOptions: const FileOptions(upsert: true),
                       );
-                } catch (_) {}
+                } catch (_) {
+                  try {
+                    await client.storage.from('user_documents').uploadBinary(
+                          storagePath,
+                          fileBytes,
+                          fileOptions: const FileOptions(upsert: true),
+                        );
+                  } catch (_) {}
+                }
               }
             }
 

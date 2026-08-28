@@ -167,6 +167,15 @@ class _UploadDocumentDialogState extends State<UploadDocumentDialog> {
         ? _titleController.text.trim()
         : (_selectedFileName ?? 'Document');
 
+    int fileSizeInBytes = 0;
+    try {
+      fileSizeInBytes = File(persistentPath).lengthSync();
+    } catch (_) {}
+
+    // Supabase bucket single-file upload threshold (e.g. 50MB)
+    const int maxCloudUploadSizeBytes = 50 * 1024 * 1024; // 50 MB
+    final bool exceedsCloudLimit = fileSizeInBytes > maxCloudUploadSizeBytes;
+
     // Create & persist DocumentItem with the custom title
     final newDoc = DocumentItem(
       fileName: customTitle,
@@ -178,6 +187,37 @@ class _UploadDocumentDialogState extends State<UploadDocumentDialog> {
     );
 
     await DocumentStorageService.saveOrUpdateDocument(newDoc);
+
+    if (exceedsCloudLimit && mounted) {
+      await showCupertinoDialog(
+        context: context,
+        builder: (ctx) => CupertinoAlertDialog(
+          title: const Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(CupertinoIcons.info_circle_fill,
+                  color: Color(0xFF6B4EE6), size: 22),
+              SizedBox(width: 8),
+              Text('Local Storage Only'),
+            ],
+          ),
+          content: Padding(
+            padding: const EdgeInsets.only(top: 8.0),
+            child: Text(
+              'This file (${_formatFileSize(fileSizeInBytes)}) exceeds the cloud sync limit (50 MB).\n\nIt has been safely saved to your local device storage so you can open, read, and annotate it offline anytime.',
+              style: const TextStyle(fontSize: 13, height: 1.4),
+            ),
+          ),
+          actions: [
+            CupertinoDialogAction(
+              isDefaultAction: true,
+              child: const Text('Got it, Open File'),
+              onPressed: () => Navigator.pop(ctx),
+            ),
+          ],
+        ),
+      );
+    }
 
     if (!mounted) return;
     Navigator.of(context).pop(newDoc);

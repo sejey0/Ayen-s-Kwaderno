@@ -263,25 +263,30 @@ class DocumentStorageService {
             .then((_) {})
             .catchError((_) {});
 
-        // Upload physical document / image file to Supabase Storage in background
+        // Upload physical document / image file to Supabase Storage in background (if <= 50MB limit)
         if (doc.filePath != null && File(doc.filePath!).existsSync()) {
           final file = File(doc.filePath!);
-          final fileBytes = await file.readAsBytes();
-          final storagePath = 'u_$targetUserId/${doc.fileName}';
-          try {
-            await client.storage.from('documents').uploadBinary(
-                  storagePath,
-                  fileBytes,
-                  fileOptions: const FileOptions(upsert: true),
-                );
-          } catch (_) {
+          final fileSize = await file.length();
+          const maxUploadLimit = 50 * 1024 * 1024; // 50 MB
+
+          if (fileSize <= maxUploadLimit) {
+            final fileBytes = await file.readAsBytes();
+            final storagePath = 'u_$targetUserId/${doc.fileName}';
             try {
-              await client.storage.from('user_documents').uploadBinary(
+              await client.storage.from('documents').uploadBinary(
                     storagePath,
                     fileBytes,
                     fileOptions: const FileOptions(upsert: true),
                   );
-            } catch (_) {}
+            } catch (_) {
+              try {
+                await client.storage.from('user_documents').uploadBinary(
+                      storagePath,
+                      fileBytes,
+                      fileOptions: const FileOptions(upsert: true),
+                    );
+              } catch (_) {}
+            }
           }
         }
       } catch (_) {}
