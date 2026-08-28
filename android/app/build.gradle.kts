@@ -37,6 +37,11 @@ android {
             // Disable PNG compression during release builds — saves minutes on
             // asset-heavy projects.  Images should be pre-optimized or use WebP.
             isCrunchPngs = false
+
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
         }
     }
 
