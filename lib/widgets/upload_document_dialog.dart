@@ -41,7 +41,6 @@ class _UploadDocumentDialogState extends State<UploadDocumentDialog> {
   bool _isImage = false;
   bool _isPicking = false;
   Uint8List? _pdfPage1Bytes;
-  bool _userManuallyEditedTitle = false;
 
   @override
   void dispose() {
@@ -125,7 +124,6 @@ class _UploadDocumentDialogState extends State<UploadDocumentDialog> {
       _pdfPage1Bytes = pdfBytes;
       // Auto-fill document title with the selected file name
       _titleController.text = name;
-      _userManuallyEditedTitle = false;
     });
   }
 
@@ -137,7 +135,6 @@ class _UploadDocumentDialogState extends State<UploadDocumentDialog> {
       _isImage = false;
       _pdfPage1Bytes = null;
       _titleController.clear();
-      _userManuallyEditedTitle = false;
     });
   }
 
@@ -426,9 +423,7 @@ class _UploadDocumentDialogState extends State<UploadDocumentDialog> {
                       child: TextField(
                         controller: _titleController,
                         onChanged: (val) {
-                          if (val.trim().isNotEmpty) {
-                            _userManuallyEditedTitle = true;
-                          }
+                          setState(() {});
                         },
                         decoration: InputDecoration(
                           hintText:
@@ -452,7 +447,6 @@ class _UploadDocumentDialogState extends State<UploadDocumentDialog> {
                                   onPressed: () {
                                     setState(() {
                                       _titleController.clear();
-                                      _userManuallyEditedTitle = false;
                                     });
                                   },
                                 )
