@@ -33,9 +33,9 @@ class AppTheme {
 
   static const LinearGradient softBackgroundGradient = LinearGradient(
     colors: [
-      Color(0xFFF9F7FE),
-      Color(0xFFFAF9FD),
-      Color(0xFFFFF7F9),
+      Color(0xFFEDE7FD), // Soft Lilac / Purple
+      Color(0xFFF4EFFE), // Soft Iris middle
+      Color(0xFFFDE8EE), // Soft Blush Pink
     ],
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,

@@ -372,23 +372,25 @@ class _AppSideNavigationPanelState extends State<AppSideNavigationPanel> {
                 width: 48,
                 height: 48,
                 decoration: BoxDecoration(
-                  color: isSelected
-                      ? AppTheme.primaryPurpleLight
-                      : Colors.transparent,
+                  gradient: isSelected ? AppTheme.primaryGradient : null,
+                  color: isSelected ? null : Colors.transparent,
                   borderRadius: BorderRadius.circular(14),
-                  border: isSelected
-                      ? Border.all(
-                          color: AppTheme.primaryPurple.withValues(alpha: 0.3),
-                        )
+                  boxShadow: isSelected
+                      ? [
+                          BoxShadow(
+                            color: AppTheme.primaryPurple
+                                .withValues(alpha: 0.35),
+                            blurRadius: 8,
+                            offset: const Offset(0, 3),
+                          ),
+                        ]
                       : null,
                 ),
                 child: Center(
                   child: Icon(
                     icon,
                     size: 20,
-                    color: isSelected
-                        ? AppTheme.primaryPurple
-                        : AppTheme.textSecondary,
+                    color: isSelected ? Colors.white : AppTheme.textSecondary,
                   ),
                 ),
               ),
@@ -410,24 +412,25 @@ class _AppSideNavigationPanelState extends State<AppSideNavigationPanel> {
             duration: const Duration(milliseconds: 180),
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             decoration: BoxDecoration(
-              color: isSelected
-                  ? AppTheme.primaryPurpleLight.withValues(alpha: 0.6)
-                  : Colors.transparent,
+              gradient: isSelected ? AppTheme.primaryGradient : null,
+              color: isSelected ? null : Colors.transparent,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: isSelected
-                    ? AppTheme.primaryPurple.withValues(alpha: 0.25)
-                    : Colors.transparent,
-              ),
+              boxShadow: isSelected
+                  ? [
+                      BoxShadow(
+                        color: AppTheme.primaryPurple.withValues(alpha: 0.3),
+                        blurRadius: 8,
+                        offset: const Offset(0, 3),
+                      ),
+                    ]
+                  : null,
             ),
             child: Row(
               children: [
                 Icon(
                   icon,
                   size: 19,
-                  color: isSelected
-                      ? AppTheme.primaryPurple
-                      : AppTheme.textSecondary,
+                  color: isSelected ? Colors.white : AppTheme.textSecondary,
                 ),
                 const SizedBox(width: 12),
 
@@ -439,9 +442,7 @@ class _AppSideNavigationPanelState extends State<AppSideNavigationPanel> {
                       fontSize: 13.5,
                       fontWeight:
                           isSelected ? FontWeight.w800 : FontWeight.w600,
-                      color: isSelected
-                          ? AppTheme.primaryPurple
-                          : AppTheme.textPrimary,
+                      color: isSelected ? Colors.white : AppTheme.textPrimary,
                       letterSpacing: -0.2,
                     ),
                     maxLines: 1,

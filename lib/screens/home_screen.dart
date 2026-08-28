@@ -1231,22 +1231,27 @@ class _HomeScreenState extends State<HomeScreen> {
                         _scaffoldKey.currentState?.closeDrawer(),
                   ),
                 ),
-          body: SafeArea(
-            child: isWideScreen
-                ? Row(
-                    children: [
-                      AppSideNavigationPanel(
-                        isDrawerMode: false,
-                        initiallyExpanded: _isSidebarExpanded,
-                        onExpansionChanged: (exp) =>
-                            setState(() => _isSidebarExpanded = exp),
-                        selectedItem: _selectedSidebarNav,
-                        onItemSelected: _handleSidebarNavSelected,
-                      ),
-                      Expanded(child: mainContent),
-                    ],
-                  )
-                : mainContent,
+          body: Container(
+            decoration: const BoxDecoration(
+              gradient: AppTheme.softBackgroundGradient,
+            ),
+            child: SafeArea(
+              child: isWideScreen
+                  ? Row(
+                      children: [
+                        AppSideNavigationPanel(
+                          isDrawerMode: false,
+                          initiallyExpanded: _isSidebarExpanded,
+                          onExpansionChanged: (exp) =>
+                              setState(() => _isSidebarExpanded = exp),
+                          selectedItem: _selectedSidebarNav,
+                          onItemSelected: _handleSidebarNavSelected,
+                        ),
+                        Expanded(child: mainContent),
+                      ],
+                    )
+                  : mainContent,
+            ),
           ),
           floatingActionButtonLocation: _isSelectionMode
               ? FloatingActionButtonLocation.centerFloat
@@ -1256,37 +1261,15 @@ class _HomeScreenState extends State<HomeScreen> {
               : (_currentSection == LibrarySection.dashboard
                   ? null
                   : (_currentSection == LibrarySection.notes
-                      ? FloatingActionButton.extended(
+                      ? _buildGradientFab(
+                          icon: CupertinoIcons.pencil_outline,
+                          label: 'Write a Note',
                           onPressed: _launchHandwritingToText,
-                          backgroundColor: AppTheme.accentPink,
-                          foregroundColor: Colors.white,
-                          elevation: 4,
-                          icon: const Icon(CupertinoIcons.pencil_outline,
-                              size: 20),
-                          label: const Text(
-                            'Write a Note',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 14,
-                              letterSpacing: 0.2,
-                            ),
-                          ),
                         )
-                      : FloatingActionButton.extended(
+                      : _buildGradientFab(
+                          icon: CupertinoIcons.cloud_upload_fill,
+                          label: 'Upload Document',
                           onPressed: _pickAndOpenDocument,
-                          backgroundColor: AppTheme.primaryPurple,
-                          foregroundColor: Colors.white,
-                          elevation: 4,
-                          icon: const Icon(CupertinoIcons.cloud_upload_fill,
-                              size: 20),
-                          label: const Text(
-                            'Upload Document',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 14,
-                              letterSpacing: 0.2,
-                            ),
-                          ),
                         ))),
         );
       },
@@ -1472,17 +1455,65 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Widget _buildGradientFab({
+    required IconData icon,
+    required String label,
+    required VoidCallback onPressed,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: AppTheme.primaryGradient,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: AppTheme.primaryPurple.withValues(alpha: 0.4),
+            blurRadius: 14,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(20),
+          onTap: onPressed,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, size: 20, color: Colors.white),
+                const SizedBox(width: 8),
+                Text(
+                  label,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 14,
+                    color: Colors.white,
+                    letterSpacing: 0.2,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   /// Big Action Hero Card (Open PDF & Handwriting to Text)
   Widget _buildUploadHeroCard() {
     return Container(
       decoration: BoxDecoration(
-        color: AppTheme.surfaceWhite,
+        gradient: AppTheme.primaryGradientDiagonal,
         borderRadius: BorderRadius.circular(24),
-        boxShadow: AppTheme.softShadow,
-        border: Border.all(
-          color: AppTheme.primaryPurpleLight.withValues(alpha: 0.8),
-          width: 1.5,
-        ),
+        boxShadow: [
+          BoxShadow(
+            color: AppTheme.primaryPurple.withValues(alpha: 0.35),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
+          ),
+        ],
       ),
       child: Stack(
         children: [
@@ -1494,7 +1525,7 @@ class _HomeScreenState extends State<HomeScreen> {
               height: 130,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: AppTheme.primaryPurpleLight.withValues(alpha: 0.4),
+                color: Colors.white.withValues(alpha: 0.12),
               ),
             ),
           ),
@@ -1506,7 +1537,7 @@ class _HomeScreenState extends State<HomeScreen> {
               height: 90,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: AppTheme.accentPinkLight.withValues(alpha: 0.4),
+                color: Colors.white.withValues(alpha: 0.08),
               ),
             ),
           ),
@@ -1522,17 +1553,17 @@ class _HomeScreenState extends State<HomeScreen> {
                       width: 50,
                       height: 50,
                       decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [Color(0xFFEFEBFF), Color(0xFFFFEEF3)],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
+                        color: Colors.white.withValues(alpha: 0.22),
                         borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.35),
+                          width: 1.5,
+                        ),
                       ),
                       child: const Center(
                         child: Icon(
                           CupertinoIcons.doc_text_viewfinder,
-                          color: AppTheme.primaryPurple,
+                          color: Colors.white,
                           size: 26,
                         ),
                       ),
@@ -1542,16 +1573,16 @@ class _HomeScreenState extends State<HomeScreen> {
                       child: Text(
                         'Quick Study Actions',
                         style: TextStyle(
-                          fontSize: 17,
-                          fontWeight: FontWeight.w700,
-                          color: AppTheme.textPrimary,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white,
                           letterSpacing: -0.2,
                         ),
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 18),
                 Row(
                   children: [
                     Expanded(
@@ -1561,52 +1592,34 @@ class _HomeScreenState extends State<HomeScreen> {
                         child: ElevatedButton(
                           onPressed: _pickAndOpenDocument,
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.transparent,
-                            shadowColor: Colors.transparent,
-                            padding: EdgeInsets.zero,
+                            backgroundColor: Colors.white,
+                            foregroundColor: AppTheme.primaryPurpleDark,
+                            elevation: 4,
+                            shadowColor: Colors.black.withValues(alpha: 0.2),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(14),
                             ),
                           ),
-                          child: Ink(
-                            decoration: BoxDecoration(
-                              gradient: AppTheme.primaryGradient,
-                              borderRadius: BorderRadius.circular(14),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: AppTheme.primaryPurple
-                                      .withValues(alpha: 0.35),
-                                  blurRadius: 10,
-                                  offset: const Offset(0, 4),
-                                ),
-                              ],
-                            ),
-                            child: Container(
-                              alignment: Alignment.center,
-                              padding: const EdgeInsets.symmetric(horizontal: 8),
-                              child: const Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.center,
-                                children: [
-                                  Icon(CupertinoIcons.cloud_upload_fill,
-                                      size: 17, color: Colors.white),
-                                  SizedBox(width: 6),
-                                  Expanded(
-                                    child: Text(
-                                      'Upload Documents or Images',
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w700,
-                                        letterSpacing: -0.2,
-                                      ),
-                                    ),
+                          child: const Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(CupertinoIcons.cloud_upload_fill,
+                                  size: 17, color: AppTheme.primaryPurpleDark),
+                              SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  'Upload Documents or Images',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    color: AppTheme.primaryPurpleDark,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: -0.2,
                                   ),
-                                ],
+                                ),
                               ),
-                            ),
+                            ],
                           ),
                         ),
                       ),
@@ -1619,17 +1632,16 @@ class _HomeScreenState extends State<HomeScreen> {
                         child: OutlinedButton(
                           onPressed: _launchHandwritingToText,
                           style: OutlinedButton.styleFrom(
-                            backgroundColor: AppTheme.primaryPurpleLight
-                                .withValues(alpha: 0.6),
+                            backgroundColor:
+                                Colors.white.withValues(alpha: 0.18),
                             side: const BorderSide(
-                              color: AppTheme.primaryPurple,
-                              width: 1.4,
+                              color: Colors.white,
+                              width: 1.6,
                             ),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(14),
                             ),
-                            padding:
-                                const EdgeInsets.symmetric(horizontal: 8),
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
                           ),
                           child: const Row(
                             mainAxisAlignment: MainAxisAlignment.center,
@@ -1637,15 +1649,15 @@ class _HomeScreenState extends State<HomeScreen> {
                               Icon(
                                 CupertinoIcons.pencil_ellipsis_rectangle,
                                 size: 17,
-                                color: AppTheme.primaryPurpleDark,
+                                color: Colors.white,
                               ),
                               SizedBox(width: 6),
                               Text(
                                 'Write a Note',
                                 style: TextStyle(
-                                  color: AppTheme.primaryPurpleDark,
+                                  color: Colors.white,
                                   fontSize: 13,
-                                  fontWeight: FontWeight.w700,
+                                  fontWeight: FontWeight.w800,
                                 ),
                               ),
                             ],
