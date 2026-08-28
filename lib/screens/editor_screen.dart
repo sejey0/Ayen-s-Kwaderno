@@ -77,7 +77,7 @@ class _EditorScreenState extends State<EditorScreen>
   Animation<Matrix4>? _zoomAnimation;
 
   // Active annotation tool state
-  AnnotationTool _activeTool = AnnotationTool.highlighter;
+  AnnotationTool _activeTool = AnnotationTool.none;
   PenSubTool _penSubTool = PenSubTool.highlighter;
   Color _selectedColor = AppTheme.highlighterColors[0];
   Color? _customColor;
@@ -1003,17 +1003,37 @@ class _EditorScreenState extends State<EditorScreen>
     );
   }
 
+  /// Distance from point p to line segment ab
+  static double _distanceToLineSegment(Offset p, Offset a, Offset b) {
+    final double l2 = (b - a).distanceSquared;
+    if (l2 == 0) return (p - a).distance;
+    final double t = (((p.dx - a.dx) * (b.dx - a.dx) + (p.dy - a.dy) * (b.dy - a.dy)) / l2)
+        .clamp(0.0, 1.0);
+    final Offset projection = Offset(a.dx + t * (b.dx - a.dx), a.dy + t * (b.dy - a.dy));
+    return (p - projection).distance;
+  }
+
   /// Erases strokes near eraserPos depending on the active _eraserMode
   void _eraseStrokesNear(Offset eraserPos, double radius) {
     if (_eraserMode == EraserMode.wipeStroke) {
-      // Mode 1: Wipe Whole Stroke (deletes entire line on contact)
+      // Mode 1: Wipe Whole Stroke (deletes entire line on contact anywhere along the path)
       bool removedAny = false;
       setState(() {
         _strokes.removeWhere((stroke) {
-          final hit = stroke.points
-              .any((p) => (p - eraserPos).distance <= radius + 4.0);
-          if (hit) removedAny = true;
-          return hit;
+          if (stroke.points.isEmpty) return false;
+          if (stroke.points.length == 1) {
+            final hit = (stroke.points.first - eraserPos).distance <= radius + 6.0;
+            if (hit) removedAny = true;
+            return hit;
+          }
+          // Test all line segments along the stroke
+          for (int i = 0; i < stroke.points.length - 1; i++) {
+            if (_distanceToLineSegment(eraserPos, stroke.points[i], stroke.points[i + 1]) <= radius + 6.0) {
+              removedAny = true;
+              return true;
+            }
+          }
+          return false;
         });
         if (removedAny) {
           _perPageStrokes[_currentPage] = List.from(_strokes);
@@ -1032,9 +1052,7 @@ class _EditorScreenState extends State<EditorScreen>
         if (stroke.points.isEmpty) continue;
 
         // Densify points along path to ensure high-resolution point-by-point erasing
-        final points = stroke.points.length < 5
-            ? _densifyPoints(stroke.points)
-            : stroke.points;
+        final points = _densifyPoints(stroke.points, step: 2.5);
 
         final List<List<Offset>> subSegments = [];
         List<Offset> currentSegment = [];
@@ -3008,11 +3026,21 @@ class _EditorScreenState extends State<EditorScreen>
                           padding: const EdgeInsets.symmetric(
                               horizontal: 8, vertical: 5),
                           decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.75),
+                            color: Colors.white.withValues(alpha: 0.95),
                             borderRadius: BorderRadius.circular(12),
                             border: Border.all(
+                              color: AppTheme.primaryPurple
+                                  .withValues(alpha: 0.55),
+                              width: 1.4,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
                                 color: AppTheme.primaryPurple
-                                    .withValues(alpha: 0.25)),
+                                    .withValues(alpha: 0.10),
+                                blurRadius: 4,
+                                offset: const Offset(0, 1),
+                              ),
+                            ],
                           ),
                           child: const Row(
                             mainAxisSize: MainAxisSize.min,
@@ -3213,17 +3241,22 @@ class _EditorScreenState extends State<EditorScreen>
         filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
         child: Container(
           decoration: BoxDecoration(
-            color: AppTheme.surfaceWhite.withValues(alpha: 0.92),
+            color: AppTheme.surfaceWhite.withValues(alpha: 0.96),
             borderRadius: BorderRadius.circular(24),
             border: Border.all(
-              color: Colors.white.withValues(alpha: 0.8),
-              width: 1.5,
+              color: AppTheme.primaryPurple.withValues(alpha: 0.55),
+              width: 1.6,
             ),
             boxShadow: [
               BoxShadow(
+                color: AppTheme.primaryPurple.withValues(alpha: 0.18),
+                blurRadius: 10,
+                offset: const Offset(0, 3),
+              ),
+              BoxShadow(
                 color: const Color(0xFF1E1B4B).withValues(alpha: 0.12),
-                blurRadius: 14,
-                offset: const Offset(0, 4),
+                blurRadius: 6,
+                offset: const Offset(0, 2),
               ),
             ],
           ),
@@ -3407,13 +3440,24 @@ class _EditorScreenState extends State<EditorScreen>
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
               decoration: BoxDecoration(
-                color: AppTheme.surfaceWhite.withValues(alpha: 0.94),
+                color: AppTheme.surfaceWhite.withValues(alpha: 0.96),
                 borderRadius: BorderRadius.circular(36),
                 border: Border.all(
-                  color: Colors.white.withValues(alpha: 0.8),
-                  width: 1.5,
+                  color: AppTheme.primaryPurple.withValues(alpha: 0.55),
+                  width: 1.6,
                 ),
-                boxShadow: AppTheme.floatingToolbarShadow,
+                boxShadow: [
+                  BoxShadow(
+                    color: AppTheme.primaryPurple.withValues(alpha: 0.18),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
+                  BoxShadow(
+                    color: const Color(0xFF1E1B4B).withValues(alpha: 0.12),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
               ),
               child: SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
@@ -3732,17 +3776,22 @@ class _EditorScreenState extends State<EditorScreen>
         filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
         child: Container(
           decoration: BoxDecoration(
-            color: AppTheme.surfaceWhite.withValues(alpha: 0.92),
+            color: AppTheme.surfaceWhite.withValues(alpha: 0.96),
             borderRadius: BorderRadius.circular(24),
             border: Border.all(
-              color: Colors.white.withValues(alpha: 0.8),
-              width: 1.5,
+              color: AppTheme.primaryPurple.withValues(alpha: 0.55),
+              width: 1.6,
             ),
             boxShadow: [
               BoxShadow(
-                color: const Color(0xFF1E1B4B).withValues(alpha: 0.14),
-                blurRadius: 14,
-                offset: const Offset(0, 4),
+                color: AppTheme.primaryPurple.withValues(alpha: 0.18),
+                blurRadius: 10,
+                offset: const Offset(0, 3),
+              ),
+              BoxShadow(
+                color: const Color(0xFF1E1B4B).withValues(alpha: 0.12),
+                blurRadius: 6,
+                offset: const Offset(0, 2),
               ),
             ],
           ),
@@ -3913,18 +3962,18 @@ class _EditorScreenState extends State<EditorScreen>
             color: AppTheme.surfaceWhite.withValues(alpha: 0.96),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
-              color: AppTheme.primaryPurple.withValues(alpha: 0.3),
-              width: 1.2,
+              color: AppTheme.primaryPurple.withValues(alpha: 0.55),
+              width: 1.6,
             ),
             boxShadow: [
               BoxShadow(
-                color: AppTheme.primaryPurple.withValues(alpha: 0.14),
-                blurRadius: 14,
+                color: AppTheme.primaryPurple.withValues(alpha: 0.18),
+                blurRadius: 12,
                 offset: const Offset(0, 4),
               ),
               BoxShadow(
-                color: const Color(0xFF1E1B4B).withValues(alpha: 0.08),
-                blurRadius: 8,
+                color: const Color(0xFF1E1B4B).withValues(alpha: 0.10),
+                blurRadius: 6,
                 offset: const Offset(0, 2),
               ),
             ],
@@ -4093,18 +4142,18 @@ class _EditorScreenState extends State<EditorScreen>
             color: AppTheme.surfaceWhite.withValues(alpha: 0.96),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
-              color: const Color(0xFFEF4444).withValues(alpha: 0.3),
-              width: 1.2,
+              color: const Color(0xFFEF4444).withValues(alpha: 0.6),
+              width: 1.6,
             ),
             boxShadow: [
               BoxShadow(
-                color: const Color(0xFFEF4444).withValues(alpha: 0.14),
-                blurRadius: 14,
+                color: const Color(0xFFEF4444).withValues(alpha: 0.18),
+                blurRadius: 12,
                 offset: const Offset(0, 4),
               ),
               BoxShadow(
-                color: const Color(0xFF1E1B4B).withValues(alpha: 0.08),
-                blurRadius: 8,
+                color: const Color(0xFF1E1B4B).withValues(alpha: 0.10),
+                blurRadius: 6,
                 offset: const Offset(0, 2),
               ),
             ],
@@ -4345,10 +4394,24 @@ class _EditorScreenState extends State<EditorScreen>
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
-            color: AppTheme.surfaceWhite.withValues(alpha: 0.94),
+            color: AppTheme.surfaceWhite.withValues(alpha: 0.96),
             borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: AppTheme.dividerColor),
-            boxShadow: AppTheme.softShadow,
+            border: Border.all(
+              color: AppTheme.primaryPurple.withValues(alpha: 0.55),
+              width: 1.6,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: AppTheme.primaryPurple.withValues(alpha: 0.16),
+                blurRadius: 10,
+                offset: const Offset(0, 3),
+              ),
+              BoxShadow(
+                color: const Color(0xFF1E1B4B).withValues(alpha: 0.12),
+                blurRadius: 6,
+                offset: const Offset(0, 2),
+              ),
+            ],
           ),
           child: SingleChildScrollView(
             scrollDirection: Axis.horizontal,
