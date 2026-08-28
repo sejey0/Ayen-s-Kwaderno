@@ -18,7 +18,7 @@ class UserProfile {
   const UserProfile({
     required this.id,
     required this.name,
-    this.avatarEmoji = '📓',
+    this.avatarEmoji = 'book',
     this.avatarImagePath,
     this.avatarUrl,
     this.avatarColorIndex = 0,
@@ -94,7 +94,7 @@ class UserProfile {
     return UserProfile(
       id: json['id'] as String,
       name: json['name'] as String? ?? 'Student',
-      avatarEmoji: json['avatar_emoji'] as String? ?? '📓',
+      avatarEmoji: json['avatar_emoji'] as String? ?? 'book',
       avatarImagePath: imagePath,
       avatarUrl: url,
       avatarColorIndex: json['avatar_color_index'] as int? ?? 0,

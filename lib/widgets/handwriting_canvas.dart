@@ -50,8 +50,8 @@ class HandwritingStroke {
 }
 
 /// Full screen pure white canvas studio for handwritten notes with 2-Page Smart Note support:
-/// - Page 1: ✍️ Real Handwritten Drawing Canvas
-/// - Page 2: 📄 AI Converted Digital Text
+/// - Page 1: Real Handwritten Drawing Canvas
+/// - Page 2: AI Converted Digital Text
 class HandwritingCanvasDialog extends StatefulWidget {
   final String languageCode;
   final HandwritingNote? existingNote;
@@ -338,7 +338,7 @@ class _HandwritingCanvasDialogState extends State<HandwritingCanvasDialog> {
 
       if (candidates.isNotEmpty) {
         final recognizedText = candidates.first.text.trim();
-        debugPrint('🎯 Recognized ML Kit Text: $recognizedText');
+        debugPrint('Recognized ML Kit Text: $recognizedText');
         return recognizedText;
       }
     } on MissingPluginException {
@@ -347,7 +347,7 @@ class _HandwritingCanvasDialogState extends State<HandwritingCanvasDialog> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
-              '⚠️ Full app restart required: Please restart run.bat once to enable native ML Kit recognition.',
+              'Full app restart required: Please restart run.bat once to enable native ML Kit recognition.',
             ),
             backgroundColor: Color(0xFFE11D48),
             duration: Duration(seconds: 4),
@@ -585,7 +585,7 @@ class _HandwritingCanvasDialogState extends State<HandwritingCanvasDialog> {
           // PAGE BODY: PAGE 1 (DRAWING CANVAS) OR PAGE 2 (CONVERTED TEXT)
           // ==============================================================
           if (_activePageIndex == 0)
-            // PAGE 1: ✍️ Pure White Drawing Space
+            // PAGE 1: Pure White Drawing Space
             Positioned.fill(
               child: GestureDetector(
                 onPanStart: _onPanStart,
@@ -635,7 +635,7 @@ class _HandwritingCanvasDialogState extends State<HandwritingCanvasDialog> {
               ),
             )
           else
-            // PAGE 2: 📄 AI Converted Digital Text View
+            // PAGE 2: AI Converted Digital Text View
             Positioned.fill(
               child: Container(
                 color: const Color(0xFFF8FAFC),
@@ -919,7 +919,7 @@ class _HandwritingCanvasDialogState extends State<HandwritingCanvasDialog> {
                   ),
                   const SizedBox(width: 6),
 
-                  // 2-PAGE SWITCHER PILL (Page 1: ✍️ Drawing | Page 2: 📄 Text)
+                  // 2-PAGE SWITCHER PILL (Page 1: Drawing | Page 2: Text)
                   Container(
                     height: 34,
                     padding: const EdgeInsets.all(2),
@@ -984,7 +984,7 @@ class _HandwritingCanvasDialogState extends State<HandwritingCanvasDialog> {
                   ),
                   const SizedBox(width: 6),
 
-                  // ✨ CONVERT TO TEXT BUTTON (Runs ML Kit Recognition)
+                  // CONVERT TO TEXT BUTTON (Runs ML Kit Recognition)
                   GestureDetector(
                     onTap: _isRecognizing ? null : _convertAndShowTextPage,
                     child: Container(

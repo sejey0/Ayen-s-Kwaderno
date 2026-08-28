@@ -42,17 +42,17 @@ class AutoSyncService {
     _connectivitySubscription = Connectivity()
         .onConnectivityChanged
         .listen((List<ConnectivityResult> results) {
-      final isOnline = results.any((r) =>
+      final hasNet = results.any((r) =>
           r == ConnectivityResult.wifi ||
           r == ConnectivityResult.mobile ||
           r == ConnectivityResult.ethernet ||
           r == ConnectivityResult.vpn);
 
-      if (isOnline) {
-        debugPrint('🌐 [AutoSync] Device is ONLINE. Triggering auto-upload...');
-        triggerSync(immediate: true);
+      if (hasNet) {
+        debugPrint('[AutoSync] Device is ONLINE. Triggering auto-upload...');
+        triggerSync();
       } else {
-        debugPrint('📴 [AutoSync] Device is OFFLINE. Queuing local updates...');
+        debugPrint('[AutoSync] Device is OFFLINE. Queuing local updates...');
         statusNotifier.value = AutoSyncStatus.offline;
       }
     });

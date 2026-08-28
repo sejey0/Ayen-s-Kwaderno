@@ -32,7 +32,7 @@ class _WelcomeAuthScreenState extends State<WelcomeAuthScreen> {
   // Form controllers & avatar state
   final TextEditingController _nameController =
       TextEditingController(text: '');
-  String _selectedEmoji = '📓';
+  String _selectedEmoji = 'book';
   String? _selectedImagePath;
   int _selectedColorIndex = 0;
 
@@ -214,7 +214,7 @@ class _WelcomeAuthScreenState extends State<WelcomeAuthScreen> {
         avatarColorIndex: _selectedColorIndex,
       );
 
-      _onSuccessNavigate('Offline profile "$name" created! 📓');
+      _onSuccessNavigate('Offline profile "$name" created!');
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -255,7 +255,7 @@ class _WelcomeAuthScreenState extends State<WelcomeAuthScreen> {
         optionalAvatarImagePath: _selectedImagePath,
       );
 
-      _onSuccessNavigate('Signed in! Notes synced with cloud ☁️✨');
+      _onSuccessNavigate('Signed in! Notes synced with cloud');
     } on AuthException catch (e) {
       if (!mounted) return;
       setState(() {
@@ -284,7 +284,7 @@ class _WelcomeAuthScreenState extends State<WelcomeAuthScreen> {
         redirectTo: 'io.supabase.ayenskwaderno://login-callback/',
       );
       await AutoSyncService.instance.syncAllToCloud();
-      _onSuccessNavigate('Google account connected! ☁️');
+      _onSuccessNavigate('Google account connected!');
     } catch (e) {
       if (!mounted) return;
       setState(() {

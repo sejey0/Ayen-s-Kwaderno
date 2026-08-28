@@ -64,7 +64,7 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
     super.initState();
     final user = UserService.instance.currentUser;
     _nameController = TextEditingController(text: user?.name ?? 'Student');
-    _currentEmoji = user?.avatarEmoji ?? '📓';
+    _currentEmoji = user?.avatarEmoji ?? 'book';
     _currentImagePath = user?.avatarImagePath ?? user?.avatarUrl;
     _clearedCustomImage = false;
   }

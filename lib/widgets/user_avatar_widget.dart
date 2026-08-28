@@ -37,7 +37,7 @@ class UserAvatarWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final effectiveEmoji = emoji ?? user?.avatarEmoji ?? '📓';
+    final effectiveEmoji = emoji ?? user?.avatarEmoji ?? 'book';
     final effectiveImagePath = imagePath ?? user?.avatarImagePath ?? user?.avatarUrl;
     final effectiveFontSize = fontSize ?? (size * 0.48);
 

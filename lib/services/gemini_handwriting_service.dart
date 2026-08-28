@@ -25,7 +25,7 @@ class GeminiHandwritingService {
     final envKey = dotenv.env['GEMINI_API_KEY'];
     if (envKey != null && envKey.trim().isNotEmpty) {
       debugPrint(
-          '🔑 Using Gemini API key from .env: ${envKey.trim().substring(0, 8)}...');
+          'Using Gemini API key from .env: ${envKey.trim().substring(0, 8)}...');
       return envKey.trim();
     }
 
@@ -34,11 +34,11 @@ class GeminiHandwritingService {
     final customKey = prefs.getString(_prefKeyGeminiApiKey);
     if (customKey != null && customKey.trim().isNotEmpty) {
       debugPrint(
-          '🔑 Using Gemini API key from SharedPreferences: ${customKey.trim().substring(0, 8)}...');
+          'Using Gemini API key from SharedPreferences: ${customKey.trim().substring(0, 8)}...');
       return customKey.trim();
     }
 
-    debugPrint('🔑 No Gemini API key found in .env or SharedPreferences');
+    debugPrint('No Gemini API key found in .env or SharedPreferences');
     return null;
   }
 
@@ -74,7 +74,7 @@ class GeminiHandwritingService {
           continue;
         } else {
           debugPrint(
-              '⚠️ Gemini API returned HTTP ${response.statusCode}: ${response.body}');
+              'Gemini API returned HTTP ${response.statusCode}: ${response.body}');
           return response;
         }
       } catch (e) {
@@ -217,7 +217,7 @@ class GeminiHandwritingService {
             final transcribedText =
                 (parts.first['text'] as String?)?.trim() ?? '';
             if (transcribedText.isNotEmpty) {
-              debugPrint('🧠 Gemini Vision AI Transcribed: "$transcribedText"');
+              debugPrint('Gemini Vision AI Transcribed: "$transcribedText"');
               return transcribedText;
             }
           }
@@ -301,7 +301,7 @@ class GeminiHandwritingService {
                   .trim();
             }
             final data = jsonDecode(text) as Map<String, dynamic>;
-            debugPrint('🧠 Gemini Vision BG Analysis: $data');
+            debugPrint('Gemini Vision BG Analysis: $data');
             return data;
           }
         }

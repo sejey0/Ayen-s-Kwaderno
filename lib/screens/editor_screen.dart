@@ -3311,12 +3311,12 @@ class _EditorScreenState extends State<EditorScreen>
                     _buildVerticalDivider(),
                     const SizedBox(width: 2),
 
-                    // Screen Orientation Switcher (Portrait 📱 / Landscape 🔄)
+                    // Screen Orientation Switcher (Portrait / Landscape)
                     Tooltip(
                       message: MediaQuery.of(context).orientation ==
                               Orientation.landscape
-                          ? 'Switch to Portrait Mode (📱)'
-                          : 'Switch to Landscape Mode (🔄)',
+                          ? 'Switch to Portrait Mode'
+                          : 'Switch to Landscape Mode',
                       child: Material(
                         color: Colors.transparent,
                         child: InkWell(
@@ -3346,8 +3346,8 @@ class _EditorScreenState extends State<EditorScreen>
                       Tooltip(
                         message: _slideOrientation ==
                                 PageSlideOrientation.vertical
-                            ? 'Vertical Scroll Mode (Tap for Horizontal ↔)'
-                            : 'Horizontal Slide Mode (Tap for Vertical ↕)',
+                            ? 'Vertical Scroll Mode (Tap for Horizontal)'
+                            : 'Horizontal Slide Mode (Tap for Vertical)',
                         child: Material(
                           color: Colors.transparent,
                           child: InkWell(

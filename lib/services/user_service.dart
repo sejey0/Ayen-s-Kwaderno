@@ -98,7 +98,7 @@ class UserService {
   /// Creates a new instant offline profile on the device
   Future<UserProfile> createOfflineProfile({
     required String name,
-    String avatarEmoji = '📓',
+    String avatarEmoji = 'book',
     String? avatarImagePath,
     int avatarColorIndex = 0,
   }) async {
@@ -217,7 +217,7 @@ class UserService {
     String displayName = optionalName?.trim().isNotEmpty == true
         ? optionalName!.trim()
         : (currentUser?.name ?? user.email?.split('@').first ?? 'Student');
-    String avatarEmoji = optionalAvatarEmoji ?? currentUser?.avatarEmoji ?? '📓';
+    String avatarEmoji = optionalAvatarEmoji ?? currentUser?.avatarEmoji ?? 'book';
     String? avatarImagePath = optionalAvatarImagePath ?? currentUser?.avatarImagePath;
     int avatarColorIndex = currentUser?.avatarColorIndex ?? 0;
 
