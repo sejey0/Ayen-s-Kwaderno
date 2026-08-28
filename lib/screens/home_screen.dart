@@ -1244,9 +1244,298 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  /// Dashboard View: Contains only Quick Study Actions once
+  /// Dashboard View: Contains Quick Study Notes Hero + Shortcut Cards to Documents and Notes
   Widget _buildDashboardView() {
-    return _buildUploadHeroCard();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildUploadHeroCard(),
+        const SizedBox(height: 22),
+
+        // Section Title: Shortcuts
+        const Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'Library Shortcuts',
+              style: TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.w800,
+                color: AppTheme.textPrimary,
+                letterSpacing: -0.3,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+
+        // 2 Shortcut Buttons (Documents & Images, Handwritten Notes)
+        Row(
+          children: [
+            // Shortcut 1: Documents & Images
+            Expanded(
+              child: _buildDashboardShortcutCard(
+                title: 'Documents',
+                subtitle:
+                    '${_documents.length} ${_documents.length == 1 ? 'file' : 'files'}',
+                icon: CupertinoIcons.doc_on_doc_fill,
+                gradientColors: const [
+                  AppTheme.primaryPurple,
+                  Color(0xFF8B6DF0),
+                ],
+                onTap: () {
+                  setState(() {
+                    _currentSection = LibrarySection.documents;
+                    _selectedSidebarNav = SidebarNavItem.documents;
+                  });
+                },
+              ),
+            ),
+            const SizedBox(width: 12),
+
+            // Shortcut 2: Handwritten Notes
+            Expanded(
+              child: _buildDashboardShortcutCard(
+                title: 'Notes',
+                subtitle:
+                    '${_handwritingNotes.length} ${_handwritingNotes.length == 1 ? 'note' : 'notes'}',
+                icon: CupertinoIcons.pencil_outline,
+                gradientColors: const [
+                  Color(0xFF7C3AED),
+                  Color(0xFFA78BFA),
+                ],
+                onTap: () {
+                  setState(() {
+                    _currentSection = LibrarySection.notes;
+                    _selectedSidebarNav = SidebarNavItem.notes;
+                  });
+                },
+              ),
+            ),
+          ],
+        ),
+
+        // Recent Documents Preview if any
+        if (_documents.isNotEmpty) ...[
+          const SizedBox(height: 24),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Recent Documents',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                  color: AppTheme.textPrimary,
+                  letterSpacing: -0.2,
+                ),
+              ),
+              TextButton(
+                onPressed: () {
+                  setState(() {
+                    _currentSection = LibrarySection.documents;
+                    _selectedSidebarNav = SidebarNavItem.documents;
+                  });
+                },
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'View All',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.primaryPurple,
+                      ),
+                    ),
+                    SizedBox(width: 3),
+                    Icon(
+                      CupertinoIcons.chevron_forward,
+                      size: 13,
+                      color: AppTheme.primaryPurple,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              crossAxisSpacing: 14,
+              mainAxisSpacing: 14,
+              childAspectRatio: 0.78,
+            ),
+            itemCount: _documents.length > 4 ? 4 : _documents.length,
+            itemBuilder: (context, index) {
+              final doc = _documents[index];
+              return _buildNotebookCard(doc);
+            },
+          ),
+        ],
+
+        // Recent Notes Preview if any
+        if (_handwritingNotes.isNotEmpty) ...[
+          const SizedBox(height: 24),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Recent Notes',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                  color: AppTheme.textPrimary,
+                  letterSpacing: -0.2,
+                ),
+              ),
+              TextButton(
+                onPressed: () {
+                  setState(() {
+                    _currentSection = LibrarySection.notes;
+                    _selectedSidebarNav = SidebarNavItem.notes;
+                  });
+                },
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'View All',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.primaryPurple,
+                      ),
+                    ),
+                    SizedBox(width: 3),
+                    Icon(
+                      CupertinoIcons.chevron_forward,
+                      size: 13,
+                      color: AppTheme.primaryPurple,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              crossAxisSpacing: 14,
+              mainAxisSpacing: 14,
+              childAspectRatio: 0.85,
+            ),
+            itemCount:
+                _handwritingNotes.length > 4 ? 4 : _handwritingNotes.length,
+            itemBuilder: (context, index) {
+              final note = _handwritingNotes[index];
+              return _buildHandwritingNoteCard(note);
+            },
+          ),
+        ],
+      ],
+    );
+  }
+
+  /// Dashboard Shortcut Navigation Card
+  Widget _buildDashboardShortcutCard({
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required List<Color> gradientColors,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: AppTheme.surfaceWhite,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: AppTheme.primaryPurpleLight.withValues(alpha: 0.6),
+            width: 1.3,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: AppTheme.primaryPurple.withValues(alpha: 0.06),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: gradientColors,
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(14),
+                    boxShadow: [
+                      BoxShadow(
+                        color: gradientColors.first.withValues(alpha: 0.3),
+                        blurRadius: 8,
+                        offset: const Offset(0, 3),
+                      ),
+                    ],
+                  ),
+                  child: Icon(icon, color: Colors.white, size: 20),
+                ),
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: AppTheme.primaryPurpleLight.withValues(alpha: 0.4),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    CupertinoIcons.chevron_forward,
+                    size: 13,
+                    color: AppTheme.primaryPurpleDark,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            Text(
+              title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 14.5,
+                fontWeight: FontWeight.w800,
+                color: AppTheme.textPrimary,
+                letterSpacing: -0.2,
+              ),
+            ),
+            const SizedBox(height: 3),
+            Text(
+              subtitle,
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: AppTheme.textMuted,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
 
@@ -1517,11 +1806,11 @@ class _HomeScreenState extends State<HomeScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     Container(
-                      width: 50,
-                      height: 50,
+                      width: 48,
+                      height: 48,
                       decoration: BoxDecoration(
                         color: Colors.white.withValues(alpha: 0.22),
                         borderRadius: BorderRadius.circular(16),
@@ -1534,20 +1823,35 @@ class _HomeScreenState extends State<HomeScreen> {
                         child: Icon(
                           CupertinoIcons.doc_text_viewfinder,
                           color: Colors.white,
-                          size: 26,
+                          size: 24,
                         ),
                       ),
                     ),
                     const SizedBox(width: 14),
                     const Expanded(
-                      child: Text(
-                        'Quick Study Actions',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
-                          color: Colors.white,
-                          letterSpacing: -0.2,
-                        ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            'Quick Study Notes',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w800,
+                              color: Colors.white,
+                              letterSpacing: -0.3,
+                            ),
+                          ),
+                          SizedBox(height: 2),
+                          Text(
+                            'Create handwritten notes or import study documents',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.white70,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
