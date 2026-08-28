@@ -77,7 +77,7 @@ class _EditorScreenState extends State<EditorScreen>
   Animation<Matrix4>? _zoomAnimation;
 
   // Active annotation tool state
-  AnnotationTool _activeTool = AnnotationTool.none;
+  AnnotationTool _activeTool = AnnotationTool.highlighter;
   PenSubTool _penSubTool = PenSubTool.highlighter;
   Color _selectedColor = AppTheme.highlighterColors[0];
   Color? _customColor;
@@ -801,6 +801,25 @@ class _EditorScreenState extends State<EditorScreen>
 
     HapticFeedback.selectionClick();
     _zoomAnimationController.forward(from: 0.0);
+  }
+
+  /// 1-tap fast toggle between Pan/Navigate mode and active Drawing Pen/Marker
+  void _onToggleNavigateMode() {
+    HapticFeedback.selectionClick();
+    setState(() {
+      if (_activeTool == AnnotationTool.none) {
+        // Return to active drawing tool (Pen / Highlighter / Line)
+        _activeTool = _previousDrawingTool;
+      } else {
+        // Remember active drawing tool and switch to pan/navigate
+        if (_activeTool == AnnotationTool.highlighter ||
+            _activeTool == AnnotationTool.straightLine ||
+            _activeTool == AnnotationTool.eraser) {
+          _previousDrawingTool = _activeTool;
+        }
+        _activeTool = AnnotationTool.none;
+      }
+    });
   }
 
   /// Changes the active annotation tool mode
@@ -1786,6 +1805,18 @@ class _EditorScreenState extends State<EditorScreen>
                 left: 14,
                 child: _buildFloatingUnhideHeaderButton(),
               ),
+
+            // ==========================================
+            // FLOATING QUICK NAVIGATE & PAGE CONTROLLER PILL
+            // (1-tap fast toggle between Pan/Navigate and Pen/Marker, with page turn buttons)
+            // ==========================================
+            Positioned(
+              top: _isHeaderVisible
+                  ? MediaQuery.of(context).padding.top + 96
+                  : MediaQuery.of(context).padding.top + 10,
+              right: 14,
+              child: _buildFloatingQuickNavigatePill(),
+            ),
 
             // ==========================================
             // FLOATING TOOLBAR: Bottom Annotation Bar
@@ -3354,18 +3385,6 @@ class _EditorScreenState extends State<EditorScreen>
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // Scroll / Pan Mode (Hand)
-                    _buildToolButton(
-                      tool: AnnotationTool.none,
-                      icon: CupertinoIcons.hand_draw,
-                      label: 'Navigate',
-                      tooltip: 'Pan & Pinch Zoom Document',
-                    ),
-
-                    const SizedBox(width: 2),
-                    _buildVerticalDivider(),
-                    const SizedBox(width: 2),
-
                     // 1. Freehand Pen / Highlighter
                     _buildToolButton(
                       tool: AnnotationTool.highlighter,
@@ -3502,6 +3521,232 @@ class _EditorScreenState extends State<EditorScreen>
                 ),
               ),
             ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Floating Fast Navigation Pill (1-tap toggle between Pan/Navigate mode and Pen/Marker, with fast page turn buttons)
+  Widget _buildFloatingQuickNavigatePill() {
+    final isNavigateMode = _activeTool == AnnotationTool.none;
+    final isPen = _penSubTool == PenSubTool.ballpen;
+    final activeDrawIcon = _activeTool == AnnotationTool.straightLine
+        ? CupertinoIcons.line_horizontal_3_decrease
+        : (_activeTool == AnnotationTool.eraser
+            ? CupertinoIcons.scribble
+            : (isPen ? CupertinoIcons.pen : CupertinoIcons.pencil_outline));
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(28),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 4),
+          decoration: BoxDecoration(
+            color: AppTheme.surfaceWhite.withValues(alpha: 0.94),
+            borderRadius: BorderRadius.circular(28),
+            border: Border.all(
+              color: isNavigateMode
+                  ? AppTheme.primaryPurple.withValues(alpha: 0.45)
+                  : Colors.white.withValues(alpha: 0.8),
+              width: 1.5,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: isNavigateMode
+                    ? AppTheme.primaryPurple.withValues(alpha: 0.22)
+                    : const Color(0xFF1E1B4B).withValues(alpha: 0.12),
+                blurRadius: 14,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // 1. Fast Mode Toggle Button (🖐️ Navigate vs ✍️ Draw)
+              Tooltip(
+                message: isNavigateMode
+                    ? 'Resume Drawing (Tap to switch back to Pen/Marker)'
+                    : 'Pan & Scroll Document (Tap to navigate)',
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(24),
+                    onTap: _onToggleNavigateMode,
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        gradient: isNavigateMode
+                            ? AppTheme.primaryGradientDiagonal
+                            : null,
+                        color: isNavigateMode
+                            ? null
+                            : AppTheme.primaryPurpleLight.withValues(alpha: 0.6),
+                        borderRadius: BorderRadius.circular(24),
+                        boxShadow: isNavigateMode
+                            ? [
+                                BoxShadow(
+                                  color: AppTheme.primaryPurple
+                                      .withValues(alpha: 0.35),
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ]
+                            : null,
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (!isNavigateMode) ...[
+                            Container(
+                              width: 9,
+                              height: 9,
+                              decoration: BoxDecoration(
+                                color: _selectedColor,
+                                shape: BoxShape.circle,
+                                border:
+                                    Border.all(color: Colors.white, width: 1.2),
+                              ),
+                            ),
+                            const SizedBox(width: 5),
+                          ],
+                          Icon(
+                            isNavigateMode
+                                ? CupertinoIcons.hand_draw
+                                : activeDrawIcon,
+                            size: 15,
+                            color: isNavigateMode
+                                ? Colors.white
+                                : AppTheme.primaryPurpleDark,
+                          ),
+                          const SizedBox(width: 5),
+                          Text(
+                            isNavigateMode ? 'Navigate' : 'Drawing',
+                            style: TextStyle(
+                              fontFamily: 'OpenSauceSans',
+                              fontSize: 12,
+                              fontWeight: FontWeight.w800,
+                              color: isNavigateMode
+                                  ? Colors.white
+                                  : AppTheme.primaryPurpleDark,
+                              letterSpacing: -0.2,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+
+              // 2. Fast Page Turning Controls (for multi-page PDFs)
+              if (_pageCount > 1) ...[
+                const SizedBox(width: 4),
+                Container(
+                  width: 1,
+                  height: 16,
+                  color: AppTheme.dividerColor,
+                ),
+                const SizedBox(width: 2),
+
+                // Previous Page Button
+                IconButton(
+                  padding: EdgeInsets.zero,
+                  constraints:
+                      const BoxConstraints(minWidth: 26, minHeight: 26),
+                  icon: Icon(
+                    CupertinoIcons.chevron_left,
+                    size: 14,
+                    color: _currentPage > 1
+                        ? AppTheme.primaryPurple
+                        : AppTheme.textMuted.withValues(alpha: 0.35),
+                  ),
+                  tooltip: 'Previous Page',
+                  onPressed:
+                      _currentPage > 1 ? () => _goToPage(_currentPage - 1) : null,
+                ),
+
+                // Page Number Indicator
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 2),
+                  child: Text(
+                    '$_currentPage/$_pageCount',
+                    style: const TextStyle(
+                      fontFamily: 'OpenSauceSans',
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                      color: AppTheme.textPrimary,
+                    ),
+                  ),
+                ),
+
+                // Next Page Button
+                IconButton(
+                  padding: EdgeInsets.zero,
+                  constraints:
+                      const BoxConstraints(minWidth: 26, minHeight: 26),
+                  icon: Icon(
+                    CupertinoIcons.chevron_right,
+                    size: 14,
+                    color: _currentPage < _pageCount
+                        ? AppTheme.primaryPurple
+                        : AppTheme.textMuted.withValues(alpha: 0.35),
+                  ),
+                  tooltip: 'Next Page',
+                  onPressed: _currentPage < _pageCount
+                      ? () => _goToPage(_currentPage + 1)
+                      : null,
+                ),
+              ],
+
+              // 3. Zoom Reset Button (when zoomed in)
+              if (_isCurrentlyZoomed) ...[
+                const SizedBox(width: 2),
+                Container(
+                  width: 1,
+                  height: 16,
+                  color: AppTheme.dividerColor,
+                ),
+                const SizedBox(width: 2),
+                Tooltip(
+                  message: 'Reset Zoom (Fit to Screen)',
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(16),
+                      onTap: () => _toggleZoom(),
+                      child: const Padding(
+                        padding: EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 4),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              CupertinoIcons.viewfinder,
+                              size: 13,
+                              color: AppTheme.primaryPurple,
+                            ),
+                            SizedBox(width: 3),
+                            Text(
+                              'Fit',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w800,
+                                color: AppTheme.primaryPurple,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ],
           ),
         ),
       ),
