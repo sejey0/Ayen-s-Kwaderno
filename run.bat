@@ -74,10 +74,10 @@ exit /b
 echo.
 echo ==========================================
 echo Select Run Mode:
-echo Standard Debug Run (Implicit ABI-slicing)
-echo Fast Attach (No Build / Rekta Debugger)
-echo Release Mode (Optimized Deployment)
-echo Clean and Fresh Rebuild (Full Refresh)
+echo [1] Standard Debug Run (Implicit ABI-slicing)
+echo [2] Fast Attach (No Build / Rekta Debugger)
+echo [3] Release Mode (Optimized Deployment)
+echo [4] Clean and Fresh Rebuild (Full Refresh)
 echo ==========================================
 
 choice /c 1234 /m "Piliin ang opsyong gusto mo"
