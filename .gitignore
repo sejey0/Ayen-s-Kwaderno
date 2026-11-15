@@ -46,3 +46,12 @@ app.*.map.json
 
 # Environment secrets (API keys)
 .env
+
+# App Runner & Device Configuration
+run.bat
+scripts/
+.device_ip
+.temp_*
+.ota_env.bat
+.custom_notes.txt
+.release_notes.txt
