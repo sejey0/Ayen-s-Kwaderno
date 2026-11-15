@@ -1,6 +1,8 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:shared_preferences_android/shared_preferences_android.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'models/user_profile_model.dart';
 import 'screens/home_screen.dart';
@@ -12,6 +14,11 @@ import 'theme/app_theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Explicitly ensure Android SharedPreferences pigeon backend is registered
+  if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+    SharedPreferencesAndroid.registerWith();
+  }
 
   // Set clean system UI overlay style
   SystemChrome.setSystemUIOverlayStyle(

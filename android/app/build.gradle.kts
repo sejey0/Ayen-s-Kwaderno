@@ -15,7 +15,7 @@ kotlin {
 android {
     namespace = "com.ayenskwaderno.ayens_kwaderno"
     compileSdk = flutter.compileSdkVersion
-    ndkVersion = flutter.ndkVersion
+    // ndkVersion disabled to prevent auto-downloading unnecessary 1.5GB NDK package
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
